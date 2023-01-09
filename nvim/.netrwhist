@@ -1,0 +1,11 @@
+let g:netrw_dirhistmax  =10
+let g:netrw_dirhistcnt =9
+let g:netrw_dirhist_9='/home/thiago/.config/nvim/lua/thiago'
+let g:netrw_dirhist_8='/home/thiago/.config/nvim/lua'
+let g:netrw_dirhist_7='/home/thiago/.config/nvim'
+let g:netrw_dirhist_6='/home/thiago/.config/nvim/lua'
+let g:netrw_dirhist_5='/home/thiago/.config/nvim/lua/thiago'
+let g:netrw_dirhist_4='/home/thiago/.config/nvim/lua'
+let g:netrw_dirhist_3='/home/thiago/.config/nvim'
+let g:netrw_dirhist_2='/home/thiago/.config'
+let g:netrw_dirhist_1='/home/thiago/.config/nvim'
