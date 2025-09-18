@@ -1,0 +1,4 @@
+{"session_id":"sample-1","ts":1757000000,"text":"Please document the change thoroughly and write a regression test."}
+{"session_id":"sample-1","ts":1757000100,"text":"Also summarize the validation steps once you're done."}
+{"session_id":"sample-2","ts":1757000200,"text":"You're editing the wrong directory; confirm the target path before writing."}
+{"session_id":"sample-2","ts":1757000300,"text":"Use rg to locate the existing implementation and update the README."}
