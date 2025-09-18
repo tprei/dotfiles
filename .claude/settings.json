@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "PreCompact": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude -p \"If you believe current changes can be compacted into a commit, use the git commit specialist to store changes and update changelogs. Otherwise do nothing\" --allowedTools \"Bash(git ls-files:*), Bash(rg:*), Bash(git:*), WebSearch, mcp__repomix__pack_codebase, mcp__repomix__pack_remote_repository, mcp__repomix__attach_packed_output, mcp__repomix__read_repomix_output, mcp__repomix__grep_repomix_output, mcp__repomix__file_system_read_file, mcp__repomix__file_system_read_directory\""
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "printf \"\\033[01;32m%s@%s\\033[00m:\\033[01;34m%s\\033[00m\" \"$(whoami)\" \"$(hostname -s)\" \"$(pwd)\""
+  },
+  "feedbackSurveyState": {
+    "lastShownTime": 1753994647675
+  },
+  "permissions": {
+    "allow": [
+      "mcp__serena__*"
+    ]
+  }
+}
