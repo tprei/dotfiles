@@ -65,3 +65,9 @@ Codex acts as an autonomous coding partner. The notes below distill common issue
 - Example: "Check the whole credits system. Can you find ways to optimize it and implemen..."
 
 Regularly revisit this document as new patterns emerge. The automation in this repository will refresh guidance when new sessions highlight fresh themes.
+
+# Callouts
+
+- DO NOT IMPLEMENT FALLBACKS. If you are unsure how to do something or something isn't working. Do not introduce quick fallbacks to make your life easier like using mocked data or assuming something isn't possible or calculating things in memory
+- Prefer rg (ripgrep) over grep
+- Leverage all your MCP tools, specially Serena and repomix
