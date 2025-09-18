@@ -12,13 +12,15 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 DEFAULT_HISTORY_PATH = Path.home() / ".codex" / "history.jsonl"
 DEFAULT_STATE_PATH = Path("automation_state.json")
 DEFAULT_CODEX_PATH = Path("CODEX.md")
 DEFAULT_AUTOMATION_BRANCH = "codex/autotune"
 DEFAULT_BASE_BRANCH = "master"
+MAX_MEMORY_TOKENS = 100_000
+MAX_PATTERNS = 20
 
 
 @dataclass
@@ -177,6 +179,9 @@ PATTERNS: Sequence[Pattern] = (
     ),
 )
 
+if len(PATTERNS) > MAX_PATTERNS:
+    raise ValueError("Number of improvement patterns exceeds MAX_PATTERNS limit")
+
 
 def load_history(path: Path) -> Dict[str, List[str]]:
     sessions: Dict[str, List[str]] = defaultdict(list)
@@ -199,10 +204,34 @@ def load_state(path: Path) -> Dict[str, object]:
     return {"processed_sessions": []}
 
 
+def estimate_token_cost(session_id: str) -> int:
+    # Rough approximation: 4 characters per token plus delimiter overhead
+    return max(1, (len(session_id) // 4) + 1)
+
+
+def enforce_state_limits(processed_sessions: List[str]) -> Tuple[List[str], int]:
+    tokens = 0
+    limited: List[str] = []
+    trimmed = 0
+    for session_id in reversed(processed_sessions):
+        cost = estimate_token_cost(session_id)
+        if tokens + cost > MAX_MEMORY_TOKENS:
+            trimmed += 1
+            continue
+        tokens += cost
+        limited.append(session_id)
+    limited.reverse()
+    trimmed_count = len(processed_sessions) - len(limited)
+    return limited, trimmed_count
+
+
 def save_state(path: Path, processed_sessions: Iterable[str]) -> None:
+    processed_list = list(processed_sessions)
+    limited, trimmed = enforce_state_limits(processed_list)
     payload = {
-        "processed_sessions": sorted(set(processed_sessions)),
+        "processed_sessions": sorted(set(limited)),
         "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "trimmed_sessions": trimmed,
     }
     with path.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2)
@@ -546,6 +575,8 @@ def run(
     if new_sessions:
         processed_sessions.extend(new_sessions)
 
+    processed_sessions, trimmed = enforce_state_limits(processed_sessions)
+
     stats = build_stats(sessions, processed_sessions)
     codex_content = render_codex(stats)
 
@@ -553,10 +584,14 @@ def run(
         print("Dry run: skipping writes.")
     else:
         write_codex(codex_path, codex_content)
-        if new_sessions or not state_path.exists():
+        if new_sessions or trimmed or not state_path.exists():
             save_state(state_path, processed_sessions)
 
-    print(f"Analyzed {len(processed_sessions)} session(s); {len(new_sessions)} new since last run.")
+    print(
+        f"Analyzed {len(processed_sessions)} session(s); {len(new_sessions)} new since last run."
+    )
+    if trimmed:
+        print(f"Trimmed {trimmed} session id(s) to stay within memory limits.")
     for pattern in PATTERNS:
         count = stats.get(pattern.identifier, {}).get("count", 0)
         print(f" - {pattern.title}: {count} session(s)")
