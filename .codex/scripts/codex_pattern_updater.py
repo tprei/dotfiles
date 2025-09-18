@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 import shutil
 import subprocess
 import textwrap
@@ -21,6 +23,11 @@ DEFAULT_AUTOMATION_BRANCH = "codex/autotune"
 DEFAULT_BASE_BRANCH = "master"
 MAX_MEMORY_TOKENS = 100_000
 MAX_PATTERNS = 20
+STATIC_CALLOUTS: Sequence[str] = (
+    "DO NOT IMPLEMENT FALLBACKS. If you are unsure how to do something or something isn't working, avoid quick hacks like mocked data or assuming functionality is impossible; pause and surface the blocker instead.",
+    "Prefer rg (ripgrep) over grep for searching.",
+    "Leverage MCP tools—including Serena and Repomix—before resorting to manual spelunking.",
+)
 
 
 @dataclass
@@ -31,7 +38,7 @@ class Pattern:
     bullets: Sequence[str]
 
 
-PATTERNS: Sequence[Pattern] = (
+STATIC_PATTERNS: Sequence[Pattern] = (
     Pattern(
         identifier="plan_first",
         title="Shape the work before touching files",
@@ -179,8 +186,191 @@ PATTERNS: Sequence[Pattern] = (
     ),
 )
 
-if len(PATTERNS) > MAX_PATTERNS:
+if len(STATIC_PATTERNS) > MAX_PATTERNS:
     raise ValueError("Number of improvement patterns exceeds MAX_PATTERNS limit")
+
+
+def slugify(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return slug or "pattern"
+
+
+def pattern_from_dict(data: Dict[str, object]) -> Pattern:
+    return Pattern(
+        identifier=str(data.get("identifier", slugify(str(data.get("title", "dynamic"))))),
+        title=str(data.get("title", "Dynamic Pattern")),
+        keywords=tuple(data.get("keywords", [])),
+        bullets=tuple(data.get("bullets", [])),
+    )
+
+
+def pattern_to_dict(pattern: Pattern) -> Dict[str, object]:
+    return {
+        "identifier": pattern.identifier,
+        "title": pattern.title,
+        "keywords": list(pattern.keywords),
+        "bullets": list(pattern.bullets),
+    }
+
+
+def dynamic_patterns_from_state(state: Dict[str, object]) -> List[Pattern]:
+    dynamic: List[Pattern] = []
+    for entry in state.get("dynamic_patterns", []):
+        try:
+            pattern = pattern_from_dict(entry)
+        except Exception:
+            continue
+        dynamic.append(pattern)
+    return dynamic
+
+
+def truncate_text(value: str, limit: int = 1200) -> str:
+    if len(value) <= limit:
+        return value
+    return value[: limit - 3] + "..."
+
+
+def summarize_sessions_for_prompt(
+    sessions: Dict[str, List[str]],
+    session_ids: Sequence[str],
+    char_limit: int = 1600,
+) -> str:
+    blocks: List[str] = []
+    for sid in session_ids:
+        messages = sessions.get(sid, [])
+        if not messages:
+            continue
+        combined = " \n".join(msg.replace("\n", " ") for msg in messages)
+        blocks.append(f"Session {sid}:\n{truncate_text(combined, char_limit)}")
+    return "\n\n".join(blocks)
+
+
+def parse_json_array(text: str) -> Optional[List[Dict[str, object]]]:
+    start = text.find("[")
+    end = text.rfind("]")
+    if start == -1 or end == -1 or end <= start:
+        return None
+    snippet = text[start : end + 1]
+    try:
+        return json.loads(snippet)
+    except json.JSONDecodeError:
+        return None
+
+
+def discover_patterns_with_llm(
+    sessions: Dict[str, List[str]],
+    session_ids: Sequence[str],
+    existing_titles: Sequence[str],
+    capacity: int,
+    repo_root: Optional[Path],
+) -> List[Pattern]:
+    if capacity <= 0 or not session_ids:
+        return []
+
+    codex_bin = shutil.which("codex")
+    if codex_bin is None:
+        print("LLM discovery skipped: codex CLI not available.")
+        return []
+
+    excerpts = summarize_sessions_for_prompt(sessions, session_ids[:10])
+    if not excerpts:
+        return []
+
+    existing_titles_text = ", ".join(existing_titles) if existing_titles else "None"
+    prompt = textwrap.dedent(
+        f"""
+        You are maintaining a set of improvement patterns for the Codex coding agent. Existing patterns are: {existing_titles_text}.
+        Review the new session excerpts below and propose up to {capacity} additional patterns that capture recurring issues not already addressed.
+
+        Respond with a JSON array (no extra text) where each element has:
+        - "title": short descriptive pattern title (max 7 words)
+        - "summary": one-sentence explanation of the issue/opportunity
+        - "guidance": array of 2-3 actionable best-practice bullets for Codex (present tense)
+        - "keywords": array of 3-6 lowercase keywords to detect similar cases
+
+        Session excerpts:
+        {excerpts}
+
+        Return only the JSON array.
+        """
+    ).strip()
+
+    env = os.environ.copy()
+    rollout_dir = Path(env.get("CODEX_ROLLOUT_DIR", "/tmp/codex_rollouts"))
+    try:
+        rollout_dir.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+    env.setdefault("CODEX_ROLLOUT_DIR", str(rollout_dir))
+
+    sandbox_mode = env.get("CODEX_PATTERN_SANDBOX", "workspace-write")
+    approval_mode = env.get("CODEX_PATTERN_APPROVAL", "on-request")
+    working_dir = str(repo_root or Path.cwd())
+
+    try:
+        result = subprocess.run(
+            [
+                codex_bin,
+                "-a",
+                approval_mode,
+                "exec",
+                "--sandbox",
+                sandbox_mode,
+                "--cd",
+                working_dir,
+                prompt,
+            ],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=120,
+        )
+    except Exception as exc:
+        print(f"LLM discovery skipped: {exc}")
+        return []
+
+    if result.returncode != 0:
+        print(
+            "LLM discovery skipped: command failed",
+            result.stderr.strip() or result.stdout.strip(),
+        )
+        return []
+
+    parsed = parse_json_array(result.stdout)
+    if not parsed:
+        print("LLM discovery returned no parsable JSON.")
+        return []
+
+    patterns: List[Pattern] = []
+    existing = {title.lower() for title in existing_titles}
+    seen_titles: set[str] = set()
+    for entry in parsed:
+        if len(patterns) >= capacity:
+            break
+        title = str(entry.get("title", "")).strip()
+        if not title or title.lower() in existing or title.lower() in seen_titles:
+            continue
+        summary = str(entry.get("summary", "")).strip()
+        guidance = entry.get("guidance", []) or ([summary] if summary else [])
+        guidance_lines = [truncate_text(str(item).strip(), 180) for item in guidance if str(item).strip()]
+        if not guidance_lines:
+            continue
+        keywords = [truncate_text(str(k).lower().strip(), 40) for k in entry.get("keywords", [])]
+        if not keywords:
+            continue
+
+        identifier = f"dynamic-{slugify(title)}"
+        bullets = tuple(guidance_lines[:3])
+        pattern = Pattern(
+            identifier=identifier,
+            title=title,
+            keywords=tuple(keywords[:6]),
+            bullets=bullets,
+        )
+        patterns.append(pattern)
+        seen_titles.add(title.lower())
+
+    return patterns
 
 
 def load_history(path: Path) -> Dict[str, List[str]]:
@@ -200,8 +390,14 @@ def load_history(path: Path) -> Dict[str, List[str]]:
 def load_state(path: Path) -> Dict[str, object]:
     if path.exists():
         with path.open("r", encoding="utf-8") as fh:
-            return json.load(fh)
-    return {"processed_sessions": []}
+            state = json.load(fh)
+    else:
+        state = {}
+
+    state.setdefault("processed_sessions", [])
+    state.setdefault("dynamic_patterns", [])
+    state.setdefault("trimmed_sessions", 0)
+    return state
 
 
 def estimate_token_cost(session_id: str) -> int:
@@ -225,16 +421,14 @@ def enforce_state_limits(processed_sessions: List[str]) -> Tuple[List[str], int]
     return limited, trimmed_count
 
 
-def save_state(path: Path, processed_sessions: Iterable[str]) -> None:
-    processed_list = list(processed_sessions)
+def save_state(path: Path, state: Dict[str, object]) -> None:
+    processed_list = list(state.get("processed_sessions", []))
     limited, trimmed = enforce_state_limits(processed_list)
-    payload = {
-        "processed_sessions": sorted(set(limited)),
-        "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "trimmed_sessions": trimmed,
-    }
+    state["processed_sessions"] = sorted(set(limited))
+    state["trimmed_sessions"] = trimmed
+    state["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     with path.open("w", encoding="utf-8") as fh:
-        json.dump(payload, fh, indent=2)
+        json.dump(state, fh, indent=2)
         fh.write("\n")
 
 
@@ -246,11 +440,12 @@ def collect_new_sessions(all_sessions: Dict[str, List[str]], processed: Iterable
 def build_stats(
     sessions: Dict[str, List[str]],
     processed_ids: Iterable[str],
+    patterns: Sequence[Pattern],
 ) -> Dict[str, Dict[str, object]]:
     stats: Dict[str, Dict[str, object]] = {}
     processed_set = set(processed_ids)
 
-    for pattern in PATTERNS:
+    for pattern in patterns:
         matched_sessions: List[str] = []
         examples: List[Dict[str, str]] = []
 
@@ -285,7 +480,7 @@ def render_examples(examples: Sequence[Dict[str, str]]) -> List[str]:
     return lines
 
 
-def render_codex(stats: Dict[str, Dict[str, object]]) -> str:
+def render_codex(patterns: Sequence[Pattern], stats: Dict[str, Dict[str, object]]) -> str:
     lines: List[str] = []
     lines.append("# Codex Improvement Guidelines")
     lines.append("")
@@ -295,7 +490,7 @@ def render_codex(stats: Dict[str, Dict[str, object]]) -> str:
     )
     lines.append("")
 
-    for index, pattern in enumerate(PATTERNS, start=1):
+    for index, pattern in enumerate(patterns, start=1):
         pattern_stats = stats.get(pattern.identifier, {"count": 0, "examples": []})
         count = pattern_stats.get("count", 0)
         example_lines = render_examples(pattern_stats.get("examples", []))
@@ -317,6 +512,13 @@ def render_codex(stats: Dict[str, Dict[str, object]]) -> str:
         "Regularly revisit this document as new patterns emerge. The automation in this repository will "
         "refresh guidance when new sessions highlight fresh themes."
     )
+
+    if STATIC_CALLOUTS:
+        lines.append("")
+        lines.append("# Callouts")
+        lines.append("")
+        for callout in STATIC_CALLOUTS:
+            lines.append(f"- {callout}")
 
     return "\n".join(lines).rstrip() + "\n"
 
@@ -449,9 +651,10 @@ def build_pr_body(
     total_sessions: int,
     new_sessions: Sequence[str],
     stats: Dict[str, Dict[str, object]],
+    patterns: Sequence[Pattern],
 ) -> str:
     top_patterns = sorted(
-        PATTERNS,
+        patterns,
         key=lambda pattern: stats.get(pattern.identifier, {}).get("count", 0),
         reverse=True,
     )[:3]
@@ -491,6 +694,7 @@ def create_or_update_pr(
     new_sessions: Sequence[str],
     stats: Dict[str, Dict[str, object]],
     total_sessions: int,
+    patterns: Sequence[Pattern],
 ) -> None:
     if shutil.which("gh") is None:
         print("gh CLI not found; skipping PR automation.")
@@ -498,7 +702,12 @@ def create_or_update_pr(
 
     info = get_pr_info(repo_root, branch)
     title = build_pr_title(len(new_sessions))
-    body = build_pr_body(total_sessions=total_sessions, new_sessions=new_sessions, stats=stats)
+    body = build_pr_body(
+        total_sessions=total_sessions,
+        new_sessions=new_sessions,
+        stats=stats,
+        patterns=patterns,
+    )
 
     if info and info.get("state") == "OPEN":
         run_cmd(["gh", "pr", "edit", branch, "--title", title, "--body", body], repo_root)
@@ -533,6 +742,7 @@ def handle_git_workflow(
     new_sessions: Sequence[str],
     stats: Dict[str, Dict[str, object]],
     total_sessions: int,
+    patterns: Sequence[Pattern],
 ) -> None:
     if not repo_has_changes(repo_root):
         print("No working tree changes detected; skipping git automation.")
@@ -556,6 +766,7 @@ def handle_git_workflow(
         new_sessions,
         stats,
         total_sessions=total_sessions,
+        patterns=patterns,
     )
 
 def run(
@@ -570,29 +781,56 @@ def run(
     sessions = load_history(history_path)
     state = load_state(state_path)
     processed_sessions: List[str] = list(state.get("processed_sessions", []))
+    dynamic_patterns = dynamic_patterns_from_state(state)
+    patterns: List[Pattern] = list(STATIC_PATTERNS) + dynamic_patterns
+
+    repo_root = detect_repo_root(codex_path.resolve().parent)
 
     new_sessions = collect_new_sessions(sessions, processed_sessions)
     if new_sessions:
         processed_sessions.extend(new_sessions)
 
     processed_sessions, trimmed = enforce_state_limits(processed_sessions)
+    state["processed_sessions"] = processed_sessions
 
-    stats = build_stats(sessions, processed_sessions)
-    codex_content = render_codex(stats)
+    remaining_pattern_slots = MAX_PATTERNS - len(patterns)
+    llm_disabled = os.environ.get("CODEX_PATTERN_DISABLE_LLM", "0").lower() in {"1", "true", "yes"}
+
+    if llm_disabled:
+        if new_sessions and remaining_pattern_slots > 0:
+            print("LLM discovery skipped: disabled via CODEX_PATTERN_DISABLE_LLM.")
+    elif new_sessions and remaining_pattern_slots > 0:
+        llm_patterns = discover_patterns_with_llm(
+            sessions,
+            new_sessions,
+            [pattern.title for pattern in patterns],
+            remaining_pattern_slots,
+            repo_root,
+        )
+        if llm_patterns:
+            patterns.extend(llm_patterns)
+            dynamic_patterns.extend(llm_patterns)
+            if not dry_run:
+                state["dynamic_patterns"] = [pattern_to_dict(p) for p in dynamic_patterns]
+
+    stats = build_stats(sessions, processed_sessions, patterns)
+    codex_content = render_codex(patterns, stats)
 
     if dry_run:
         print("Dry run: skipping writes.")
     else:
         write_codex(codex_path, codex_content)
         if new_sessions or trimmed or not state_path.exists():
-            save_state(state_path, processed_sessions)
+            if "dynamic_patterns" not in state:
+                state["dynamic_patterns"] = [pattern_to_dict(p) for p in dynamic_patterns]
+            save_state(state_path, state)
 
     print(
         f"Analyzed {len(processed_sessions)} session(s); {len(new_sessions)} new since last run."
     )
     if trimmed:
         print(f"Trimmed {trimmed} session id(s) to stay within memory limits.")
-    for pattern in PATTERNS:
+    for pattern in patterns:
         count = stats.get(pattern.identifier, {}).get("count", 0)
         print(f" - {pattern.title}: {count} session(s)")
 
@@ -601,7 +839,6 @@ def run(
             print("Skipping git and PR automation (--skip-git).")
         return
 
-    repo_root = detect_repo_root(codex_path.resolve().parent)
     if repo_root is None:
         print("Skipping git automation; could not locate git repository root.")
         return
@@ -615,6 +852,7 @@ def run(
             new_sessions,
             stats,
             total_sessions=len(processed_sessions),
+            patterns=patterns,
         )
     except RuntimeError as exc:
         print(f"Git automation failed: {exc}")

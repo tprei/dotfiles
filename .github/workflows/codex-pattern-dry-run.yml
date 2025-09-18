@@ -1,0 +1,31 @@
+name: Codex Pattern Dry Run
+
+on:
+  push:
+    branches: [ master, codex/autotune ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run Codex pattern analyzer (dry run)
+        env:
+          CODEX_PATTERN_DISABLE_LLM: '1'
+        run: |
+          python3 .codex/scripts/codex_pattern_updater.py \
+            --dry-run \
+            --skip-git \
+            --history tests/fixtures/history_sample.jsonl \
+            --state /tmp/state.json \
+            --codex /tmp/CODEX.md
