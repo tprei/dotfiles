@@ -786,6 +786,10 @@ def run(
 
     repo_root = detect_repo_root(codex_path.resolve().parent)
 
+    if not dry_run and not skip_git and repo_root is not None:
+        # Switch to the automation branch before mutating files so later git operations succeed.
+        ensure_branch(repo_root, branch, base_branch)
+
     new_sessions = collect_new_sessions(sessions, processed_sessions)
     if new_sessions:
         processed_sessions.extend(new_sessions)
