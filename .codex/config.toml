@@ -1,5 +1,5 @@
 model = "gpt-5-codex"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "high"
 
 [projects."/home/prei/jianing"]
 trust_level = "trusted"
@@ -11,6 +11,15 @@ trust_level = "trusted"
 trust_level = "trusted"
 
 [projects."/home/prei/retirers/microsaas-boilerplate"]
+trust_level = "trusted"
+
+[projects."/home/prei/dotfiles"]
+trust_level = "trusted"
+
+[projects."/home/prei"]
+trust_level = "trusted"
+
+[projects."/home/prei/jianing/new-code"]
 trust_level = "trusted"
 
 [mcp_servers.serena]
@@ -31,6 +40,11 @@ startup_timeout_ms = 20000
 [mcp_servers.playwright]
 command = "npx"
 args = ["@playwright/mcp@latest"]
+
+[mcp_server.chrome-devtools]
+command = "npx"
+args = ["chrome-dev-tools-mcp@latest"]
+
 
 [tui]
 # Send desktop notifications when approvals are required or a turn completes.
