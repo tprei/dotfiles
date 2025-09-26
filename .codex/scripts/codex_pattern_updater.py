@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Incrementally analyze Codex session history and refresh CODEX.md guidance."""
+"""Incrementally analyze Codex session history and refresh AGENTS.md guidance."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 DEFAULT_HISTORY_PATH = Path.home() / ".codex" / "history.jsonl"
 DEFAULT_STATE_PATH = Path("automation_state.json")
-DEFAULT_CODEX_PATH = Path("CODEX.md")
+DEFAULT_CODEX_PATH = Path("AGENTS.md")
 DEFAULT_AUTOMATION_BRANCH = "codex/autotune"
 DEFAULT_BASE_BRANCH = "master"
 MAX_MEMORY_TOKENS = 100_000
@@ -866,7 +866,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--history", type=Path, default=DEFAULT_HISTORY_PATH, help="Path to history.jsonl")
     parser.add_argument("--state", type=Path, default=DEFAULT_STATE_PATH, help="Path to incremental state file")
-    parser.add_argument("--codex", type=Path, default=DEFAULT_CODEX_PATH, help="Path to CODEX.md output")
+    parser.add_argument("--codex", type=Path, default=DEFAULT_CODEX_PATH, help="Path to AGENTS.md output")
     parser.add_argument("--dry-run", action="store_true", help="Run analysis without writing outputs")
     parser.add_argument("--skip-git", action="store_true", help="Skip git commit/push and PR automation")
     parser.add_argument("--branch", default=DEFAULT_AUTOMATION_BRANCH, help="Automation branch name")

@@ -1,3 +1,8 @@
+- NEVER WRITE FALLBACKS - if you are unsure, please just ask
+- Leverage your MCP tools as much as possible
+- When writing docs, add a timestamp to them so we know what the latest are
+- Put docs in a @docs/ folder (if one already exists, use that). Check previous commits
+
 # Codex Improvement Guidelines
 
 Codex acts as an autonomous coding partner. The notes below distill common issues spotted across past sessions in `~/.codex/history.jsonl` and turn them into guardrails that apply to any repo.
