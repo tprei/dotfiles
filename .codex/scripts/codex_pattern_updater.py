@@ -298,30 +298,61 @@ def discover_patterns_with_llm(
     ).strip()
 
     env = os.environ.copy()
-    rollout_dir = Path(env.get("CODEX_ROLLOUT_DIR", "/tmp/codex_rollouts"))
-    try:
-        rollout_dir.mkdir(parents=True, exist_ok=True)
-    except Exception:
-        pass
-    env.setdefault("CODEX_ROLLOUT_DIR", str(rollout_dir))
+
+    # Ensure the Codex CLI writes any session artifacts inside the workspace so it
+    # stays within sandbox permissions (writing to $HOME/.codex fails here).
+    workspace_root = Path(__file__).resolve().parent.parent
+    if not workspace_root.exists():
+        workspace_root = Path.cwd()
+    codex_home = env.get("CODEX_HOME")
+    if codex_home:
+        codex_home_path = Path(codex_home)
+    else:
+        codex_home_path = workspace_root / ".codex_cli"
+        try:
+            codex_home_path.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            print(f"Warning: could not create CODEX_HOME at {codex_home_path}: {exc}")
+        env["CODEX_HOME"] = str(codex_home_path)
+
+    rollout_dir_value = env.get("CODEX_ROLLOUT_DIR")
+    if rollout_dir_value:
+        rollout_dir = Path(rollout_dir_value)
+    else:
+        rollout_dir = Path(env.get("CODEX_HOME", workspace_root)) / "rollouts"
+        try:
+            rollout_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            print(f"Warning: could not create rollout directory at {rollout_dir}: {exc}")
+        env["CODEX_ROLLOUT_DIR"] = str(rollout_dir)
 
     sandbox_mode = env.get("CODEX_PATTERN_SANDBOX", "workspace-write")
-    approval_mode = env.get("CODEX_PATTERN_APPROVAL", "on-request")
+    approval_mode = env.get("CODEX_PATTERN_APPROVAL", "never")
     working_dir = str(repo_root or Path.cwd())
+
+    command: List[str] = [
+        codex_bin,
+        "-a",
+        approval_mode,
+        "exec",
+        "--sandbox",
+        sandbox_mode,
+        "--cd",
+        working_dir,
+    ]
+
+    if (
+        sandbox_mode == "workspace-write"
+        and env.get("CODEX_PATTERN_DISABLE_NETWORK_CONFIG", "0").lower()
+        not in {"1", "true", "yes"}
+    ):
+        command.extend(["-c", "sandbox_workspace_write.network_access=true"])
+
+    command.append(prompt)
 
     try:
         result = subprocess.run(
-            [
-                codex_bin,
-                "-a",
-                approval_mode,
-                "exec",
-                "--sandbox",
-                sandbox_mode,
-                "--cd",
-                working_dir,
-                prompt,
-            ],
+            command,
             capture_output=True,
             text=True,
             env=env,
@@ -332,15 +363,40 @@ def discover_patterns_with_llm(
         return []
 
     if result.returncode != 0:
+        error_text = result.stderr.strip() or result.stdout.strip()
+        print("LLM discovery skipped: command failed", error_text)
+        lowered = error_text.lower()
+        if "permission denied" in lowered and "rollout" in lowered:
+            print(
+                "Hint: Codex CLI could not write rollout data. Set CODEX_HOME to a"
+                " writable directory or let the updater manage it."
+            )
+        elif "error sending request" in lowered:
+            print(
+                "Hint: Codex CLI could not reach the OpenAI API. Confirm network"
+                " access before rerunning."
+            )
+        snippet = (result.stdout or "").strip()
+        if snippet:
+            preview = truncate_text(snippet, 400)
+            print(f"Codex CLI output (truncated): {preview}")
+        return []
+
+    combined_lower = f"{result.stdout}\n{result.stderr}".lower()
+    if "error sending request" in combined_lower:
         print(
-            "LLM discovery skipped: command failed",
-            result.stderr.strip() or result.stdout.strip(),
+            "LLM discovery skipped: Codex CLI could not reach the OpenAI API."
+            " Confirm network access before rerunning."
         )
         return []
 
     parsed = parse_json_array(result.stdout)
     if not parsed:
         print("LLM discovery returned no parsable JSON.")
+        snippet = (result.stdout or "").strip()
+        if snippet:
+            preview = truncate_text(snippet, 400)
+            print(f"Codex CLI output (truncated): {preview}")
         return []
 
     patterns: List[Pattern] = []
@@ -898,6 +954,20 @@ def run(
 
     touched_sessions = new_sessions + [sid for sid in updated_sessions if sid not in new_sessions]
 
+    if new_sessions:
+        preview = ", ".join(new_sessions[:5])
+        suffix = "..." if len(new_sessions) > 5 else ""
+        print(f"New sessions detected ({len(new_sessions)}): {preview}{suffix}")
+    else:
+        print("No new sessions detected this run.")
+
+    if updated_sessions:
+        preview = ", ".join(updated_sessions[:5])
+        suffix = "..." if len(updated_sessions) > 5 else ""
+        print(f"Updated sessions ({len(updated_sessions)}): {preview}{suffix}")
+    else:
+        print("No previously processed sessions had new messages.")
+
     if llm_disabled:
         if touched_sessions and remaining_pattern_slots > 0:
             print("LLM discovery skipped: disabled via CODEX_PATTERN_DISABLE_LLM.")
@@ -914,6 +984,12 @@ def run(
             dynamic_patterns.extend(llm_patterns)
             if not dry_run:
                 state["dynamic_patterns"] = [pattern_to_dict(p) for p in dynamic_patterns]
+            print(
+                "Discovered dynamic patterns: "
+                + ", ".join(pattern.title for pattern in llm_patterns)
+            )
+        else:
+            print("No dynamic patterns discovered in latest sessions.")
 
     stats = build_stats(sessions, processed_sessions, patterns)
     codex_content = render_codex(patterns, stats)
@@ -943,6 +1019,11 @@ def run(
     for pattern in patterns:
         count = stats.get(pattern.identifier, {}).get("count", 0)
         print(f" - {pattern.title}: {count} session(s)")
+
+    recent_dynamic = [p for p in dynamic_patterns if p.identifier.startswith("dynamic-")]
+    if recent_dynamic:
+        titles = ", ".join(p.title for p in recent_dynamic[-5:])
+        print(f"Recent dynamic patterns tracked ({len(recent_dynamic)} total): {titles}")
 
     if dry_run or skip_git:
         if skip_git:
