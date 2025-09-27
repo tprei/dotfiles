@@ -49,7 +49,7 @@ Codex acts as an autonomous coding partner. The notes below distill common issue
 - Example: "I want to build something quite simple: There is a file in my home: $HOME/.co..."
 
 ## 7. Leverage available tooling proactively
-- Highlight built-in tools before the user prompts you. 20 session(s) reminded Codex to employ local tooling.
+- Highlight built-in tools before the user prompts you. 21 session(s) reminded Codex to employ local tooling.
 - Prefer existing scripts or automation hooks over ad-hoc commands; update or create helpers when they are missing.
 - Cache learnings: when you discover an effective workflow, note it for future runs.
 - Example: "So the burning happened: Docker logs"
