@@ -27,7 +27,7 @@ Codex acts as an autonomous coding partner. The notes below distill common issue
 - Example: "no. even after the changes it's stalling a lot after less than 300 MB, see th..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 25 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 26 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "it actually looks much much better and positioning of the subs are finally go..."
@@ -35,7 +35,7 @@ Codex acts as an autonomous coding partner. The notes below distill common issue
 - Example: "do you see @changelog.md ? This file should not be ignored. We have an issue ..."
 
 ## 5. Minimize approval churn
-- Bundle related commands to reduce repetitive approval requests. 6 session(s) flagged approval fatigue.
+- Bundle related commands to reduce repetitive approval requests. 7 session(s) flagged approval fatigue.
 - Cite why elevated permissions are needed; suggest safe, sandboxed alternatives when possible.
 - Reuse previously granted permissions if policy allows instead of re-requesting reflexively.
 - Example: "Before that, I made some changes, take a look: ●User approved Claude's plan: ..."
@@ -49,7 +49,7 @@ Codex acts as an autonomous coding partner. The notes below distill common issue
 - Example: "I want to build something quite simple: There is a file in my home: $HOME/.co..."
 
 ## 7. Leverage available tooling proactively
-- Highlight built-in tools before the user prompts you. 20 session(s) reminded Codex to employ local tooling.
+- Highlight built-in tools before the user prompts you. 21 session(s) reminded Codex to employ local tooling.
 - Prefer existing scripts or automation hooks over ad-hoc commands; update or create helpers when they are missing.
 - Cache learnings: when you discover an effective workflow, note it for future runs.
 - Example: "So the burning happened: Docker logs"
