@@ -8,8 +8,11 @@ import json
 import os
 import re
 import shutil
+import shlex
 import subprocess
 import textwrap
+import urllib.error
+import urllib.request
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -23,6 +26,8 @@ DEFAULT_AUTOMATION_BRANCH = "codex/autotune"
 DEFAULT_BASE_BRANCH = "master"
 MAX_MEMORY_TOKENS = 100_000
 MAX_PATTERNS = 20
+DEFAULT_LLM_PROVIDER = "claude"
+DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-20250514"
 STATIC_CALLOUTS: Sequence[str] = (
     "DO NOT IMPLEMENT FALLBACKS. If you are unsure how to do something or something isn't working, avoid quick hacks like mocked data or assuming functionality is impossible; pause and surface the blocker instead.",
     "Prefer rg (ripgrep) over grep for searching.",
@@ -266,6 +271,15 @@ def discover_patterns_with_llm(
     capacity: int,
     repo_root: Optional[Path],
 ) -> List[Pattern]:
+    provider = os.environ.get("CODEX_PATTERN_PROVIDER", DEFAULT_LLM_PROVIDER).lower()
+    if provider == "claude":
+        return discover_patterns_with_claude(
+            sessions,
+            session_ids,
+            existing_titles,
+            capacity,
+        )
+
     if capacity <= 0 or not session_ids:
         return []
 
@@ -298,30 +312,61 @@ def discover_patterns_with_llm(
     ).strip()
 
     env = os.environ.copy()
-    rollout_dir = Path(env.get("CODEX_ROLLOUT_DIR", "/tmp/codex_rollouts"))
-    try:
-        rollout_dir.mkdir(parents=True, exist_ok=True)
-    except Exception:
-        pass
-    env.setdefault("CODEX_ROLLOUT_DIR", str(rollout_dir))
+
+    # Ensure the Codex CLI writes any session artifacts inside the workspace so it
+    # stays within sandbox permissions (writing to $HOME/.codex fails here).
+    workspace_root = Path(__file__).resolve().parent.parent
+    if not workspace_root.exists():
+        workspace_root = Path.cwd()
+    codex_home = env.get("CODEX_HOME")
+    if codex_home:
+        codex_home_path = Path(codex_home)
+    else:
+        codex_home_path = workspace_root / ".codex_cli"
+        try:
+            codex_home_path.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            print(f"Warning: could not create CODEX_HOME at {codex_home_path}: {exc}")
+        env["CODEX_HOME"] = str(codex_home_path)
+
+    rollout_dir_value = env.get("CODEX_ROLLOUT_DIR")
+    if rollout_dir_value:
+        rollout_dir = Path(rollout_dir_value)
+    else:
+        rollout_dir = Path(env.get("CODEX_HOME", workspace_root)) / "rollouts"
+        try:
+            rollout_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            print(f"Warning: could not create rollout directory at {rollout_dir}: {exc}")
+        env["CODEX_ROLLOUT_DIR"] = str(rollout_dir)
 
     sandbox_mode = env.get("CODEX_PATTERN_SANDBOX", "workspace-write")
-    approval_mode = env.get("CODEX_PATTERN_APPROVAL", "on-request")
+    approval_mode = env.get("CODEX_PATTERN_APPROVAL", "never")
     working_dir = str(repo_root or Path.cwd())
+
+    command: List[str] = [
+        codex_bin,
+        "-a",
+        approval_mode,
+        "exec",
+        "--sandbox",
+        sandbox_mode,
+        "--cd",
+        working_dir,
+    ]
+
+    if (
+        sandbox_mode == "workspace-write"
+        and env.get("CODEX_PATTERN_DISABLE_NETWORK_CONFIG", "0").lower()
+        not in {"1", "true", "yes"}
+    ):
+        command.extend(["-c", "sandbox_workspace_write.network_access=true"])
+
+    command.append(prompt)
 
     try:
         result = subprocess.run(
-            [
-                codex_bin,
-                "-a",
-                approval_mode,
-                "exec",
-                "--sandbox",
-                sandbox_mode,
-                "--cd",
-                working_dir,
-                prompt,
-            ],
+            command,
             capture_output=True,
             text=True,
             env=env,
@@ -332,14 +377,191 @@ def discover_patterns_with_llm(
         return []
 
     if result.returncode != 0:
+        error_text = result.stderr.strip() or result.stdout.strip()
+        print("LLM discovery skipped: command failed", error_text)
+        lowered = error_text.lower()
+        if "permission denied" in lowered and "rollout" in lowered:
+            print(
+                "Hint: Codex CLI could not write rollout data. Set CODEX_HOME to a"
+                " writable directory or let the updater manage it."
+            )
+        elif "error sending request" in lowered:
+            print(
+                "Hint: Codex CLI could not reach the OpenAI API. Confirm network"
+                " access before rerunning."
+            )
+        snippet = (result.stdout or "").strip()
+        if snippet:
+            preview = truncate_text(snippet, 400)
+            print(f"Codex CLI output (truncated): {preview}")
+        return []
+
+    combined_lower = f"{result.stdout}\n{result.stderr}".lower()
+    if "error sending request" in combined_lower:
         print(
-            "LLM discovery skipped: command failed",
-            result.stderr.strip() or result.stdout.strip(),
+            "LLM discovery skipped: Codex CLI could not reach the OpenAI API."
+            " Confirm network access before rerunning."
         )
         return []
 
     parsed = parse_json_array(result.stdout)
     if not parsed:
+        print("LLM discovery returned no parsable JSON.")
+        snippet = (result.stdout or "").strip()
+        if snippet:
+            preview = truncate_text(snippet, 400)
+            print(f"Codex CLI output (truncated): {preview}")
+        return []
+
+    patterns: List[Pattern] = []
+    existing = {title.lower() for title in existing_titles}
+    seen_titles: set[str] = set()
+    for entry in parsed:
+        if len(patterns) >= capacity:
+            break
+        title = str(entry.get("title", "")).strip()
+        if not title or title.lower() in existing or title.lower() in seen_titles:
+            continue
+        summary = str(entry.get("summary", "")).strip()
+        guidance = entry.get("guidance", []) or ([summary] if summary else [])
+        guidance_lines = [truncate_text(str(item).strip(), 180) for item in guidance if str(item).strip()]
+        if not guidance_lines:
+            continue
+        keywords = [truncate_text(str(k).lower().strip(), 40) for k in entry.get("keywords", [])]
+        if not keywords:
+            continue
+
+        identifier = f"dynamic-{slugify(title)}"
+        bullets = tuple(guidance_lines[:3])
+        pattern = Pattern(
+            identifier=identifier,
+            title=title,
+            keywords=tuple(keywords[:6]),
+            bullets=bullets,
+        )
+        patterns.append(pattern)
+        seen_titles.add(title.lower())
+
+    return patterns
+
+
+def discover_patterns_with_claude(
+    sessions: Dict[str, List[Dict[str, object]]],
+    session_ids: Sequence[str],
+    existing_titles: Sequence[str],
+    capacity: int,
+) -> List[Pattern]:
+    if capacity <= 0 or not session_ids:
+        return []
+
+    env = os.environ.copy()
+    api_key = env.get("ANTHROPIC_API_KEY") or env.get("CLAUDE_API_KEY")
+    if not api_key:
+        print(
+            "LLM discovery skipped: ANTHROPIC_API_KEY (or CLAUDE_API_KEY) not set "
+            "for claude provider."
+        )
+        return []
+
+    excerpts = summarize_sessions_for_prompt(sessions, session_ids[:10])
+    if not excerpts:
+        return []
+
+    existing_titles_text = ", ".join(existing_titles) if existing_titles else "None"
+    prompt = textwrap.dedent(
+        f"""
+        You are maintaining a set of improvement patterns for a coding agent. Existing patterns are: {existing_titles_text}.
+        Review the new session excerpts below and propose up to {capacity} additional patterns that capture recurring issues not already addressed.
+
+        Respond with a JSON array (no extra text) where each element has:
+        - "title": short descriptive pattern title (max 7 words)
+        - "summary": one-sentence explanation of the issue/opportunity
+        - "guidance": array of 2-3 actionable best-practice bullets for the agent (present tense)
+        - "keywords": array of 3-6 lowercase keywords to detect similar cases
+
+        Session excerpts:
+        {excerpts}
+
+        Return only the JSON array.
+        """
+    ).strip()
+
+    model = env.get("CODEX_PATTERN_CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL)
+    max_tokens = int(env.get("CODEX_PATTERN_CLAUDE_MAX_TOKENS", "1024"))
+    temperature = float(env.get("CODEX_PATTERN_CLAUDE_TEMPERATURE", "0"))
+    top_p = env.get("CODEX_PATTERN_CLAUDE_TOP_P")
+    top_p_value = float(top_p) if top_p is not None else None
+
+    request_body: Dict[str, object] = {
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt,
+            }
+        ],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    if top_p_value is not None:
+        request_body["top_p"] = top_p_value
+
+    request_json = json.dumps(request_body).encode("utf-8")
+    request = urllib.request.Request(
+        env.get("ANTHROPIC_API_URL", "https://api.anthropic.com/v1/messages"),
+        data=request_json,
+        headers={
+            "content-type": "application/json",
+            "x-api-key": api_key,
+            "anthropic-version": env.get("ANTHROPIC_API_VERSION", "2023-06-01"),
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            body = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        error_text = exc.read().decode("utf-8", errors="ignore")
+        message = error_text or str(exc)
+        print("LLM discovery skipped: claude API error", message)
+        if "insufficient" in message.lower() or "credit" in message.lower():
+            print(
+                "Hint: ensure your Anthropic account has sufficient credit or quota "
+                "for claude-sonnet-4-20250514."
+            )
+        return []
+    except urllib.error.URLError as exc:
+        print(f"LLM discovery skipped: failed to contact Anthropic ({exc})")
+        return []
+
+    try:
+        api_response = json.loads(body)
+    except json.JSONDecodeError:
+        snippet = truncate_text(body.strip(), 400)
+        if snippet:
+            print(f"Claude API response (truncated): {snippet}")
+        print("LLM discovery returned no parsable JSON.")
+        return []
+
+    if api_response.get("type") == "error":
+        message = truncate_text(str(api_response.get("error", "")), 400)
+        print(f"LLM discovery skipped: claude API error {message}")
+        return []
+
+    content = api_response.get("content", [])
+    text_chunks = [
+        item.get("text", "")
+        for item in content
+        if isinstance(item, dict) and item.get("type") == "text"
+    ]
+    combined_output = "\n".join(chunk for chunk in text_chunks if chunk).strip()
+
+    parsed = parse_json_array(combined_output)
+    if not parsed:
+        snippet = truncate_text(combined_output, 400)
+        if snippet:
+            print(f"Claude response (truncated): {snippet}")
         print("LLM discovery returned no parsable JSON.")
         return []
 
@@ -898,6 +1120,20 @@ def run(
 
     touched_sessions = new_sessions + [sid for sid in updated_sessions if sid not in new_sessions]
 
+    if new_sessions:
+        preview = ", ".join(new_sessions[:5])
+        suffix = "..." if len(new_sessions) > 5 else ""
+        print(f"New sessions detected ({len(new_sessions)}): {preview}{suffix}")
+    else:
+        print("No new sessions detected this run.")
+
+    if updated_sessions:
+        preview = ", ".join(updated_sessions[:5])
+        suffix = "..." if len(updated_sessions) > 5 else ""
+        print(f"Updated sessions ({len(updated_sessions)}): {preview}{suffix}")
+    else:
+        print("No previously processed sessions had new messages.")
+
     if llm_disabled:
         if touched_sessions and remaining_pattern_slots > 0:
             print("LLM discovery skipped: disabled via CODEX_PATTERN_DISABLE_LLM.")
@@ -914,6 +1150,12 @@ def run(
             dynamic_patterns.extend(llm_patterns)
             if not dry_run:
                 state["dynamic_patterns"] = [pattern_to_dict(p) for p in dynamic_patterns]
+            print(
+                "Discovered dynamic patterns: "
+                + ", ".join(pattern.title for pattern in llm_patterns)
+            )
+        else:
+            print("No dynamic patterns discovered in latest sessions.")
 
     stats = build_stats(sessions, processed_sessions, patterns)
     codex_content = render_codex(patterns, stats)
@@ -943,6 +1185,11 @@ def run(
     for pattern in patterns:
         count = stats.get(pattern.identifier, {}).get("count", 0)
         print(f" - {pattern.title}: {count} session(s)")
+
+    recent_dynamic = [p for p in dynamic_patterns if p.identifier.startswith("dynamic-")]
+    if recent_dynamic:
+        titles = ", ".join(p.title for p in recent_dynamic[-5:])
+        print(f"Recent dynamic patterns tracked ({len(recent_dynamic)} total): {titles}")
 
     if dry_run or skip_git:
         if skip_git:

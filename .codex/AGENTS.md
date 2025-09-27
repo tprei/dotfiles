@@ -11,7 +11,7 @@ Codex acts as an autonomous coding partner. The notes below distill common issue
 - Example: "Check most recent changes. Something is wrong when converting to audio. Think..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 28 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 29 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "Cool can you write a README within video-miner folder so it can be used by co..."
@@ -35,7 +35,7 @@ Codex acts as an autonomous coding partner. The notes below distill common issue
 - Example: "do you see @changelog.md ? This file should not be ignored. We have an issue ..."
 
 ## 5. Minimize approval churn
-- Bundle related commands to reduce repetitive approval requests. 7 session(s) flagged approval fatigue.
+- Bundle related commands to reduce repetitive approval requests. 8 session(s) flagged approval fatigue.
 - Cite why elevated permissions are needed; suggest safe, sandboxed alternatives when possible.
 - Reuse previously granted permissions if policy allows instead of re-requesting reflexively.
 - Example: "Before that, I made some changes, take a look: ●User approved Claude's plan: ..."
