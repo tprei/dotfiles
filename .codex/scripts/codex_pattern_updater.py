@@ -8,8 +8,11 @@ import json
 import os
 import re
 import shutil
+import shlex
 import subprocess
 import textwrap
+import urllib.error
+import urllib.request
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -23,6 +26,8 @@ DEFAULT_AUTOMATION_BRANCH = "codex/autotune"
 DEFAULT_BASE_BRANCH = "master"
 MAX_MEMORY_TOKENS = 100_000
 MAX_PATTERNS = 20
+DEFAULT_LLM_PROVIDER = "claude"
+DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-20250514"
 STATIC_CALLOUTS: Sequence[str] = (
     "DO NOT IMPLEMENT FALLBACKS. If you are unsure how to do something or something isn't working, avoid quick hacks like mocked data or assuming functionality is impossible; pause and surface the blocker instead.",
     "Prefer rg (ripgrep) over grep for searching.",
@@ -266,6 +271,15 @@ def discover_patterns_with_llm(
     capacity: int,
     repo_root: Optional[Path],
 ) -> List[Pattern]:
+    provider = os.environ.get("CODEX_PATTERN_PROVIDER", DEFAULT_LLM_PROVIDER).lower()
+    if provider == "claude":
+        return discover_patterns_with_claude(
+            sessions,
+            session_ids,
+            existing_titles,
+            capacity,
+        )
+
     if capacity <= 0 or not session_ids:
         return []
 
@@ -397,6 +411,158 @@ def discover_patterns_with_llm(
         if snippet:
             preview = truncate_text(snippet, 400)
             print(f"Codex CLI output (truncated): {preview}")
+        return []
+
+    patterns: List[Pattern] = []
+    existing = {title.lower() for title in existing_titles}
+    seen_titles: set[str] = set()
+    for entry in parsed:
+        if len(patterns) >= capacity:
+            break
+        title = str(entry.get("title", "")).strip()
+        if not title or title.lower() in existing or title.lower() in seen_titles:
+            continue
+        summary = str(entry.get("summary", "")).strip()
+        guidance = entry.get("guidance", []) or ([summary] if summary else [])
+        guidance_lines = [truncate_text(str(item).strip(), 180) for item in guidance if str(item).strip()]
+        if not guidance_lines:
+            continue
+        keywords = [truncate_text(str(k).lower().strip(), 40) for k in entry.get("keywords", [])]
+        if not keywords:
+            continue
+
+        identifier = f"dynamic-{slugify(title)}"
+        bullets = tuple(guidance_lines[:3])
+        pattern = Pattern(
+            identifier=identifier,
+            title=title,
+            keywords=tuple(keywords[:6]),
+            bullets=bullets,
+        )
+        patterns.append(pattern)
+        seen_titles.add(title.lower())
+
+    return patterns
+
+
+def discover_patterns_with_claude(
+    sessions: Dict[str, List[Dict[str, object]]],
+    session_ids: Sequence[str],
+    existing_titles: Sequence[str],
+    capacity: int,
+) -> List[Pattern]:
+    if capacity <= 0 or not session_ids:
+        return []
+
+    env = os.environ.copy()
+    api_key = env.get("ANTHROPIC_API_KEY") or env.get("CLAUDE_API_KEY")
+    if not api_key:
+        print(
+            "LLM discovery skipped: ANTHROPIC_API_KEY (or CLAUDE_API_KEY) not set "
+            "for claude provider."
+        )
+        return []
+
+    excerpts = summarize_sessions_for_prompt(sessions, session_ids[:10])
+    if not excerpts:
+        return []
+
+    existing_titles_text = ", ".join(existing_titles) if existing_titles else "None"
+    prompt = textwrap.dedent(
+        f"""
+        You are maintaining a set of improvement patterns for a coding agent. Existing patterns are: {existing_titles_text}.
+        Review the new session excerpts below and propose up to {capacity} additional patterns that capture recurring issues not already addressed.
+
+        Respond with a JSON array (no extra text) where each element has:
+        - "title": short descriptive pattern title (max 7 words)
+        - "summary": one-sentence explanation of the issue/opportunity
+        - "guidance": array of 2-3 actionable best-practice bullets for the agent (present tense)
+        - "keywords": array of 3-6 lowercase keywords to detect similar cases
+
+        Session excerpts:
+        {excerpts}
+
+        Return only the JSON array.
+        """
+    ).strip()
+
+    model = env.get("CODEX_PATTERN_CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL)
+    max_tokens = int(env.get("CODEX_PATTERN_CLAUDE_MAX_TOKENS", "1024"))
+    temperature = float(env.get("CODEX_PATTERN_CLAUDE_TEMPERATURE", "0"))
+    top_p = env.get("CODEX_PATTERN_CLAUDE_TOP_P")
+    top_p_value = float(top_p) if top_p is not None else None
+
+    request_body: Dict[str, object] = {
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt,
+            }
+        ],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    if top_p_value is not None:
+        request_body["top_p"] = top_p_value
+
+    request_json = json.dumps(request_body).encode("utf-8")
+    request = urllib.request.Request(
+        env.get("ANTHROPIC_API_URL", "https://api.anthropic.com/v1/messages"),
+        data=request_json,
+        headers={
+            "content-type": "application/json",
+            "x-api-key": api_key,
+            "anthropic-version": env.get("ANTHROPIC_API_VERSION", "2023-06-01"),
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            body = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        error_text = exc.read().decode("utf-8", errors="ignore")
+        message = error_text or str(exc)
+        print("LLM discovery skipped: claude API error", message)
+        if "insufficient" in message.lower() or "credit" in message.lower():
+            print(
+                "Hint: ensure your Anthropic account has sufficient credit or quota "
+                "for claude-sonnet-4-20250514."
+            )
+        return []
+    except urllib.error.URLError as exc:
+        print(f"LLM discovery skipped: failed to contact Anthropic ({exc})")
+        return []
+
+    try:
+        api_response = json.loads(body)
+    except json.JSONDecodeError:
+        snippet = truncate_text(body.strip(), 400)
+        if snippet:
+            print(f"Claude API response (truncated): {snippet}")
+        print("LLM discovery returned no parsable JSON.")
+        return []
+
+    if api_response.get("type") == "error":
+        message = truncate_text(str(api_response.get("error", "")), 400)
+        print(f"LLM discovery skipped: claude API error {message}")
+        return []
+
+    content = api_response.get("content", [])
+    text_chunks = [
+        item.get("text", "")
+        for item in content
+        if isinstance(item, dict) and item.get("type") == "text"
+    ]
+    combined_output = "\n".join(chunk for chunk in text_chunks if chunk).strip()
+
+    parsed = parse_json_array(combined_output)
+    if not parsed:
+        snippet = truncate_text(combined_output, 400)
+        if snippet:
+            print(f"Claude response (truncated): {snippet}")
+        print("LLM discovery returned no parsable JSON.")
         return []
 
     patterns: List[Pattern] = []
