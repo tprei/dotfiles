@@ -35,7 +35,7 @@ Codex acts as an autonomous coding partner. The notes below distill common issue
 - Example: "do you see @changelog.md ? This file should not be ignored. We have an issue ..."
 
 ## 5. Minimize approval churn
-- Bundle related commands to reduce repetitive approval requests. 6 session(s) flagged approval fatigue.
+- Bundle related commands to reduce repetitive approval requests. 7 session(s) flagged approval fatigue.
 - Cite why elevated permissions are needed; suggest safe, sandboxed alternatives when possible.
 - Reuse previously granted permissions if policy allows instead of re-requesting reflexively.
 - Example: "Before that, I made some changes, take a look: ●User approved Claude's plan: ..."

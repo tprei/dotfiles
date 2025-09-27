@@ -231,7 +231,7 @@ def truncate_text(value: str, limit: int = 1200) -> str:
 
 
 def summarize_sessions_for_prompt(
-    sessions: Dict[str, List[str]],
+    sessions: Dict[str, List[Dict[str, object]]],
     session_ids: Sequence[str],
     char_limit: int = 1600,
 ) -> str:
@@ -240,7 +240,9 @@ def summarize_sessions_for_prompt(
         messages = sessions.get(sid, [])
         if not messages:
             continue
-        combined = " \n".join(msg.replace("\n", " ") for msg in messages)
+        combined = " \n".join(
+            str(msg.get("text", "")).replace("\n", " ") for msg in messages
+        )
         blocks.append(f"Session {sid}:\n{truncate_text(combined, char_limit)}")
     return "\n\n".join(blocks)
 
@@ -258,7 +260,7 @@ def parse_json_array(text: str) -> Optional[List[Dict[str, object]]]:
 
 
 def discover_patterns_with_llm(
-    sessions: Dict[str, List[str]],
+    sessions: Dict[str, List[Dict[str, object]]],
     session_ids: Sequence[str],
     existing_titles: Sequence[str],
     capacity: int,
@@ -373,8 +375,8 @@ def discover_patterns_with_llm(
     return patterns
 
 
-def load_history(path: Path) -> Dict[str, List[str]]:
-    sessions: Dict[str, List[str]] = defaultdict(list)
+def load_history(path: Path) -> Dict[str, List[Dict[str, object]]]:
+    sessions: Dict[str, List[Dict[str, object]]] = defaultdict(list)
     if not path.exists():
         raise FileNotFoundError(f"History file not found: {path}")
     with path.open("r", encoding="utf-8") as fh:
@@ -383,8 +385,20 @@ def load_history(path: Path) -> Dict[str, List[str]]:
             if not line:
                 continue
             entry = json.loads(line)
-            sessions[entry["session_id"]].append(entry["text"])
+            session_id = entry["session_id"]
+            sessions[session_id].append(
+                {
+                    "ts": entry.get("ts", 0),
+                    "text": entry.get("text", ""),
+                }
+            )
+    for message_list in sessions.values():
+        message_list.sort(key=lambda item: item.get("ts") or 0)
     return sessions
+
+
+def extract_text(messages: Sequence[Dict[str, object]]) -> List[str]:
+    return [str(item.get("text", "")) for item in messages]
 
 
 def load_state(path: Path) -> Dict[str, object]:
@@ -397,6 +411,7 @@ def load_state(path: Path) -> Dict[str, object]:
     state.setdefault("processed_sessions", [])
     state.setdefault("dynamic_patterns", [])
     state.setdefault("trimmed_sessions", 0)
+    state.setdefault("session_progress", {})
     return state
 
 
@@ -423,8 +438,30 @@ def enforce_state_limits(processed_sessions: List[str]) -> Tuple[List[str], int]
 
 def save_state(path: Path, state: Dict[str, object]) -> None:
     processed_list = list(state.get("processed_sessions", []))
+    session_progress: Dict[str, int] = {
+        str(key): int(value)
+        for key, value in (state.get("session_progress", {}) or {}).items()
+    }
+
     limited, trimmed = enforce_state_limits(processed_list)
-    state["processed_sessions"] = sorted(set(limited))
+
+    seen: set[str] = set()
+    ordered_unique: List[str] = []
+    for sid in limited:
+        if sid in seen:
+            continue
+        seen.add(sid)
+        ordered_unique.append(sid)
+
+    if session_progress:
+        session_progress = {
+            sid: session_progress[sid]
+            for sid in ordered_unique
+            if sid in session_progress
+        }
+        state["session_progress"] = session_progress
+
+    state["processed_sessions"] = ordered_unique
     state["trimmed_sessions"] = trimmed
     state["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     with path.open("w", encoding="utf-8") as fh:
@@ -432,13 +469,8 @@ def save_state(path: Path, state: Dict[str, object]) -> None:
         fh.write("\n")
 
 
-def collect_new_sessions(all_sessions: Dict[str, List[str]], processed: Iterable[str]) -> List[str]:
-    seen = set(processed)
-    return [sid for sid in all_sessions.keys() if sid not in seen]
-
-
 def build_stats(
-    sessions: Dict[str, List[str]],
+    sessions: Dict[str, List[Dict[str, object]]],
     processed_ids: Iterable[str],
     patterns: Sequence[Pattern],
 ) -> Dict[str, Dict[str, object]]:
@@ -452,14 +484,22 @@ def build_stats(
         for sid, messages in sessions.items():
             if processed_set and sid not in processed_set:
                 continue
-            blob = "\n".join(messages).lower()
+            text_messages = extract_text(messages)
+            blob = "\n".join(text_messages).lower()
             if any(keyword in blob for keyword in pattern.keywords):
                 matched_sessions.append(sid)
                 if len(examples) < 3:
-                    snippet = next((m for m in messages if any(k in m.lower() for k in pattern.keywords)), messages[0])
+                    snippet = next(
+                        (
+                            msg.get("text", "")
+                            for msg in messages
+                            if any(k in str(msg.get("text", "")).lower() for k in pattern.keywords)
+                        ),
+                        messages[0].get("text", ""),
+                    )
                     examples.append({
                         "session_id": sid,
-                        "snippet": " ".join(snippet.strip().split())[:160],
+                        "snippet": " ".join(str(snippet).strip().split())[:160],
                     })
 
         stats[pattern.identifier] = {
@@ -625,15 +665,31 @@ def get_pr_info(repo_root: Path, branch: str) -> Optional[Dict[str, object]]:
         return None
 
 
-def build_commit_message(new_sessions: int) -> str:
+def build_commit_message(new_sessions: int, updated_sessions: int) -> str:
+    labels: List[str] = []
     if new_sessions:
-        return f"chore: refresh codex guidance ({new_sessions} new session{'s' if new_sessions != 1 else ''})"
+        labels.append(
+            f"{new_sessions} new session{'s' if new_sessions != 1 else ''}"
+        )
+    if updated_sessions:
+        labels.append(
+            f"{updated_sessions} updated session{'s' if updated_sessions != 1 else ''}"
+        )
+    if labels:
+        return f"chore: refresh codex guidance ({' / '.join(labels)})"
     return "chore: refresh codex guidance"
 
 
-def build_pr_title(new_sessions: int) -> str:
+def build_pr_title(new_sessions: int, updated_sessions: int) -> str:
+    segments: List[str] = []
     if new_sessions:
-        return f"Update CODEX guidance from {new_sessions} new session{'s' if new_sessions != 1 else ''}"
+        segments.append(f"{new_sessions} new")
+    if updated_sessions:
+        segments.append(f"{updated_sessions} updated")
+    if segments:
+        total = new_sessions + updated_sessions
+        noun = "session" if total == 1 else "sessions"
+        return f"Update CODEX guidance ({' / '.join(segments)} {noun})"
     return "Update CODEX guidance"
 
 
@@ -650,6 +706,7 @@ def format_example_for_pr(examples: Sequence[Dict[str, str]]) -> str:
 def build_pr_body(
     total_sessions: int,
     new_sessions: Sequence[str],
+    updated_sessions: Sequence[str],
     stats: Dict[str, Dict[str, object]],
     patterns: Sequence[Pattern],
 ) -> str:
@@ -669,6 +726,9 @@ def build_pr_body(
     motivation_section = "\n".join(motivation_lines) if motivation_lines else "- No new insights detected"
 
     new_sessions_list = ", ".join(new_sessions[:5]) if new_sessions else "None"
+    updated_sessions_list = (
+        ", ".join(updated_sessions[:5]) if updated_sessions else "None"
+    )
 
     body = f"""
 ## Summary
@@ -681,6 +741,9 @@ def build_pr_body(
 ## Newly Processed Sessions
 - {new_sessions_list}
 
+## Updated Sessions
+- {updated_sessions_list}
+
 ## Testing
 - scripts/codex_pattern_updater.py --dry-run
 """
@@ -692,6 +755,7 @@ def create_or_update_pr(
     branch: str,
     base_branch: str,
     new_sessions: Sequence[str],
+    updated_sessions: Sequence[str],
     stats: Dict[str, Dict[str, object]],
     total_sessions: int,
     patterns: Sequence[Pattern],
@@ -701,10 +765,11 @@ def create_or_update_pr(
         return
 
     info = get_pr_info(repo_root, branch)
-    title = build_pr_title(len(new_sessions))
+    title = build_pr_title(len(new_sessions), len(updated_sessions))
     body = build_pr_body(
         total_sessions=total_sessions,
         new_sessions=new_sessions,
+        updated_sessions=updated_sessions,
         stats=stats,
         patterns=patterns,
     )
@@ -740,6 +805,7 @@ def handle_git_workflow(
     branch: str,
     base_branch: str,
     new_sessions: Sequence[str],
+    updated_sessions: Sequence[str],
     stats: Dict[str, Dict[str, object]],
     total_sessions: int,
     patterns: Sequence[Pattern],
@@ -757,13 +823,17 @@ def handle_git_workflow(
         print("No staged changes after add; skipping commit.")
         return
 
-    commit_changes(repo_root, build_commit_message(len(new_sessions)))
+    commit_changes(
+        repo_root,
+        build_commit_message(len(new_sessions), len(updated_sessions)),
+    )
     push_branch(repo_root, branch)
     create_or_update_pr(
         repo_root,
         branch,
         base_branch,
         new_sessions,
+        updated_sessions,
         stats,
         total_sessions=total_sessions,
         patterns=patterns,
@@ -780,33 +850,61 @@ def run(
 ) -> None:
     sessions = load_history(history_path)
     state = load_state(state_path)
-    processed_sessions: List[str] = list(state.get("processed_sessions", []))
+    session_progress: Dict[str, int] = {
+        str(key): int(value)
+        for key, value in (state.get("session_progress", {}) or {}).items()
+    }
+    processed_sessions_snapshot: List[str] = list(state.get("processed_sessions", []))
     dynamic_patterns = dynamic_patterns_from_state(state)
     patterns: List[Pattern] = list(STATIC_PATTERNS) + dynamic_patterns
 
     repo_root = detect_repo_root(codex_path.resolve().parent)
 
+    # Migrate legacy state that only tracked session identifiers.
+    migration_performed = False
+    if processed_sessions_snapshot and not session_progress:
+        for sid in processed_sessions_snapshot:
+            messages = sessions.get(sid, [])
+            if not messages:
+                continue
+            latest_ts = max(int(item.get("ts") or 0) for item in messages)
+            session_progress[sid] = latest_ts
+        migration_performed = True
+
     if not dry_run and not skip_git and repo_root is not None:
         # Switch to the automation branch before mutating files so later git operations succeed.
         ensure_branch(repo_root, branch, base_branch)
 
-    new_sessions = collect_new_sessions(sessions, processed_sessions)
-    if new_sessions:
-        processed_sessions.extend(new_sessions)
+    new_sessions: List[str] = []
+    updated_sessions: List[str] = []
 
-    processed_sessions, trimmed = enforce_state_limits(processed_sessions)
+    for sid, messages in sessions.items():
+        latest_ts = max(int(item.get("ts") or 0) for item in messages) if messages else 0
+        last_seen = session_progress.get(sid)
+        if last_seen is None:
+            if messages:
+                new_sessions.append(sid)
+        else:
+            if any(int(item.get("ts") or 0) > last_seen for item in messages):
+                updated_sessions.append(sid)
+        session_progress[sid] = latest_ts
+
+    processed_sessions = list(session_progress.keys())
+    state["session_progress"] = session_progress
     state["processed_sessions"] = processed_sessions
 
     remaining_pattern_slots = MAX_PATTERNS - len(patterns)
     llm_disabled = os.environ.get("CODEX_PATTERN_DISABLE_LLM", "0").lower() in {"1", "true", "yes"}
 
+    touched_sessions = new_sessions + [sid for sid in updated_sessions if sid not in new_sessions]
+
     if llm_disabled:
-        if new_sessions and remaining_pattern_slots > 0:
+        if touched_sessions and remaining_pattern_slots > 0:
             print("LLM discovery skipped: disabled via CODEX_PATTERN_DISABLE_LLM.")
-    elif new_sessions and remaining_pattern_slots > 0:
+    elif touched_sessions and remaining_pattern_slots > 0:
         llm_patterns = discover_patterns_with_llm(
             sessions,
-            new_sessions,
+            touched_sessions,
             [pattern.title for pattern in patterns],
             remaining_pattern_slots,
             repo_root,
@@ -820,17 +918,25 @@ def run(
     stats = build_stats(sessions, processed_sessions, patterns)
     codex_content = render_codex(patterns, stats)
 
+    trimmed_preview = enforce_state_limits(processed_sessions)[1]
+
     if dry_run:
         print("Dry run: skipping writes.")
+        trimmed = trimmed_preview
     else:
         write_codex(codex_path, codex_content)
-        if new_sessions or trimmed or not state_path.exists():
+        if touched_sessions or trimmed_preview or migration_performed or not state_path.exists():
             if "dynamic_patterns" not in state:
                 state["dynamic_patterns"] = [pattern_to_dict(p) for p in dynamic_patterns]
             save_state(state_path, state)
+        trimmed = state.get("trimmed_sessions", trimmed_preview)
 
     print(
-        f"Analyzed {len(processed_sessions)} session(s); {len(new_sessions)} new since last run."
+        "Analyzed {total} session(s); {new} new, {updated} updated since last run.".format(
+            total=len(processed_sessions),
+            new=len(new_sessions),
+            updated=len(updated_sessions),
+        )
     )
     if trimmed:
         print(f"Trimmed {trimmed} session id(s) to stay within memory limits.")
@@ -854,6 +960,7 @@ def run(
             branch,
             base_branch,
             new_sessions,
+            updated_sessions,
             stats,
             total_sessions=len(processed_sessions),
             patterns=patterns,
