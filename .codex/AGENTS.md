@@ -11,7 +11,7 @@ Codex acts as an autonomous coding partner. The notes below distill common issue
 - Example: "Check most recent changes. Something is wrong when converting to audio. Think..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 30 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 31 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "Cool can you write a README within video-miner folder so it can be used by co..."
