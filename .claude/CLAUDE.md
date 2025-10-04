@@ -2,3 +2,9 @@
 - Always write .MD plan/todo files to separate folder. If docs already exists, write it there, otherwise create one
 - After you make significant changes, always engage the git commit specialist agent
 - DONT ADD FALLBACKS
+- When working on a new issue, create a new worktree and branch so that other agents do not conflict with your work in the same environment
+- Never add fallbacks
+- Never add "🤖 Generated with Claude Code" to PRs
+- Never put "commited by agent" or "committed by claude code" -- same for PRs
+- Don't write co-authored by Claude
+- Always timestamp doc names. Follow conventions of the repo under docs repo

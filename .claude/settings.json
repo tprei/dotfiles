@@ -1,4 +1,9 @@
 {
+  "permissions": {
+    "allow": [
+      "mcp__serena__*"
+    ]
+  },
   "hooks": {
     "PreCompact": [
       {
@@ -16,12 +21,8 @@
     "type": "command",
     "command": "printf \"\\033[01;32m%s@%s\\033[00m:\\033[01;34m%s\\033[00m\" \"$(whoami)\" \"$(hostname -s)\" \"$(pwd)\""
   },
+  "alwaysThinkingEnabled": false,
   "feedbackSurveyState": {
     "lastShownTime": 1753994647675
-  },
-  "permissions": {
-    "allow": [
-      "mcp__serena__*"
-    ]
   }
 }
