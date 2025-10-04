@@ -19,9 +19,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
+SCRIPT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def resolve_workspace_path(path: Path) -> Path:
+    if path.is_absolute():
+        return path
+    return (SCRIPT_ROOT / path).resolve()
+
+
 DEFAULT_HISTORY_PATH = Path.home() / ".codex" / "history.jsonl"
 DEFAULT_STATE_PATH = Path("automation_state.json")
 DEFAULT_CODEX_PATH = Path("AGENTS.md")
+DEFAULT_CLAUDE_DOC_PATH = Path("..") / ".claude" / "CLAUDE.md"
+DEFAULT_CLAUDE_STATE_PATH = Path("..") / ".claude" / "automation_state.json"
+DEFAULT_CLAUDE_PROJECTS_PATH = Path.home() / ".claude" / "projects"
+DEFAULT_CLAUDE_TOP_HISTORY_PATH = Path.home() / ".claude" / "history.jsonl"
 DEFAULT_AUTOMATION_BRANCH = "codex/autotune"
 DEFAULT_BASE_BRANCH = "master"
 MAX_MEMORY_TOKENS = 100_000
@@ -33,6 +46,37 @@ STATIC_CALLOUTS: Sequence[str] = (
     "Prefer rg (ripgrep) over grep for searching.",
     "Leverage MCP tools—including Serena and Repomix—before resorting to manual spelunking.",
 )
+
+DEFAULT_CLAUDE_MANUAL_CALLOUTS: Sequence[str] = (
+    "- Use context7 for context",
+    "- Always write .MD plan/todo files to separate folder. If docs already exists, write it there, otherwise create one",
+    "- After you make significant changes, always engage the git commit specialist agent",
+    "- DONT ADD FALLBACKS",
+    "- When working on a new issue, create a new worktree and branch so that other agents do not conflict with your work in the same environment",
+    "- Never add fallbacks",
+    "- Never add \"🤖 Generated with Claude Code\" to PRs",
+    "- Never put \"commited by agent\" or \"committed by claude code\" -- same for PRs",
+    "- Don't write co-authored by Claude",
+    "- Always timestamp doc names. Follow conventions of the repo under docs repo",
+)
+
+CLAUDE_MANUAL_MARKER_START = "<!-- manual-claude-guidance:start -->"
+CLAUDE_MANUAL_MARKER_END = "<!-- manual-claude-guidance:end -->"
+
+ANSI_ESCAPE_RE = re.compile(r"\x1B\[[0-9;?]*[ -/]*[@-~]")
+CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
+
+
+def sanitize_text(value: str) -> str:
+    if not value:
+        return ""
+    cleaned = ANSI_ESCAPE_RE.sub("", value)
+    cleaned = cleaned.replace("\r", "")
+    cleaned = CONTROL_CHAR_RE.sub("", cleaned)
+    cleaned = cleaned.encode("ascii", "ignore").decode("ascii", "ignore")
+    cleaned = re.sub(r"[ \t]+", " ", cleaned)
+    cleaned = re.sub(r"\n[ \t]+", "\n", cleaned)
+    return cleaned.strip()
 
 
 @dataclass
@@ -195,9 +239,100 @@ if len(STATIC_PATTERNS) > MAX_PATTERNS:
     raise ValueError("Number of improvement patterns exceeds MAX_PATTERNS limit")
 
 
-def slugify(value: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
-    return slug or "pattern"
+
+@dataclass
+class ManualSectionSpec:
+    header: str
+    start_marker: str
+    end_marker: str
+    default_lines: Sequence[str]
+
+
+@dataclass
+class ManualSectionContent:
+    header: str
+    start_marker: str
+    end_marker: str
+    lines: Sequence[str]
+
+
+@dataclass
+class AgentConfig:
+    key: str
+    history_loader: str
+    history_path: Path
+    state_path: Path
+    output_path: Path
+    doc_title: str
+    doc_intro: str
+    callout_header: str
+    static_callouts: Sequence[str]
+    manual_section: Optional[ManualSectionSpec] = None
+    branch: str = DEFAULT_AUTOMATION_BRANCH
+    base_branch: str = DEFAULT_BASE_BRANCH
+
+
+@dataclass
+class AgentRunResult:
+    agent: AgentConfig
+    sessions: Dict[str, List[Dict[str, object]]]
+    processed_sessions: List[str]
+    new_sessions: List[str]
+    updated_sessions: List[str]
+    stats: Dict[str, Dict[str, object]]
+    patterns: Sequence[Pattern]
+    repo_root: Optional[Path]
+    trimmed: int
+    output_path: Path
+    state_path: Path
+    total_sessions: int
+    branch: str
+    base_branch: str
+
+
+DEFAULT_AGENT_CONFIGS: Dict[str, AgentConfig] = {
+    "codex": AgentConfig(
+        key="codex",
+        history_loader="codex",
+        history_path=DEFAULT_HISTORY_PATH,
+        state_path=DEFAULT_STATE_PATH,
+        output_path=DEFAULT_CODEX_PATH,
+        doc_title="Codex Improvement Guidelines",
+        doc_intro=(
+            "Codex acts as an autonomous coding partner. The notes below distill common "
+            "issues spotted across past sessions in `~/.codex/history.jsonl` and turn "
+            "them into guardrails that apply to any repo."
+        ),
+        callout_header="# Callouts",
+        static_callouts=STATIC_CALLOUTS,
+        manual_section=None,
+        branch=DEFAULT_AUTOMATION_BRANCH,
+        base_branch=DEFAULT_BASE_BRANCH,
+    ),
+    "claude": AgentConfig(
+        key="claude",
+        history_loader="claude",
+        history_path=DEFAULT_CLAUDE_PROJECTS_PATH,
+        state_path=DEFAULT_CLAUDE_STATE_PATH,
+        output_path=DEFAULT_CLAUDE_DOC_PATH,
+        doc_title="Claude Improvement Guidelines",
+        doc_intro=(
+            "Claude acts as an autonomous coding partner alongside Codex. The notes below "
+            "distill recurrent themes from local Claude sessions (captured under "
+            "`~/.claude/projects`) so future runs follow the same guardrails."
+        ),
+        callout_header="# Callouts",
+        static_callouts=(),
+        manual_section=ManualSectionSpec(
+            header="## Manual Reminders",
+            start_marker=CLAUDE_MANUAL_MARKER_START,
+            end_marker=CLAUDE_MANUAL_MARKER_END,
+            default_lines=DEFAULT_CLAUDE_MANUAL_CALLOUTS,
+        ),
+        branch=DEFAULT_AUTOMATION_BRANCH,
+        base_branch=DEFAULT_BASE_BRANCH,
+    ),
+}
 
 
 def pattern_from_dict(data: Dict[str, object]) -> Pattern:
@@ -216,6 +351,51 @@ def pattern_to_dict(pattern: Pattern) -> Dict[str, object]:
         "keywords": list(pattern.keywords),
         "bullets": list(pattern.bullets),
     }
+
+
+def load_existing_manual_lines(output_path: Path, spec: ManualSectionSpec) -> Sequence[str]:
+    if not output_path.exists():
+        return tuple(spec.default_lines)
+
+    try:
+        text = output_path.read_text(encoding="utf-8")
+    except OSError:
+        return tuple(spec.default_lines)
+
+    start_idx = text.find(spec.start_marker)
+    end_idx = text.find(spec.end_marker)
+
+    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+        start_idx += len(spec.start_marker)
+        snippet = text[start_idx:end_idx]
+        lines = [line.rstrip() for line in snippet.splitlines() if line.strip()]
+        return tuple(lines) if lines else tuple(spec.default_lines)
+
+    # First run: treat any bullet-style lines as manual callouts.
+    candidate_lines = [line.rstrip() for line in text.splitlines() if line.strip()]
+    bullet_lines = [line.strip() for line in candidate_lines if line.strip().startswith("-")]
+    if bullet_lines:
+        return tuple(bullet_lines)
+
+    return tuple(spec.default_lines)
+
+
+def build_manual_section(
+    config: AgentConfig,
+    output_path_override: Optional[Path] = None,
+) -> Optional[ManualSectionContent]:
+    if config.manual_section is None:
+        return None
+
+    target_path = output_path_override or config.output_path
+    target_path = resolve_workspace_path(target_path)
+    lines = load_existing_manual_lines(target_path, config.manual_section)
+    return ManualSectionContent(
+        header=config.manual_section.header,
+        start_marker=config.manual_section.start_marker,
+        end_marker=config.manual_section.end_marker,
+        lines=lines,
+    )
 
 
 def dynamic_patterns_from_state(state: Dict[str, object]) -> List[Pattern]:
@@ -597,7 +777,7 @@ def discover_patterns_with_claude(
     return patterns
 
 
-def load_history(path: Path) -> Dict[str, List[Dict[str, object]]]:
+def load_codex_history(path: Path) -> Dict[str, List[Dict[str, object]]]:
     sessions: Dict[str, List[Dict[str, object]]] = defaultdict(list)
     if not path.exists():
         raise FileNotFoundError(f"History file not found: {path}")
@@ -611,11 +791,115 @@ def load_history(path: Path) -> Dict[str, List[Dict[str, object]]]:
             sessions[session_id].append(
                 {
                     "ts": entry.get("ts", 0),
-                    "text": entry.get("text", ""),
+                    "text": sanitize_text(entry.get("text", "")),
                 }
             )
     for message_list in sessions.values():
         message_list.sort(key=lambda item: item.get("ts") or 0)
+    return sessions
+
+
+def _normalize_timestamp(raw: object) -> int:
+    if isinstance(raw, (int, float)):
+        value = int(raw)
+        # Anthropics history sometimes stores milliseconds.
+        if value > 10**12:
+            value //= 1000
+        return value
+
+    if isinstance(raw, str) and raw:
+        cleaned = raw.strip()
+        if cleaned.isdigit():
+            return _normalize_timestamp(int(cleaned))
+        try:
+            if cleaned.endswith("Z"):
+                cleaned = cleaned[:-1] + "+00:00"
+            dt = datetime.fromisoformat(cleaned)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return int(dt.timestamp())
+        except ValueError:
+            return 0
+
+    return 0
+
+
+def _extract_claude_text(entry: Dict[str, object]) -> Optional[str]:
+    message = entry.get("message")
+    if isinstance(message, dict):
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+    for key in ("summary", "display", "text"):
+        value = entry.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return None
+
+
+def load_claude_history(
+    projects_root: Path,
+    top_level_history: Optional[Path] = DEFAULT_CLAUDE_TOP_HISTORY_PATH,
+) -> Dict[str, List[Dict[str, object]]]:
+    sessions: Dict[str, List[Dict[str, object]]] = defaultdict(list)
+
+    if projects_root.exists():
+        jsonl_files = sorted(projects_root.glob("**/*.jsonl"))
+        for file_path in jsonl_files:
+            try:
+                with file_path.open("r", encoding="utf-8") as fh:
+                    for line in fh:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            data = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        session_id = (
+                            data.get("sessionId")
+                            or data.get("session_id")
+                            or data.get("leafUuid")
+                        )
+                        if not session_id:
+                            continue
+                        text = _extract_claude_text(data)
+                        if not text:
+                            continue
+                        ts = _normalize_timestamp(
+                            data.get("timestamp")
+                            or data.get("ts")
+                            or data.get("createdAt")
+                        )
+                        sessions[str(session_id)].append({"ts": ts, "text": sanitize_text(text)})
+            except OSError:
+                continue
+
+    # The flat history file stores quick command invocations; include them as context.
+    if top_level_history and top_level_history.exists():
+        try:
+            with top_level_history.open("r", encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    project = data.get("project")
+                    session_id = f"{project}:{data.get('timestamp')}"
+                    text = _extract_claude_text(data)
+                    if not text:
+                        continue
+                    ts = _normalize_timestamp(data.get("timestamp"))
+                    sessions[str(session_id)].append({"ts": ts, "text": sanitize_text(text)})
+        except OSError:
+            pass
+
+    for message_list in sessions.values():
+        message_list.sort(key=lambda item: item.get("ts") or 0)
+
     return sessions
 
 
@@ -742,14 +1026,19 @@ def render_examples(examples: Sequence[Dict[str, str]]) -> List[str]:
     return lines
 
 
-def render_codex(patterns: Sequence[Pattern], stats: Dict[str, Dict[str, object]]) -> str:
+def render_guidance_document(
+    title: str,
+    intro: str,
+    patterns: Sequence[Pattern],
+    stats: Dict[str, Dict[str, object]],
+    callouts: Sequence[str],
+    callout_header: str,
+    manual_section: Optional[ManualSectionContent] = None,
+) -> str:
     lines: List[str] = []
-    lines.append("# Codex Improvement Guidelines")
+    lines.append(f"# {title}")
     lines.append("")
-    lines.append(
-        "Codex acts as an autonomous coding partner. The notes below distill common issues spotted across "
-        "past sessions in `~/.codex/history.jsonl` and turn them into guardrails that apply to any repo."
-    )
+    lines.append(intro)
     lines.append("")
 
     for index, pattern in enumerate(patterns, start=1):
@@ -775,17 +1064,29 @@ def render_codex(patterns: Sequence[Pattern], stats: Dict[str, Dict[str, object]
         "refresh guidance when new sessions highlight fresh themes."
     )
 
-    if STATIC_CALLOUTS:
+    if callouts:
         lines.append("")
-        lines.append("# Callouts")
+        lines.append(callout_header)
         lines.append("")
-        for callout in STATIC_CALLOUTS:
+        for callout in callouts:
             lines.append(f"- {callout}")
+
+    if manual_section:
+        lines.append("")
+        lines.append(manual_section.header)
+        lines.append("")
+        lines.append(manual_section.start_marker)
+        if manual_section.lines:
+            lines.append("")
+            for line in manual_section.lines:
+                lines.append(line)
+            lines.append("")
+        lines.append(manual_section.end_marker)
 
     return "\n".join(lines).rstrip() + "\n"
 
 
-def write_codex(path: Path, content: str) -> None:
+def write_document(path: Path, content: str) -> None:
     with path.open("w", encoding="utf-8") as fh:
         fh.write(content)
 
@@ -887,114 +1188,316 @@ def get_pr_info(repo_root: Path, branch: str) -> Optional[Dict[str, object]]:
         return None
 
 
-def build_commit_message(new_sessions: int, updated_sessions: int) -> str:
+
+
+def process_agent(
+    agent: AgentConfig,
+    *,
+    history_path: Optional[Path] = None,
+    claude_top_history: Optional[Path] = None,
+    state_path: Optional[Path] = None,
+    output_path: Optional[Path] = None,
+    dry_run: bool = False,
+    branch: Optional[str] = None,
+    base_branch: Optional[str] = None,
+) -> AgentRunResult:
+    resolved_state_path = resolve_workspace_path(state_path or agent.state_path)
+    resolved_output_path = resolve_workspace_path(output_path or agent.output_path)
+    branch_name = branch or agent.branch
+    base_branch_name = base_branch or agent.base_branch
+
+    if agent.history_loader == "codex":
+        history_source = history_path or agent.history_path
+        sessions = load_codex_history(history_source)
+    elif agent.history_loader == "claude":
+        projects_root = history_path or agent.history_path
+        top_history_path = claude_top_history or DEFAULT_CLAUDE_TOP_HISTORY_PATH
+        sessions = load_claude_history(projects_root, top_history_path)
+    else:
+        raise ValueError(f"Unsupported history loader: {agent.history_loader}")
+
+    state = load_state(resolved_state_path)
+    session_progress: Dict[str, int] = {
+        str(key): int(value)
+        for key, value in (state.get("session_progress", {}) or {}).items()
+    }
+    processed_sessions_snapshot: List[str] = list(state.get("processed_sessions", []))
+    dynamic_patterns = dynamic_patterns_from_state(state)
+    patterns: List[Pattern] = list(STATIC_PATTERNS) + dynamic_patterns
+
+    repo_root = detect_repo_root(resolved_output_path.resolve().parent)
+
+    migration_performed = False
+    if processed_sessions_snapshot and not session_progress:
+        for sid in processed_sessions_snapshot:
+            messages = sessions.get(sid, [])
+            if not messages:
+                continue
+            latest_ts = max(int(item.get("ts") or 0) for item in messages)
+            session_progress[sid] = latest_ts
+        migration_performed = True
+
+    new_sessions: List[str] = []
+    updated_sessions: List[str] = []
+
+    for sid, messages in sessions.items():
+        latest_ts = max(int(item.get("ts") or 0) for item in messages) if messages else 0
+        last_seen = session_progress.get(sid)
+        if last_seen is None:
+            if messages:
+                new_sessions.append(sid)
+        else:
+            if any(int(item.get("ts") or 0) > last_seen for item in messages):
+                updated_sessions.append(sid)
+        session_progress[sid] = latest_ts
+
+    processed_sessions = list(session_progress.keys())
+    state["session_progress"] = session_progress
+    state["processed_sessions"] = processed_sessions
+
+    remaining_pattern_slots = MAX_PATTERNS - len(patterns)
+    llm_disabled = os.environ.get("CODEX_PATTERN_DISABLE_LLM", "0").lower() in {"1", "true", "yes"}
+
+    touched_sessions = new_sessions + [sid for sid in updated_sessions if sid not in new_sessions]
+
+    prefix = f"[{agent.key}]"
+    if new_sessions:
+        preview = ", ".join(new_sessions[:5])
+        suffix = "..." if len(new_sessions) > 5 else ""
+        print(f"{prefix} New sessions detected ({len(new_sessions)}): {preview}{suffix}")
+    else:
+        print(f"{prefix} No new sessions detected this run.")
+
+    if updated_sessions:
+        preview = ", ".join(updated_sessions[:5])
+        suffix = "..." if len(updated_sessions) > 5 else ""
+        print(f"{prefix} Updated sessions ({len(updated_sessions)}): {preview}{suffix}")
+    else:
+        print(f"{prefix} No previously processed sessions had new messages.")
+
+    if llm_disabled:
+        if touched_sessions and remaining_pattern_slots > 0:
+            print(f"{prefix} LLM discovery skipped: disabled via CODEX_PATTERN_DISABLE_LLM.")
+    elif touched_sessions and remaining_pattern_slots > 0:
+        llm_patterns = discover_patterns_with_llm(
+            sessions,
+            touched_sessions,
+            [pattern.title for pattern in patterns],
+            remaining_pattern_slots,
+            repo_root,
+        )
+        if llm_patterns:
+            patterns.extend(llm_patterns)
+            dynamic_patterns.extend(llm_patterns)
+            if "dynamic_patterns" not in state:
+                state["dynamic_patterns"] = []
+            state["dynamic_patterns"] = [pattern_to_dict(p) for p in dynamic_patterns]
+            print(
+                f"{prefix} Discovered dynamic patterns: "
+                + ", ".join(pattern.title for pattern in llm_patterns)
+            )
+        else:
+            print(f"{prefix} No dynamic patterns discovered in latest sessions.")
+
+    callouts = list(agent.static_callouts)
+    manual_section = build_manual_section(agent, resolved_output_path)
+
+    stats = build_stats(sessions, processed_sessions, patterns)
+    document_content = render_guidance_document(
+        title=agent.doc_title,
+        intro=agent.doc_intro,
+        patterns=patterns,
+        stats=stats,
+        callouts=callouts,
+        callout_header=agent.callout_header,
+        manual_section=manual_section,
+    )
+
+    trimmed_preview = enforce_state_limits(processed_sessions)[1]
+
+    if dry_run:
+        print(f"{prefix} Dry run: skipping writes.")
+        trimmed = trimmed_preview
+    else:
+        write_document(resolved_output_path, document_content)
+        if touched_sessions or trimmed_preview or migration_performed or not resolved_state_path.exists():
+            if "dynamic_patterns" not in state:
+                state["dynamic_patterns"] = [pattern_to_dict(p) for p in dynamic_patterns]
+            save_state(resolved_state_path, state)
+        trimmed = state.get("trimmed_sessions", trimmed_preview)
+
+    print(
+        f"{prefix} Analyzed {len(processed_sessions)} session(s); "
+        f"{len(new_sessions)} new, {len(updated_sessions)} updated since last run."
+    )
+    if trimmed:
+        print(f"{prefix} Trimmed {trimmed} session id(s) to stay within memory limits.")
+    for pattern in patterns:
+        count = stats.get(pattern.identifier, {}).get("count", 0)
+        print(f"{prefix}  - {pattern.title}: {count} session(s)")
+
+    recent_dynamic = [p for p in dynamic_patterns if p.identifier.startswith("dynamic-")]
+    if recent_dynamic:
+        titles = ", ".join(p.title for p in recent_dynamic[-5:])
+        print(f"{prefix} Recent dynamic patterns tracked ({len(recent_dynamic)} total): {titles}")
+
+    return AgentRunResult(
+        agent=agent,
+        sessions=sessions,
+        processed_sessions=processed_sessions,
+        new_sessions=new_sessions,
+        updated_sessions=updated_sessions,
+        stats=stats,
+        patterns=patterns,
+        repo_root=repo_root,
+        trimmed=trimmed,
+        output_path=resolved_output_path,
+        state_path=resolved_state_path,
+        total_sessions=len(processed_sessions),
+        branch=branch_name,
+        base_branch=base_branch_name,
+    )
+
+
+def build_commit_message_multi(results: Sequence[AgentRunResult]) -> str:
     labels: List[str] = []
-    if new_sessions:
-        labels.append(
-            f"{new_sessions} new session{'s' if new_sessions != 1 else ''}"
-        )
-    if updated_sessions:
-        labels.append(
-            f"{updated_sessions} updated session{'s' if updated_sessions != 1 else ''}"
-        )
+    for result in results:
+        new_count = len(result.new_sessions)
+        updated_count = len(result.updated_sessions)
+        parts: List[str] = []
+        if new_count:
+            parts.append(f"{new_count} new")
+        if updated_count:
+            parts.append(f"{updated_count} updated")
+        if parts:
+            labels.append(f"{result.agent.key}: {' / '.join(parts)}")
     if labels:
-        return f"chore: refresh codex guidance ({' / '.join(labels)})"
-    return "chore: refresh codex guidance"
+        return f"chore: refresh agent guidance ({'; '.join(labels)})"
+    return "chore: refresh agent guidance"
 
 
-def build_pr_title(new_sessions: int, updated_sessions: int) -> str:
-    segments: List[str] = []
-    if new_sessions:
-        segments.append(f"{new_sessions} new")
-    if updated_sessions:
-        segments.append(f"{updated_sessions} updated")
-    if segments:
-        total = new_sessions + updated_sessions
-        noun = "session" if total == 1 else "sessions"
-        return f"Update CODEX guidance ({' / '.join(segments)} {noun})"
-    return "Update CODEX guidance"
+def build_pr_title_multi(results: Sequence[AgentRunResult]) -> str:
+    active_agents = [
+        result.agent.key for result in results if result.new_sessions or result.updated_sessions
+    ]
+    if active_agents:
+        return f"Update agent guidance ({', '.join(active_agents)})"
+    return "Update agent guidance"
+
+
+def relativize_path(repo_root: Optional[Path], path: Path) -> str:
+    resolved = path.resolve()
+    if repo_root is not None:
+        try:
+            return str(resolved.relative_to(repo_root.resolve()))
+        except ValueError:
+            pass
+    return str(resolved)
+
+
+def summarize_session_preview(session_ids: Sequence[str]) -> str:
+    if not session_ids:
+        return "None"
+    preview = ", ".join(session_ids[:5])
+    if len(session_ids) > 5:
+        preview += ", ..."
+    return preview
 
 
 def format_example_for_pr(examples: Sequence[Dict[str, str]]) -> str:
     if not examples:
         return "no direct example stored"
     sample = examples[0]
-    snippet = sample["snippet"]
+    snippet = sample.get("snippet", "")
     if len(snippet) > 100:
         snippet = snippet[:97] + "..."
-    return f"session {sample['session_id']} — \"{snippet}\""
+    session_id = sample.get("session_id", "unknown")
+    return f"session {session_id} — \"{snippet}\""
 
 
-def build_pr_body(
-    total_sessions: int,
-    new_sessions: Sequence[str],
-    updated_sessions: Sequence[str],
-    stats: Dict[str, Dict[str, object]],
-    patterns: Sequence[Pattern],
-) -> str:
-    top_patterns = sorted(
-        patterns,
-        key=lambda pattern: stats.get(pattern.identifier, {}).get("count", 0),
-        reverse=True,
-    )[:3]
-
-    motivation_lines = []
-    for pattern in top_patterns:
-        data = stats.get(pattern.identifier, {"count": 0, "examples": []})
-        motivation_lines.append(
-            f"- {pattern.title}: {data.get('count', 0)} session(s); {format_example_for_pr(data.get('examples', []))}"
+def build_pr_body_multi(results: Sequence[AgentRunResult]) -> str:
+    summary_lines: List[str] = []
+    for result in results:
+        output_rel = relativize_path(result.repo_root, result.output_path)
+        state_rel = relativize_path(result.repo_root, result.state_path)
+        summary_lines.append(
+            f"- regenerate {output_rel} with updated guidance across {result.total_sessions} session(s)"
         )
+        summary_lines.append(
+            f"- update {state_rel} to record processed conversations"
+        )
+    summary_section = "\\n".join(summary_lines) if summary_lines else "- No changes detected"
 
-    motivation_section = "\n".join(motivation_lines) if motivation_lines else "- No new insights detected"
-
-    new_sessions_list = ", ".join(new_sessions[:5]) if new_sessions else "None"
-    updated_sessions_list = (
-        ", ".join(updated_sessions[:5]) if updated_sessions else "None"
+    motivation_sections: List[str] = []
+    for result in results:
+        top_patterns = sorted(
+            result.patterns,
+            key=lambda pattern: result.stats.get(pattern.identifier, {}).get("count", 0),
+            reverse=True,
+        )[:3]
+        lines: List[str] = []
+        for pattern in top_patterns:
+            data = result.stats.get(pattern.identifier, {"count": 0, "examples": []})
+            lines.append(
+                f"- {pattern.title}: {data.get('count', 0)} session(s); {format_example_for_pr(data.get('examples', []))}"
+            )
+        if not lines:
+            lines.append("- No new insights detected")
+        motivation_sections.append(
+            f"### {result.agent.doc_title}\n" + "\n".join(lines)
+        )
+    motivation_section = (
+        "\n\n".join(motivation_sections)
+        if motivation_sections
+        else "- No new insights detected"
     )
+
+    new_sessions_lines = [
+        f"- {result.agent.key}: {summarize_session_preview(result.new_sessions)}"
+        for result in results
+    ]
+    updated_sessions_lines = [
+        f"- {result.agent.key}: {summarize_session_preview(result.updated_sessions)}"
+        for result in results
+    ]
+
+    if len(results) == len(DEFAULT_AGENT_CONFIGS):
+        dry_run_flag = "--agent all"
+    else:
+        dry_run_flag = " ".join(f"--agent {result.agent.key}" for result in results) or "--agent codex"
 
     body = f"""
 ## Summary
-- regenerate CODEX.md with updated guidance across {total_sessions} session(s)
-- update automation_state.json to record processed conversations
+{summary_section}
 
 ## Motivation
 {motivation_section}
 
 ## Newly Processed Sessions
-- {new_sessions_list}
+{"\\n".join(new_sessions_lines)}
 
 ## Updated Sessions
-- {updated_sessions_list}
+{"\\n".join(updated_sessions_lines)}
 
 ## Testing
-- scripts/codex_pattern_updater.py --dry-run
+- scripts/codex_pattern_updater.py --dry-run {dry_run_flag}
 """
     return textwrap.dedent(body).strip() + "\n"
 
 
-def create_or_update_pr(
+def create_or_update_pr_multi(
     repo_root: Path,
     branch: str,
     base_branch: str,
-    new_sessions: Sequence[str],
-    updated_sessions: Sequence[str],
-    stats: Dict[str, Dict[str, object]],
-    total_sessions: int,
-    patterns: Sequence[Pattern],
+    results: Sequence[AgentRunResult],
 ) -> None:
     if shutil.which("gh") is None:
         print("gh CLI not found; skipping PR automation.")
         return
 
     info = get_pr_info(repo_root, branch)
-    title = build_pr_title(len(new_sessions), len(updated_sessions))
-    body = build_pr_body(
-        total_sessions=total_sessions,
-        new_sessions=new_sessions,
-        updated_sessions=updated_sessions,
-        stats=stats,
-        patterns=patterns,
-    )
+    title = build_pr_title_multi(results)
+    body = build_pr_body_multi(results)
 
     if info and info.get("state") == "OPEN":
         run_cmd(["gh", "pr", "edit", branch, "--title", title, "--body", body], repo_root)
@@ -1020,26 +1523,42 @@ def create_or_update_pr(
     print("Created new pull request.")
 
 
-def handle_git_workflow(
-    repo_root: Path,
-    codex_path: Path,
-    state_path: Path,
-    branch: str,
-    base_branch: str,
-    new_sessions: Sequence[str],
-    updated_sessions: Sequence[str],
-    stats: Dict[str, Dict[str, object]],
-    total_sessions: int,
-    patterns: Sequence[Pattern],
+def handle_git_workflow_multi(
+    results: Sequence[AgentRunResult],
+    branch: Optional[str],
+    base_branch: Optional[str],
 ) -> None:
+    if not results:
+        return
+
+    repo_roots = {
+        result.repo_root.resolve()
+        for result in results
+        if result.repo_root is not None
+    }
+    if not repo_roots:
+        print("Skipping git automation; could not locate git repository root.")
+        return
+    if len(repo_roots) > 1:
+        raise RuntimeError("Multiple repository roots detected; cannot manage git automation.")
+
+    repo_root = next(iter(repo_roots))
+
     if not repo_has_changes(repo_root):
         print("No working tree changes detected; skipping git automation.")
         return
 
-    ensure_branch(repo_root, branch, base_branch)
+    branch_name = branch or results[0].branch
+    base_branch_name = base_branch or results[0].base_branch
 
-    paths_to_stage = [codex_path, state_path, Path(__file__).resolve()]
-    stage_paths(repo_root, paths_to_stage)
+    ensure_branch(repo_root, branch_name, base_branch_name)
+
+    paths_to_stage = {Path(__file__).resolve()}
+    for result in results:
+        paths_to_stage.add(result.output_path.resolve())
+        paths_to_stage.add(result.state_path.resolve())
+
+    stage_paths(repo_root, sorted(paths_to_stage))
 
     if not has_staged_changes(repo_root):
         print("No staged changes after add; skipping commit.")
@@ -1047,192 +1566,81 @@ def handle_git_workflow(
 
     commit_changes(
         repo_root,
-        build_commit_message(len(new_sessions), len(updated_sessions)),
+        build_commit_message_multi(results),
     )
-    push_branch(repo_root, branch)
-    create_or_update_pr(
-        repo_root,
-        branch,
-        base_branch,
-        new_sessions,
-        updated_sessions,
-        stats,
-        total_sessions=total_sessions,
-        patterns=patterns,
-    )
-
-def run(
-    history_path: Path,
-    state_path: Path,
-    codex_path: Path,
-    dry_run: bool = False,
-    skip_git: bool = False,
-    branch: str = DEFAULT_AUTOMATION_BRANCH,
-    base_branch: str = DEFAULT_BASE_BRANCH,
-) -> None:
-    sessions = load_history(history_path)
-    state = load_state(state_path)
-    session_progress: Dict[str, int] = {
-        str(key): int(value)
-        for key, value in (state.get("session_progress", {}) or {}).items()
-    }
-    processed_sessions_snapshot: List[str] = list(state.get("processed_sessions", []))
-    dynamic_patterns = dynamic_patterns_from_state(state)
-    patterns: List[Pattern] = list(STATIC_PATTERNS) + dynamic_patterns
-
-    repo_root = detect_repo_root(codex_path.resolve().parent)
-
-    # Migrate legacy state that only tracked session identifiers.
-    migration_performed = False
-    if processed_sessions_snapshot and not session_progress:
-        for sid in processed_sessions_snapshot:
-            messages = sessions.get(sid, [])
-            if not messages:
-                continue
-            latest_ts = max(int(item.get("ts") or 0) for item in messages)
-            session_progress[sid] = latest_ts
-        migration_performed = True
-
-    if not dry_run and not skip_git and repo_root is not None:
-        # Switch to the automation branch before mutating files so later git operations succeed.
-        ensure_branch(repo_root, branch, base_branch)
-
-    new_sessions: List[str] = []
-    updated_sessions: List[str] = []
-
-    for sid, messages in sessions.items():
-        latest_ts = max(int(item.get("ts") or 0) for item in messages) if messages else 0
-        last_seen = session_progress.get(sid)
-        if last_seen is None:
-            if messages:
-                new_sessions.append(sid)
-        else:
-            if any(int(item.get("ts") or 0) > last_seen for item in messages):
-                updated_sessions.append(sid)
-        session_progress[sid] = latest_ts
-
-    processed_sessions = list(session_progress.keys())
-    state["session_progress"] = session_progress
-    state["processed_sessions"] = processed_sessions
-
-    remaining_pattern_slots = MAX_PATTERNS - len(patterns)
-    llm_disabled = os.environ.get("CODEX_PATTERN_DISABLE_LLM", "0").lower() in {"1", "true", "yes"}
-
-    touched_sessions = new_sessions + [sid for sid in updated_sessions if sid not in new_sessions]
-
-    if new_sessions:
-        preview = ", ".join(new_sessions[:5])
-        suffix = "..." if len(new_sessions) > 5 else ""
-        print(f"New sessions detected ({len(new_sessions)}): {preview}{suffix}")
-    else:
-        print("No new sessions detected this run.")
-
-    if updated_sessions:
-        preview = ", ".join(updated_sessions[:5])
-        suffix = "..." if len(updated_sessions) > 5 else ""
-        print(f"Updated sessions ({len(updated_sessions)}): {preview}{suffix}")
-    else:
-        print("No previously processed sessions had new messages.")
-
-    if llm_disabled:
-        if touched_sessions and remaining_pattern_slots > 0:
-            print("LLM discovery skipped: disabled via CODEX_PATTERN_DISABLE_LLM.")
-    elif touched_sessions and remaining_pattern_slots > 0:
-        llm_patterns = discover_patterns_with_llm(
-            sessions,
-            touched_sessions,
-            [pattern.title for pattern in patterns],
-            remaining_pattern_slots,
-            repo_root,
-        )
-        if llm_patterns:
-            patterns.extend(llm_patterns)
-            dynamic_patterns.extend(llm_patterns)
-            if not dry_run:
-                state["dynamic_patterns"] = [pattern_to_dict(p) for p in dynamic_patterns]
-            print(
-                "Discovered dynamic patterns: "
-                + ", ".join(pattern.title for pattern in llm_patterns)
-            )
-        else:
-            print("No dynamic patterns discovered in latest sessions.")
-
-    stats = build_stats(sessions, processed_sessions, patterns)
-    codex_content = render_codex(patterns, stats)
-
-    trimmed_preview = enforce_state_limits(processed_sessions)[1]
-
-    if dry_run:
-        print("Dry run: skipping writes.")
-        trimmed = trimmed_preview
-    else:
-        write_codex(codex_path, codex_content)
-        if touched_sessions or trimmed_preview or migration_performed or not state_path.exists():
-            if "dynamic_patterns" not in state:
-                state["dynamic_patterns"] = [pattern_to_dict(p) for p in dynamic_patterns]
-            save_state(state_path, state)
-        trimmed = state.get("trimmed_sessions", trimmed_preview)
-
-    print(
-        "Analyzed {total} session(s); {new} new, {updated} updated since last run.".format(
-            total=len(processed_sessions),
-            new=len(new_sessions),
-            updated=len(updated_sessions),
-        )
-    )
-    if trimmed:
-        print(f"Trimmed {trimmed} session id(s) to stay within memory limits.")
-    for pattern in patterns:
-        count = stats.get(pattern.identifier, {}).get("count", 0)
-        print(f" - {pattern.title}: {count} session(s)")
-
-    recent_dynamic = [p for p in dynamic_patterns if p.identifier.startswith("dynamic-")]
-    if recent_dynamic:
-        titles = ", ".join(p.title for p in recent_dynamic[-5:])
-        print(f"Recent dynamic patterns tracked ({len(recent_dynamic)} total): {titles}")
-
-    if dry_run or skip_git:
-        if skip_git:
-            print("Skipping git and PR automation (--skip-git).")
-        return
-
-    if repo_root is None:
-        print("Skipping git automation; could not locate git repository root.")
-        return
-    try:
-        handle_git_workflow(
-            repo_root,
-            codex_path.resolve(),
-            state_path.resolve(),
-            branch,
-            base_branch,
-            new_sessions,
-            updated_sessions,
-            stats,
-            total_sessions=len(processed_sessions),
-            patterns=patterns,
-        )
-    except RuntimeError as exc:
-        print(f"Git automation failed: {exc}")
+    push_branch(repo_root, branch_name)
+    create_or_update_pr_multi(repo_root, branch_name, base_branch_name, results)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--history", type=Path, default=DEFAULT_HISTORY_PATH, help="Path to history.jsonl")
-    parser.add_argument("--state", type=Path, default=DEFAULT_STATE_PATH, help="Path to incremental state file")
-    parser.add_argument("--codex", type=Path, default=DEFAULT_CODEX_PATH, help="Path to AGENTS.md output")
+    parser.add_argument(
+        "--agent",
+        action="append",
+        choices=[*DEFAULT_AGENT_CONFIGS.keys(), "all"],
+        help="Agent(s) to process (defaults to codex). Repeat to specify multiple or use 'all'.",
+    )
+    parser.add_argument("--history", type=Path, help="Override Codex history.jsonl path")
+    parser.add_argument("--state", type=Path, help="Override Codex automation state path")
+    parser.add_argument("--codex", type=Path, help="Override Codex guidance output path")
+    parser.add_argument("--codex-history", type=Path, help="Alias for --history")
+    parser.add_argument("--codex-state", type=Path, help="Alias for --state")
+    parser.add_argument("--codex-output", type=Path, help="Alias for --codex")
+    parser.add_argument("--claude-projects", type=Path, help="Override Claude projects directory")
+    parser.add_argument(
+        "--claude-history",
+        type=Path,
+        help="Override Claude top-level history.jsonl path",
+    )
+    parser.add_argument("--claude-state", type=Path, help="Override Claude automation state path")
+    parser.add_argument("--claude-output", type=Path, help="Override Claude guidance output path")
     parser.add_argument("--dry-run", action="store_true", help="Run analysis without writing outputs")
     parser.add_argument("--skip-git", action="store_true", help="Skip git commit/push and PR automation")
-    parser.add_argument("--branch", default=DEFAULT_AUTOMATION_BRANCH, help="Automation branch name")
-    parser.add_argument("--base-branch", default=DEFAULT_BASE_BRANCH, help="Base branch for PRs")
+    parser.add_argument("--branch", help="Automation branch name overriding defaults")
+    parser.add_argument("--base-branch", help="Base branch for PRs overriding defaults")
     args = parser.parse_args()
 
-    run(
-        args.history,
-        args.state,
-        args.codex,
-        dry_run=args.dry_run,
-        skip_git=args.skip_git,
-        branch=args.branch,
-        base_branch=args.base_branch,
-    )
+    selected = args.agent or ["codex"]
+    if "all" in selected:
+        agent_keys = list(DEFAULT_AGENT_CONFIGS.keys())
+    else:
+        agent_keys: List[str] = []
+        for key in selected:
+            if key == "all":
+                continue
+            if key not in DEFAULT_AGENT_CONFIGS:
+                raise ValueError(f"Unknown agent: {key}")
+            if key not in agent_keys:
+                agent_keys.append(key)
+
+    overrides: Dict[str, Dict[str, Optional[Path]]] = {key: {} for key in agent_keys}
+    if "codex" in overrides:
+        overrides["codex"]["history_path"] = args.codex_history or args.history
+        overrides["codex"]["state_path"] = args.codex_state or args.state
+        overrides["codex"]["output_path"] = args.codex_output or args.codex
+    if "claude" in overrides:
+        overrides["claude"]["history_path"] = args.claude_projects
+        overrides["claude"]["claude_top_history"] = args.claude_history
+        overrides["claude"]["state_path"] = args.claude_state
+        overrides["claude"]["output_path"] = args.claude_output
+
+    results: List[AgentRunResult] = []
+    for key in agent_keys:
+        config = DEFAULT_AGENT_CONFIGS[key]
+        override = overrides.get(key, {})
+        result = process_agent(
+            config,
+            history_path=override.get("history_path"),
+            claude_top_history=override.get("claude_top_history"),
+            state_path=override.get("state_path"),
+            output_path=override.get("output_path"),
+            dry_run=args.dry_run,
+            branch=args.branch,
+            base_branch=args.base_branch,
+        )
+        results.append(result)
+
+    if not args.dry_run and not args.skip_git:
+        handle_git_workflow_multi(results, branch=args.branch, base_branch=args.base_branch)
+    elif args.skip_git:
+        print("Skipping git and PR automation (--skip-git).")

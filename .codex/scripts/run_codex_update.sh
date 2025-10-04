@@ -6,6 +6,10 @@ PYTHON_BIN="${PYTHON_BIN:-$(command -v python3 || true)}"
 SCRIPT_PATH="${PROJECT_ROOT}/.codex/scripts/codex_pattern_updater.py"
 STATE_PATH="${PROJECT_ROOT}/.codex/automation_state.json"
 CODEX_PATH="${PROJECT_ROOT}/.codex/AGENTS.md"
+CLAUDE_STATE_PATH="${PROJECT_ROOT}/.claude/automation_state.json"
+CLAUDE_GUIDANCE_PATH="${PROJECT_ROOT}/.claude/CLAUDE.md"
+CLAUDE_PROJECTS_PATH="${HOME}/.claude/projects"
+CLAUDE_HISTORY_PATH="${HOME}/.claude/history.jsonl"
 BRANCH="codex/autotune"
 BASE_BRANCH="master"
 
@@ -31,7 +35,13 @@ fi
 cd "${PROJECT_ROOT}"
 
 "${PYTHON_BIN}" "${SCRIPT_PATH}" \
+  --agent all \
   --branch "${BRANCH}" \
   --base-branch "${BASE_BRANCH}" \
-  --state "${STATE_PATH}" \
-  --codex "${CODEX_PATH}"
+  --codex-state "${STATE_PATH}" \
+  --codex-output "${CODEX_PATH}" \
+  --codex-history "${HOME}/.codex/history.jsonl" \
+  --claude-state "${CLAUDE_STATE_PATH}" \
+  --claude-output "${CLAUDE_GUIDANCE_PATH}" \
+  --claude-projects "${CLAUDE_PROJECTS_PATH}" \
+  --claude-history "${CLAUDE_HISTORY_PATH}"
