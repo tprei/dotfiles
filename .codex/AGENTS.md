@@ -11,7 +11,7 @@ Codex acts as an autonomous coding partner. The notes below distill common issue
 - Example: "Check most recent changes. Something is wrong when converting to audio. Think..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 32 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 33 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "Cool can you write a README within video-miner folder so it can be used by co..."
@@ -19,7 +19,7 @@ Codex acts as an autonomous coding partner. The notes below distill common issue
 - Example: "Sure implement. Also can you add a CHANGELOG to video-miner where things are ..."
 
 ## 3. Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. 25 session(s) demanded test coverage or reruns.
+- Default to running or adding tests whenever behavior shifts. 26 session(s) demanded test coverage or reruns.
 - If no automated test exists, outline a manual checklist and suggest how to automate it next.
 - Share test commands and results; avoid saying it works without evidence.
 - Example: "Can you make this change and document all of this including the change and fo..."
@@ -27,7 +27,7 @@ Codex acts as an autonomous coding partner. The notes below distill common issue
 - Example: "no. even after the changes it's stalling a lot after less than 300 MB, see th..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 32 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 33 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "it actually looks much much better and positioning of the subs are finally go..."
@@ -57,7 +57,7 @@ Codex acts as an autonomous coding partner. The notes below distill common issue
 - Example: "zhongwen on  translation-stuff [⇡$!] on 🐳 v27.5.1 using ☁️ default/zhongwen-..."
 
 ## 8. Communicate like a teammate
-- Narrate trade-offs and residual risks instead of silently choosing a path. 13 session(s) asked for clearer communication.
+- Narrate trade-offs and residual risks instead of silently choosing a path. 14 session(s) asked for clearer communication.
 - When blocked, propose concrete next steps for the user instead of stalling.
 - Close the loop by outlining follow-up tasks or open questions at the end of each session.
 - Example: "Check the whole credits system. Can you find ways to optimize it and implemen..."
