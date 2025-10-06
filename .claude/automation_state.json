@@ -757,7 +757,9 @@
     "/home/prei/dotfiles:1759760806621",
     "/home/prei/zhongwen-video-ui-revamp:1759760933324",
     "/home/prei/zhongwen-video-ui-revamp:1759760949385",
-    "/home/prei/dotfiles:1759760983944"
+    "/home/prei/dotfiles:1759760983944",
+    "/home/prei/zhongwen-video-ui-revamp:1759761183576",
+    "/home/prei/zhongwen-video-ui-revamp:1759761183590"
   ],
   "dynamic_patterns": [],
   "trimmed_sessions": 0,
@@ -1391,7 +1393,7 @@
     "f1a3cc39-831f-4d1a-b664-35c6fa190865": 1759754194,
     "a4ab7dba-64cd-4d0a-9e04-cb67323bbdd5": 0,
     "fc38950d-3034-4d78-bdd5-c3960df16beb": 0,
-    "2b35d961-7b51-4e5a-841b-1411b5845f52": 1759760949,
+    "2b35d961-7b51-4e5a-841b-1411b5845f52": 1759761183,
     "d65b930e-d212-4dfc-a3dc-896495ea48cf": 0,
     "e8d598bb-d0bf-454a-9af8-5b7599e5a711": 1759755062,
     "c4a21dc5-9109-4c95-a93a-ed4a1a479dbc": 1759754233,
@@ -1519,7 +1521,9 @@
     "/home/prei/dotfiles:1759760806621": 1759760806,
     "/home/prei/zhongwen-video-ui-revamp:1759760933324": 1759760933,
     "/home/prei/zhongwen-video-ui-revamp:1759760949385": 1759760949,
-    "/home/prei/dotfiles:1759760983944": 1759760983
+    "/home/prei/dotfiles:1759760983944": 1759760983,
+    "/home/prei/zhongwen-video-ui-revamp:1759761183576": 1759761183,
+    "/home/prei/zhongwen-video-ui-revamp:1759761183590": 1759761183
   },
-  "updated_at": "2025-10-06T14:30:19+00:00"
+  "updated_at": "2025-10-06T14:33:08+00:00"
 }

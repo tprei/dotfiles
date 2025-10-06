@@ -48,7 +48,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - After edits, echo file paths so the user can audit quickly.
 
 ## 7. Leverage available tooling proactively
-- Highlight built-in tools before the user prompts you. 23 session(s) reminded Codex to employ local tooling.
+- Highlight built-in tools before the user prompts you. 26 session(s) reminded Codex to employ local tooling.
 - Prefer existing scripts or automation hooks over ad-hoc commands; update or create helpers when they are missing.
 - Cache learnings: when you discover an effective workflow, note it for future runs.
 - Example: "I want to check why I have no PRs on my dotfiles repo. Where are the logs for..."
