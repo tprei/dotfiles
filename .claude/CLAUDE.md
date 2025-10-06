@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Whenever we click the hamburger menu there is a small flicker (the page shift..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 89 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 91 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "First let's document this repo better. Within @artiffacts you'll see a lot of..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "No fuck your test. I tried running it myself: wstill noithing. I'm in WSL as ..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 105 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 107 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "First let's document this repo better. Within @artiffacts you'll see a lot of..."
@@ -35,7 +35,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "perfect commit changes and push"
 
 ## 5. Minimize approval churn
-- Bundle related commands to reduce repetitive approval requests. 54 session(s) flagged approval fatigue.
+- Bundle related commands to reduce repetitive approval requests. 58 session(s) flagged approval fatigue.
 - Cite why elevated permissions are needed; suggest safe, sandboxed alternatives when possible.
 - Reuse previously granted permissions if policy allows instead of re-requesting reflexively.
 - Example: "<command-name>/permissions</command-name> <command-message>permissions</comma..."
@@ -56,12 +56,12 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I am working on a bot to schedule visa appointments under this URL: https://c..."
 
 ## 8. Communicate like a teammate
-- Narrate trade-offs and residual risks instead of silently choosing a path. 30 session(s) asked for clearer communication.
+- Narrate trade-offs and residual risks instead of silently choosing a path. 31 session(s) asked for clearer communication.
 - When blocked, propose concrete next steps for the user instead of stalling.
 - Close the loop by outlining follow-up tasks or open questions at the end of each session.
 - Example: "This session is being continued from a previous conversation that ran out of ..."
+- Example: "This session is being continued from a previous conversation that ran out of ..."
 - Example: "Are you able to make a document in @pages/README.md explaining everything fro..."
-- Example: "> What Happened - The HTTPS request never reached mydomain.com; the proxy at ..."
 
 Regularly revisit this document as new patterns emerge. The automation in this repository will refresh guidance when new sessions highlight fresh themes.
 
