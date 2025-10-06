@@ -56,7 +56,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I am working on a bot to schedule visa appointments under this URL: https://c..."
 
 ## 8. Communicate like a teammate
-- Narrate trade-offs and residual risks instead of silently choosing a path. 31 session(s) asked for clearer communication.
+- Narrate trade-offs and residual risks instead of silently choosing a path. 32 session(s) asked for clearer communication.
 - When blocked, propose concrete next steps for the user instead of stalling.
 - Close the loop by outlining follow-up tasks or open questions at the end of each session.
 - Example: "This session is being continued from a previous conversation that ran out of ..."

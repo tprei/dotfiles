@@ -760,7 +760,13 @@
     "/home/prei/dotfiles:1759760983944",
     "/home/prei/zhongwen-video-ui-revamp:1759761183576",
     "/home/prei/zhongwen-video-ui-revamp:1759761183590",
-    "/home/prei/dotfiles:1759761196449"
+    "/home/prei/dotfiles:1759761196449",
+    "/home/prei/zhongwen-video-ui-revamp:1759761462865",
+    "/home/prei/zhongwen-video-ui-revamp:1759761466509",
+    "/home/prei/zhongwen-video-ui-revamp:1759762422794",
+    "/home/prei/zhongwen-video-ui-revamp:1759762482220",
+    "/home/prei/zhongwen-video-ui-revamp:1759762524349",
+    "/home/prei/zhongwen-video-ui-revamp:1759762704854"
   ],
   "dynamic_patterns": [],
   "trimmed_sessions": 0,
@@ -1394,7 +1400,7 @@
     "f1a3cc39-831f-4d1a-b664-35c6fa190865": 1759754194,
     "a4ab7dba-64cd-4d0a-9e04-cb67323bbdd5": 0,
     "fc38950d-3034-4d78-bdd5-c3960df16beb": 0,
-    "2b35d961-7b51-4e5a-841b-1411b5845f52": 1759761183,
+    "2b35d961-7b51-4e5a-841b-1411b5845f52": 1759762704,
     "d65b930e-d212-4dfc-a3dc-896495ea48cf": 0,
     "e8d598bb-d0bf-454a-9af8-5b7599e5a711": 1759755062,
     "c4a21dc5-9109-4c95-a93a-ed4a1a479dbc": 1759754233,
@@ -1525,7 +1531,13 @@
     "/home/prei/dotfiles:1759760983944": 1759760983,
     "/home/prei/zhongwen-video-ui-revamp:1759761183576": 1759761183,
     "/home/prei/zhongwen-video-ui-revamp:1759761183590": 1759761183,
-    "/home/prei/dotfiles:1759761196449": 1759761196
+    "/home/prei/dotfiles:1759761196449": 1759761196,
+    "/home/prei/zhongwen-video-ui-revamp:1759761462865": 1759761462,
+    "/home/prei/zhongwen-video-ui-revamp:1759761466509": 1759761466,
+    "/home/prei/zhongwen-video-ui-revamp:1759762422794": 1759762422,
+    "/home/prei/zhongwen-video-ui-revamp:1759762482220": 1759762482,
+    "/home/prei/zhongwen-video-ui-revamp:1759762524349": 1759762524,
+    "/home/prei/zhongwen-video-ui-revamp:1759762704854": 1759762704
   },
-  "updated_at": "2025-10-06T14:34:24+00:00"
+  "updated_at": "2025-10-06T15:00:02+00:00"
 }
