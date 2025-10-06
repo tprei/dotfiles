@@ -41,6 +41,7 @@ MAX_MEMORY_TOKENS = 100_000
 MAX_PATTERNS = 20
 DEFAULT_LLM_PROVIDER = "claude"
 DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-20250514"
+ENABLE_DYNAMIC_DISCOVERY = True  # Allow discovery of truly new themes beyond static patterns
 STATIC_CALLOUTS: Sequence[str] = (
     "DO NOT IMPLEMENT FALLBACKS. If you are unsure how to do something or something isn't working, avoid quick hacks like mocked data or assuming functionality is impossible; pause and surface the blocker instead.",
     "Prefer rg (ripgrep) over grep for searching.",
@@ -65,6 +66,18 @@ CLAUDE_MANUAL_MARKER_END = "<!-- manual-claude-guidance:end -->"
 
 ANSI_ESCAPE_RE = re.compile(r"\x1B\[[0-9;?]*[ -/]*[@-~]")
 CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
+
+
+def slugify(value: str) -> str:
+    """Convert a string to a URL-friendly slug."""
+    # Convert to lowercase and replace spaces with hyphens
+    value = value.lower()
+    # Remove non-alphanumeric characters except hyphens and underscores
+    value = re.sub(r'[^a-z0-9\s\-_]', '', value)
+    # Replace spaces and multiple hyphens with single hyphen
+    value = re.sub(r'[\s\-_]+', '-', value)
+    # Remove leading/trailing hyphens
+    return value.strip('-')
 
 
 def sanitize_text(value: str) -> str:
@@ -450,6 +463,7 @@ def discover_patterns_with_llm(
     existing_titles: Sequence[str],
     capacity: int,
     repo_root: Optional[Path],
+    force_dynamic: bool = False,
 ) -> List[Pattern]:
     provider = os.environ.get("CODEX_PATTERN_PROVIDER", DEFAULT_LLM_PROVIDER).lower()
     if provider == "claude":
@@ -458,6 +472,7 @@ def discover_patterns_with_llm(
             session_ids,
             existing_titles,
             capacity,
+            force_dynamic,
         )
 
     if capacity <= 0 or not session_ids:
@@ -473,23 +488,53 @@ def discover_patterns_with_llm(
         return []
 
     existing_titles_text = ", ".join(existing_titles) if existing_titles else "None"
-    prompt = textwrap.dedent(
-        f"""
-        You are maintaining a set of improvement patterns for the Codex coding agent. Existing patterns are: {existing_titles_text}.
-        Review the new session excerpts below and propose up to {capacity} additional patterns that capture recurring issues not already addressed.
 
-        Respond with a JSON array (no extra text) where each element has:
-        - "title": short descriptive pattern title (max 7 words)
-        - "summary": one-sentence explanation of the issue/opportunity
-        - "guidance": array of 2-3 actionable best-practice bullets for Codex (present tense)
-        - "keywords": array of 3-6 lowercase keywords to detect similar cases
+    # Dynamic discovery mode - look for truly novel themes
+    if force_dynamic or ENABLE_DYNAMIC_DISCOVERY:
+        prompt = textwrap.dedent(
+            f"""
+            You are analyzing new coding agent sessions to discover emerging themes and patterns.
+            Existing patterns: {existing_titles_text}
 
-        Session excerpts:
-        {excerpts}
+            Review the session excerpts below and identify up to {capacity} NOVEL themes or recurring issues that:
+            1. Are NOT well-covered by existing patterns above
+            2. Represent genuine emerging behaviors, challenges, or opportunities
+            3. Could evolve into new guidance categories over time
 
-        Return only the JSON array.
-        """
-    ).strip()
+            Prioritize truly novel insights over minor variations of existing patterns. If no new themes exist, return an empty array.
+
+            Respond with a JSON array (no extra text) where each element has:
+            - "title": short descriptive theme title (max 7 words)
+            - "summary": one-sentence explanation of the new theme/issue
+            - "guidance": array of 2-3 actionable best-practice bullets for the agent (present tense)
+            - "keywords": array of 3-6 lowercase keywords to detect similar cases
+            - "novelty_score": number 1-10 indicating how novel this theme is compared to existing patterns
+
+            Session excerpts:
+            {excerpts}
+
+            Return only the JSON array.
+            """
+        ).strip()
+    else:
+        # Original pattern matching mode
+        prompt = textwrap.dedent(
+            f"""
+            You are maintaining a set of improvement patterns for the Codex coding agent. Existing patterns are: {existing_titles_text}.
+            Review the new session excerpts below and propose up to {capacity} additional patterns that capture recurring issues not already addressed.
+
+            Respond with a JSON array (no extra text) where each element has:
+            - "title": short descriptive pattern title (max 7 words)
+            - "summary": one-sentence explanation of the issue/opportunity
+            - "guidance": array of 2-3 actionable best-practice bullets for Codex (present tense)
+            - "keywords": array of 3-6 lowercase keywords to detect similar cases
+
+            Session excerpts:
+            {excerpts}
+
+            Return only the JSON array.
+            """
+        ).strip()
 
     env = os.environ.copy()
 
@@ -611,6 +656,13 @@ def discover_patterns_with_llm(
         if not keywords:
             continue
 
+        # In dynamic mode, prioritize patterns with higher novelty scores
+        novelty_score = entry.get("novelty_score", 5)  # Default to 5 if not provided
+        if force_dynamic or ENABLE_DYNAMIC_DISCOVERY:
+            if novelty_score < 3:  # Skip low novelty patterns in dynamic mode
+                print(f"Skipping low novelty pattern '{title}' (score: {novelty_score})")
+                continue
+
         identifier = f"dynamic-{slugify(title)}"
         bullets = tuple(guidance_lines[:3])
         pattern = Pattern(
@@ -622,6 +674,10 @@ def discover_patterns_with_llm(
         patterns.append(pattern)
         seen_titles.add(title.lower())
 
+        # Log novelty information for dynamic patterns
+        if force_dynamic or ENABLE_DYNAMIC_DISCOVERY:
+            print(f"Added dynamic pattern '{title}' with novelty score {novelty_score}")
+
     return patterns
 
 
@@ -630,15 +686,16 @@ def discover_patterns_with_claude(
     session_ids: Sequence[str],
     existing_titles: Sequence[str],
     capacity: int,
+    force_dynamic: bool = False,
 ) -> List[Pattern]:
     if capacity <= 0 or not session_ids:
         return []
 
     env = os.environ.copy()
-    api_key = env.get("ANTHROPIC_API_KEY") or env.get("CLAUDE_API_KEY")
+    api_key = env.get("ANTHROPIC_API_KEY") or env.get("ANTHROPIC_AUTH_TOKEN") or env.get("CLAUDE_API_KEY")
     if not api_key:
         print(
-            "LLM discovery skipped: ANTHROPIC_API_KEY (or CLAUDE_API_KEY) not set "
+            "LLM discovery skipped: ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN (or CLAUDE_API_KEY) not set "
             "for claude provider."
         )
         return []
@@ -648,23 +705,53 @@ def discover_patterns_with_claude(
         return []
 
     existing_titles_text = ", ".join(existing_titles) if existing_titles else "None"
-    prompt = textwrap.dedent(
-        f"""
-        You are maintaining a set of improvement patterns for a coding agent. Existing patterns are: {existing_titles_text}.
-        Review the new session excerpts below and propose up to {capacity} additional patterns that capture recurring issues not already addressed.
 
-        Respond with a JSON array (no extra text) where each element has:
-        - "title": short descriptive pattern title (max 7 words)
-        - "summary": one-sentence explanation of the issue/opportunity
-        - "guidance": array of 2-3 actionable best-practice bullets for the agent (present tense)
-        - "keywords": array of 3-6 lowercase keywords to detect similar cases
+    # Dynamic discovery mode - look for truly novel themes
+    if force_dynamic or ENABLE_DYNAMIC_DISCOVERY:
+        prompt = textwrap.dedent(
+            f"""
+            You are analyzing new coding agent sessions to discover emerging themes and patterns.
+            Existing patterns: {existing_titles_text}
 
-        Session excerpts:
-        {excerpts}
+            Review the session excerpts below and identify up to {capacity} NOVEL themes or recurring issues that:
+            1. Are NOT well-covered by existing patterns above
+            2. Represent genuine emerging behaviors, challenges, or opportunities
+            3. Could evolve into new guidance categories over time
 
-        Return only the JSON array.
-        """
-    ).strip()
+            Prioritize truly novel insights over minor variations of existing patterns. If no new themes exist, return an empty array.
+
+            Respond with a JSON array (no extra text) where each element has:
+            - "title": short descriptive theme title (max 7 words)
+            - "summary": one-sentence explanation of the new theme/issue
+            - "guidance": array of 2-3 actionable best-practice bullets for the agent (present tense)
+            - "keywords": array of 3-6 lowercase keywords to detect similar cases
+            - "novelty_score": number 1-10 indicating how novel this theme is compared to existing patterns
+
+            Session excerpts:
+            {excerpts}
+
+            Return only the JSON array.
+            """
+        ).strip()
+    else:
+        # Original pattern matching mode
+        prompt = textwrap.dedent(
+            f"""
+            You are maintaining a set of improvement patterns for a coding agent. Existing patterns are: {existing_titles_text}.
+            Review the new session excerpts below and propose up to {capacity} additional patterns that capture recurring issues not already addressed.
+
+            Respond with a JSON array (no extra text) where each element has:
+            - "title": short descriptive pattern title (max 7 words)
+            - "summary": one-sentence explanation of the issue/opportunity
+            - "guidance": array of 2-3 actionable best-practice bullets for the agent (present tense)
+            - "keywords": array of 3-6 lowercase keywords to detect similar cases
+
+            Session excerpts:
+            {excerpts}
+
+            Return only the JSON array.
+            """
+        ).strip()
 
     model = env.get("CODEX_PATTERN_CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL)
     max_tokens = int(env.get("CODEX_PATTERN_CLAUDE_MAX_TOKENS", "1024"))
@@ -763,6 +850,13 @@ def discover_patterns_with_claude(
         if not keywords:
             continue
 
+        # In dynamic mode, prioritize patterns with higher novelty scores
+        novelty_score = entry.get("novelty_score", 5)  # Default to 5 if not provided
+        if force_dynamic or ENABLE_DYNAMIC_DISCOVERY:
+            if novelty_score < 3:  # Skip low novelty patterns in dynamic mode
+                print(f"Skipping low novelty pattern '{title}' (score: {novelty_score})")
+                continue
+
         identifier = f"dynamic-{slugify(title)}"
         bullets = tuple(guidance_lines[:3])
         pattern = Pattern(
@@ -773,6 +867,10 @@ def discover_patterns_with_claude(
         )
         patterns.append(pattern)
         seen_titles.add(title.lower())
+
+        # Log novelty information for dynamic patterns
+        if force_dynamic or ENABLE_DYNAMIC_DISCOVERY:
+            print(f"Added dynamic pattern '{title}' with novelty score {novelty_score}")
 
     return patterns
 
@@ -1279,12 +1377,15 @@ def process_agent(
         if touched_sessions and remaining_pattern_slots > 0:
             print(f"{prefix} LLM discovery skipped: disabled via CODEX_PATTERN_DISABLE_LLM.")
     elif touched_sessions and remaining_pattern_slots > 0:
+        # Force dynamic mode to discover truly novel themes
+        force_dynamic = ENABLE_DYNAMIC_DISCOVERY
         llm_patterns = discover_patterns_with_llm(
             sessions,
             touched_sessions,
             [pattern.title for pattern in patterns],
             remaining_pattern_slots,
             repo_root,
+            force_dynamic=force_dynamic,
         )
         if llm_patterns:
             patterns.extend(llm_patterns)
