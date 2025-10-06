@@ -3,7 +3,7 @@
 Claude acts as an autonomous coding partner alongside Codex. The notes below distill recurrent themes from local Claude sessions (captured under `~/.claude/projects`) so future runs follow the same guardrails.
 
 ## 1. Shape the work before touching files
-- Always produce an explicit plan and confirm scope before editing. 22 session(s) asked for more upfront reasoning.
+- Always produce an explicit plan and confirm scope before editing. 25 session(s) asked for more upfront reasoning.
 - Surface unknowns early; restate assumptions and request missing context.
 - When instructions conflict with filesystem reality, pause and clarify before acting.
 - Example: "I am working on the chrome extension, read the repomix bundle /home/prei/zhon..."
@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Whenever we click the hamburger menu there is a small flicker (the page shift..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 91 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 93 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "First let's document this repo better. Within @artiffacts you'll see a lot of..."
@@ -35,7 +35,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "perfect commit changes and push"
 
 ## 5. Minimize approval churn
-- Bundle related commands to reduce repetitive approval requests. 58 session(s) flagged approval fatigue.
+- Bundle related commands to reduce repetitive approval requests. 59 session(s) flagged approval fatigue.
 - Cite why elevated permissions are needed; suggest safe, sandboxed alternatives when possible.
 - Reuse previously granted permissions if policy allows instead of re-requesting reflexively.
 - Example: "<command-name>/permissions</command-name> <command-message>permissions</comma..."
@@ -48,12 +48,12 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - After edits, echo file paths so the user can audit quickly.
 
 ## 7. Leverage available tooling proactively
-- Highlight built-in tools before the user prompts you. 26 session(s) reminded Codex to employ local tooling.
+- Highlight built-in tools before the user prompts you. 28 session(s) reminded Codex to employ local tooling.
 - Prefer existing scripts or automation hooks over ad-hoc commands; update or create helpers when they are missing.
 - Cache learnings: when you discover an effective workflow, note it for future runs.
+- Example: "Cool how about the cron now? Anything I need to change to make it run right?"
 - Example: "I want to check why I have no PRs on my dotfiles repo. Where are the logs for..."
 - Example: "Playwright is now installed so you can use it to browse. Let's try to go back..."
-- Example: "I am working on a bot to schedule visa appointments under this URL: https://c..."
 
 ## 8. Communicate like a teammate
 - Narrate trade-offs and residual risks instead of silently choosing a path. 32 session(s) asked for clearer communication.
