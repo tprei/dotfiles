@@ -81,3 +81,5 @@ Regularly revisit this document as new patterns emerge. The automation in this r
 - Always timestamp doc names. Follow conventions of the repo under docs repo
 
 <!-- manual-claude-guidance:end -->
+- always source python env before running python
+- if you make temporary tests, please make sure to clean them up after you've validated behavior
