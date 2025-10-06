@@ -1,4 +1,17 @@
 {
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "a37dc7fd6fad4993bc2d3b716a4b5a11.u1IFrJRaeQ7xrkbq",
+    "ANTHROPIC_BASE_URL": "https://api.z.ai/api/anthropic",
+    "API_TIMEOUT_MS": "3000000",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-4.5-air",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-4.6",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-4.6",
+    "MAX_THINKING_TOKENS": "16000",
+    "ENABLE_STREAMING": "true",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "64000",
+    "MAX_MCP_OUTPUT_TOKENS": "64000",
+    "DISABLE_COST_WARNINGS": "1"
+  },
   "permissions": {
     "allow": [
       "mcp__serena__*"
