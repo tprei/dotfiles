@@ -2,7 +2,7 @@
   "env": {
     "ANTHROPIC_AUTH_TOKEN": "a37dc7fd6fad4993bc2d3b716a4b5a11.u1IFrJRaeQ7xrkbq",
     "ANTHROPIC_BASE_URL": "https://api.z.ai/api/anthropic",
-    "API_TIMEOUT_MS": "3000000",
+    "API_TIMEOUT_MS": "10000000",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-4.5-air",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-4.6",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-4.6",
@@ -34,7 +34,7 @@
     "type": "command",
     "command": "printf \"\\033[01;32m%s@%s\\033[00m:\\033[01;34m%s\\033[00m\" \"$(whoami)\" \"$(hostname -s)\" \"$(pwd)\""
   },
-  "alwaysThinkingEnabled": false,
+  "alwaysThinkingEnabled": true,
   "feedbackSurveyState": {
     "lastShownTime": 1753994647675
   }

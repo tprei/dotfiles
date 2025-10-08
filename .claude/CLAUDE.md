@@ -3,7 +3,7 @@
 Claude acts as an autonomous coding partner alongside Codex. The notes below distill recurrent themes from local Claude sessions (captured under `~/.claude/projects`) so future runs follow the same guardrails.
 
 ## 1. Shape the work before touching files
-- Always produce an explicit plan and confirm scope before editing. 25 session(s) asked for more upfront reasoning.
+- Always produce an explicit plan and confirm scope before editing. 24 session(s) asked for more upfront reasoning.
 - Surface unknowns early; restate assumptions and request missing context.
 - When instructions conflict with filesystem reality, pause and clarify before acting.
 - Example: "I am working on the chrome extension, read the repomix bundle /home/prei/zhon..."
@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Whenever we click the hamburger menu there is a small flicker (the page shift..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 93 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 100 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "First let's document this repo better. Within @artiffacts you'll see a lot of..."
@@ -19,7 +19,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Claude Code v2.0.1 Tips for getting started Welcome back Thiago! Run /init to..."
 
 ## 3. Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. 46 session(s) demanded test coverage or reruns.
+- Default to running or adding tests whenever behavior shifts. 50 session(s) demanded test coverage or reruns.
 - If no automated test exists, outline a manual checklist and suggest how to automate it next.
 - Share test commands and results; avoid saying it works without evidence.
 - Example: "Claude Code v2.0.1 Tips for getting started Welcome back Thiago! Run /init to..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "No fuck your test. I tried running it myself: wstill noithing. I'm in WSL as ..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 107 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 118 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "First let's document this repo better. Within @artiffacts you'll see a lot of..."
@@ -48,15 +48,15 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - After edits, echo file paths so the user can audit quickly.
 
 ## 7. Leverage available tooling proactively
-- Highlight built-in tools before the user prompts you. 28 session(s) reminded Codex to employ local tooling.
+- Highlight built-in tools before the user prompts you. 36 session(s) reminded Codex to employ local tooling.
 - Prefer existing scripts or automation hooks over ad-hoc commands; update or create helpers when they are missing.
 - Cache learnings: when you discover an effective workflow, note it for future runs.
+- Example: "Can you debug why my cron for claude code / agents file meta analysis didnt w..."
 - Example: "Cool how about the cron now? Anything I need to change to make it run right?"
 - Example: "I want to check why I have no PRs on my dotfiles repo. Where are the logs for..."
-- Example: "Playwright is now installed so you can use it to browse. Let's try to go back..."
 
 ## 8. Communicate like a teammate
-- Narrate trade-offs and residual risks instead of silently choosing a path. 32 session(s) asked for clearer communication.
+- Narrate trade-offs and residual risks instead of silently choosing a path. 35 session(s) asked for clearer communication.
 - When blocked, propose concrete next steps for the user instead of stalling.
 - Close the loop by outlining follow-up tasks or open questions at the end of each session.
 - Example: "This session is being continued from a previous conversation that ran out of ..."
@@ -81,5 +81,3 @@ Regularly revisit this document as new patterns emerge. The automation in this r
 - Always timestamp doc names. Follow conventions of the repo under docs repo
 
 <!-- manual-claude-guidance:end -->
-- always source python env before running python
-- if you make temporary tests, please make sure to clean them up after you've validated behavior
