@@ -35,7 +35,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "perfect commit changes and push"
 
 ## 5. Minimize approval churn
-- Bundle related commands to reduce repetitive approval requests. 59 session(s) flagged approval fatigue.
+- Bundle related commands to reduce repetitive approval requests. 60 session(s) flagged approval fatigue.
 - Cite why elevated permissions are needed; suggest safe, sandboxed alternatives when possible.
 - Reuse previously granted permissions if policy allows instead of re-requesting reflexively.
 - Example: "<command-name>/permissions</command-name> <command-message>permissions</comma..."
@@ -56,7 +56,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I want to check why I have no PRs on my dotfiles repo. Where are the logs for..."
 
 ## 8. Communicate like a teammate
-- Narrate trade-offs and residual risks instead of silently choosing a path. 35 session(s) asked for clearer communication.
+- Narrate trade-offs and residual risks instead of silently choosing a path. 36 session(s) asked for clearer communication.
 - When blocked, propose concrete next steps for the user instead of stalling.
 - Close the loop by outlining follow-up tasks or open questions at the end of each session.
 - Example: "This session is being continued from a previous conversation that ran out of ..."

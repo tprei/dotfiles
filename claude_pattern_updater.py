@@ -774,33 +774,70 @@ def discover_patterns_with_claude(
         request_body["top_p"] = top_p_value
 
     request_json = json.dumps(request_body).encode("utf-8")
-    request = urllib.request.Request(
-        env.get("ANTHROPIC_BASE_URL") or env.get("ANTHROPIC_API_URL", "https://api.anthropic.com/v1/messages"),
-        data=request_json,
-        headers={
-            "content-type": "application/json",
-            "x-api-key": api_key,
-            "anthropic-version": env.get("ANTHROPIC_API_VERSION", "2023-06-01"),
-        },
-        method="POST",
-    )
+    base_url = env.get("ANTHROPIC_BASE_URL") or env.get("ANTHROPIC_API_URL", "https://api.anthropic.com/v1/messages")
 
-    try:
-        with urllib.request.urlopen(request, timeout=120) as response:
-            body = response.read().decode("utf-8")
-    except urllib.error.HTTPError as exc:
-        error_text = exc.read().decode("utf-8", errors="ignore")
-        message = error_text or str(exc)
-        print("LLM discovery skipped: claude API error", message)
-        if "insufficient" in message.lower() or "credit" in message.lower():
-            print(
-                "Hint: ensure your Anthropic account has sufficient credit or quota "
-                "for claude-sonnet-4-20250514."
-            )
-        return []
-    except urllib.error.URLError as exc:
-        print(f"LLM discovery skipped: failed to contact Anthropic ({exc})")
-        return []
+    # Try different endpoints for GLM compatibility
+    possible_endpoints = [
+        base_url.rstrip('/') + '/messages',  # Anthropic style
+        base_url.rstrip('/') + '/chat/completions',  # OpenAI style
+        base_url.rstrip('/') + '/v1/chat/completions',  # OpenAI style with version
+    ]
+
+    request_body_for_openai = None
+    if "chat/completions" in base_url:
+        # Convert to OpenAI format if needed
+        request_body_for_openai = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": request_body["messages"][0]["content"],
+                }
+            ],
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        if top_p_value is not None:
+            request_body_for_openai["top_p"] = top_p_value
+
+    last_error = None
+    for endpoint in possible_endpoints:
+        try:
+            if "chat/completions" in endpoint and request_body_for_openai:
+                # Use OpenAI format for chat completions
+                request_json = json.dumps(request_body_for_openai).encode("utf-8")
+                headers = {
+                    "content-type": "application/json",
+                    "authorization": f"Bearer {api_key}",
+                }
+            else:
+                # Use Anthropic format
+                request_json = json.dumps(request_body).encode("utf-8")
+                headers = {
+                    "content-type": "application/json",
+                    "x-api-key": api_key,
+                    "anthropic-version": env.get("ANTHROPIC_API_VERSION", "2023-06-01"),
+                }
+
+            request = urllib.request.Request(endpoint, data=request_json, headers=headers, method="POST")
+
+            with urllib.request.urlopen(request, timeout=120) as response:
+                body = response.read().decode("utf-8")
+
+            # If we get here, the request succeeded
+            print(f"=== DEBUG: Successfully used endpoint: {endpoint} ===")
+            break
+
+        except Exception as e:
+            print(f"=== DEBUG: Endpoint {endpoint} failed: {e} ===")
+            last_error = e
+            continue
+    else:
+        # All endpoints failed
+        if last_error:
+            raise last_error
+        else:
+            raise RuntimeError("All API endpoints failed")
 
     # Debug: Log the raw API response
     print("=== DEBUG: Raw API Response ===")
