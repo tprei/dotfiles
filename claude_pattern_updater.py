@@ -825,9 +825,13 @@ def discover_patterns_with_claude(
                 body = response.read().decode("utf-8")
 
             # If we get here, the request succeeded
-            print(f"=== DEBUG: Successfully used endpoint: {endpoint} ===")
+            print(f"Successfully used endpoint: {endpoint}")
             break
 
+        except urllib.error.HTTPError as e:
+            print(f"=== DEBUG: Endpoint {endpoint} HTTP Error: {e.code} - {e.reason} ===")
+            last_error = e
+            continue
         except Exception as e:
             print(f"=== DEBUG: Endpoint {endpoint} failed: {e} ===")
             last_error = e
