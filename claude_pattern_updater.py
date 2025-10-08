@@ -802,6 +802,12 @@ def discover_patterns_with_claude(
         print(f"LLM discovery skipped: failed to contact Anthropic ({exc})")
         return []
 
+    # Debug: Log the raw API response
+    print("=== DEBUG: Raw API Response ===")
+    print(f"Status: Response received, length: {len(body)} characters")
+    print(f"Raw body (first 1000 chars): {body[:1000]}")
+    print("=== END DEBUG ===")
+
     try:
         api_response = json.loads(body)
     except json.JSONDecodeError:
@@ -810,6 +816,19 @@ def discover_patterns_with_claude(
             print(f"Claude API response (truncated): {snippet}")
         print("LLM discovery returned no parsable JSON.")
         return []
+
+    # Debug: Log the parsed API response
+    print("=== DEBUG: Parsed API Response ===")
+    print(f"Response type: {api_response.get('type')}")
+    if api_response.get("type") == "error":
+        print(f"Error: {api_response.get('error')}")
+    else:
+        content = api_response.get("content", [])
+        print(f"Content items: {len(content)}")
+        for i, item in enumerate(content):
+            if isinstance(item, dict):
+                print(f"Item {i}: type={item.get('type')}, text_length={len(item.get('text', ''))}")
+    print("=== END DEBUG ===")
 
     if api_response.get("type") == "error":
         message = truncate_text(str(api_response.get("error", "")), 400)
@@ -823,6 +842,12 @@ def discover_patterns_with_claude(
         if isinstance(item, dict) and item.get("type") == "text"
     ]
     combined_output = "\n".join(chunk for chunk in text_chunks if chunk).strip()
+
+    # Debug: Log the extracted text
+    print("=== DEBUG: Extracted Text ===")
+    print(f"Combined output length: {len(combined_output)}")
+    print(f"Combined output (first 500 chars): {combined_output[:500]}")
+    print("=== END DEBUG ===")
 
     parsed = parse_json_array(combined_output)
     if not parsed:
