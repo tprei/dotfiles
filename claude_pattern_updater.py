@@ -692,10 +692,10 @@ def discover_patterns_with_claude(
         return []
 
     env = os.environ.copy()
-    api_key = env.get("ANTHROPIC_API_KEY") or env.get("ANTHROPIC_AUTH_TOKEN") or env.get("CLAUDE_API_KEY")
+    api_key = env.get("OPENAI_API_KEY") or env.get("ANTHROPIC_API_KEY") or env.get("ANTHROPIC_AUTH_TOKEN") or env.get("CLAUDE_API_KEY")
     if not api_key:
         print(
-            "LLM discovery skipped: ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN (or CLAUDE_API_KEY) not set "
+            "LLM discovery skipped: OPENAI_API_KEY, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN (or CLAUDE_API_KEY) not set "
             "for claude provider."
         )
         return []
@@ -774,36 +774,34 @@ def discover_patterns_with_claude(
         request_body["top_p"] = top_p_value
 
     request_json = json.dumps(request_body).encode("utf-8")
-    base_url = env.get("ANTHROPIC_BASE_URL") or env.get("ANTHROPIC_API_URL", "https://api.anthropic.com/v1/messages")
+    # Use OpenAI-style API for GLM
+    base_url = env.get("OPENAI_BASE_URL") or env.get("ANTHROPIC_BASE_URL") or env.get("ANTHROPIC_API_URL", "https://api.openai.com/v1")
 
-    # Try different endpoints for GLM compatibility
+    # Try different endpoints for GLM compatibility (prioritize OpenAI style)
     possible_endpoints = [
-        base_url.rstrip('/') + '/messages',  # Anthropic style
         base_url.rstrip('/') + '/chat/completions',  # OpenAI style
-        base_url.rstrip('/') + '/v1/chat/completions',  # OpenAI style with version
+        base_url.rstrip('/') + '/messages',  # Anthropic style (fallback)
     ]
 
-    request_body_for_openai = None
-    if "chat/completions" in base_url:
-        # Convert to OpenAI format if needed
-        request_body_for_openai = {
-            "model": model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": request_body["messages"][0]["content"],
-                }
-            ],
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-        }
-        if top_p_value is not None:
-            request_body_for_openai["top_p"] = top_p_value
+    # Always use OpenAI format for GLM compatibility
+    request_body_for_openai = {
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": request_body["messages"][0]["content"],
+            }
+        ],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    if top_p_value is not None:
+        request_body_for_openai["top_p"] = top_p_value
 
     last_error = None
     for endpoint in possible_endpoints:
         try:
-            if "chat/completions" in endpoint and request_body_for_openai:
+            if "chat/completions" in endpoint:
                 # Use OpenAI format for chat completions
                 request_json = json.dumps(request_body_for_openai).encode("utf-8")
                 headers = {
@@ -811,7 +809,7 @@ def discover_patterns_with_claude(
                     "authorization": f"Bearer {api_key}",
                 }
             else:
-                # Use Anthropic format
+                # Use Anthropic format (fallback)
                 request_json = json.dumps(request_body).encode("utf-8")
                 headers = {
                     "content-type": "application/json",
@@ -860,29 +858,52 @@ def discover_patterns_with_claude(
 
     # Debug: Log the parsed API response
     print("=== DEBUG: Parsed API Response ===")
-    print(f"Response type: {api_response.get('type')}")
-    if api_response.get("type") == "error":
-        print(f"Error: {api_response.get('error')}")
-    else:
+    if "choices" in api_response:
+        # OpenAI format
+        print("Response format: OpenAI-style")
+        choices = api_response.get("choices", [])
+        print(f"Choices: {len(choices)}")
+        for i, choice in enumerate(choices):
+            message = choice.get("message", {})
+            print(f"Choice {i}: role={message.get('role')}, content_length={len(message.get('content', ''))}")
+    elif "content" in api_response:
+        # Anthropic format
+        print("Response format: Anthropic-style")
         content = api_response.get("content", [])
         print(f"Content items: {len(content)}")
         for i, item in enumerate(content):
             if isinstance(item, dict):
                 print(f"Item {i}: type={item.get('type')}, text_length={len(item.get('text', ''))}")
+    else:
+        print("Unknown response format")
+        print(f"Keys: {list(api_response.keys())}")
     print("=== END DEBUG ===")
 
-    if api_response.get("type") == "error":
-        message = truncate_text(str(api_response.get("error", "")), 400)
-        print(f"LLM discovery skipped: claude API error {message}")
-        return []
+    # Parse response based on format
+    if "choices" in api_response:
+        # OpenAI format
+        choices = api_response.get("choices", [])
+        if choices:
+            message = choices[0].get("message", {})
+            combined_output = message.get("content", "").strip()
+        else:
+            combined_output = ""
+    elif "content" in api_response:
+        # Anthropic format
+        content = api_response.get("content", [])
+        text_chunks = [
+            item.get("text", "")
+            for item in content
+            if isinstance(item, dict) and item.get("type") == "text"
+        ]
+        combined_output = "\n".join(chunk for chunk in text_chunks if chunk).strip()
+    else:
+        combined_output = ""
 
-    content = api_response.get("content", [])
-    text_chunks = [
-        item.get("text", "")
-        for item in content
-        if isinstance(item, dict) and item.get("type") == "text"
-    ]
-    combined_output = "\n".join(chunk for chunk in text_chunks if chunk).strip()
+    if "error" in api_response:
+        message = truncate_text(str(api_response.get("error", "")), 400)
+        print(f"LLM discovery skipped: API error {message}")
+        return []
 
     # Debug: Log the extracted text
     print("=== DEBUG: Extracted Text ===")
