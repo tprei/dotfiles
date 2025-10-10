@@ -775,12 +775,12 @@ def discover_patterns_with_claude(
 
     request_json = json.dumps(request_body).encode("utf-8")
     # Use OpenAI-style API for GLM
-    openai_base_url = env.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    glm_base_url = env.get("OPENAI_BASE_URL", "https://api.z.ai/v1")
     anthropic_base_url = env.get("ANTHROPIC_BASE_URL") or env.get("ANTHROPIC_API_URL", "https://api.anthropic.com/v1/messages")
 
     # Try different endpoints for GLM compatibility (prioritize OpenAI style)
     possible_endpoints = [
-        openai_base_url.rstrip('/') + '/chat/completions',  # OpenAI style
+        glm_base_url.rstrip('/') + '/chat/completions',  # GLM OpenAI style
         anthropic_base_url.rstrip('/') + '/messages',  # Anthropic style (fallback)
     ]
 
