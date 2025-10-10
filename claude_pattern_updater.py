@@ -692,7 +692,7 @@ def discover_patterns_with_claude(
         return []
 
     env = os.environ.copy()
-    api_key = env.get("OPENAI_API_KEY") or env.get("ANTHROPIC_API_KEY") or env.get("ANTHROPIC_AUTH_TOKEN") or env.get("CLAUDE_API_KEY")
+    api_key = env.get("GLM_API_KEY") or env.get("OPENAI_API_KEY") or env.get("ANTHROPIC_API_KEY") or env.get("ANTHROPIC_AUTH_TOKEN") or env.get("CLAUDE_API_KEY")
     if not api_key:
         print(
             "LLM discovery skipped: OPENAI_API_KEY, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN (or CLAUDE_API_KEY) not set "
