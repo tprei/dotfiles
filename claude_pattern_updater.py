@@ -842,12 +842,7 @@ def discover_patterns_with_claude(
         else:
             raise RuntimeError("All API endpoints failed")
 
-    # Debug: Log the raw API response
-    print("=== DEBUG: Raw API Response ===")
-    print(f"Status: Response received, length: {len(body)} characters")
-    print(f"Raw body (first 1000 chars): {body[:1000]}")
-    print("=== END DEBUG ===")
-
+    
     try:
         api_response = json.loads(body)
     except json.JSONDecodeError:
@@ -857,29 +852,7 @@ def discover_patterns_with_claude(
         print("LLM discovery returned no parsable JSON.")
         return []
 
-    # Debug: Log the parsed API response
-    print("=== DEBUG: Parsed API Response ===")
-    if "choices" in api_response:
-        # OpenAI format
-        print("Response format: OpenAI-style")
-        choices = api_response.get("choices", [])
-        print(f"Choices: {len(choices)}")
-        for i, choice in enumerate(choices):
-            message = choice.get("message", {})
-            print(f"Choice {i}: role={message.get('role')}, content_length={len(message.get('content', ''))}")
-    elif "content" in api_response:
-        # Anthropic format
-        print("Response format: Anthropic-style")
-        content = api_response.get("content", [])
-        print(f"Content items: {len(content)}")
-        for i, item in enumerate(content):
-            if isinstance(item, dict):
-                print(f"Item {i}: type={item.get('type')}, text_length={len(item.get('text', ''))}")
-    else:
-        print("Unknown response format")
-        print(f"Keys: {list(api_response.keys())}")
-    print("=== END DEBUG ===")
-
+    
     # Parse response based on format
     if "choices" in api_response:
         # OpenAI format
