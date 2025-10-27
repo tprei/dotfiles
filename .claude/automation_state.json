@@ -2591,7 +2591,22 @@
     "/home/prei/betterbili/zhongwen-video:1761601427876",
     "/home/prei/betterbili/zhongwen-video:1761601449842",
     "/home/prei/betterbili/zhongwen-video:1761601449901",
-    "/home/prei/betterbili/zhongwen-video:1761601449916"
+    "/home/prei/betterbili/zhongwen-video:1761601449916",
+    "51fe0503-0eda-49d1-a7ef-2e676e8b650f",
+    "c61fc304-7649-4b34-8138-f9e1c00f9d97",
+    "7fa41a30-ee33-4157-b58f-2be3dd959fd5",
+    "9d00f13e-8e5c-4197-99e3-e82e4362282f",
+    "b925a090-50dd-484f-a9e0-44f745c8a496",
+    "/home/prei/betterbili/zhongwen-video:1761602536405",
+    "/home/prei/betterbili/zhongwen-video:1761602536468",
+    "/home/prei/betterbili/zhongwen-video:1761602568921",
+    "/home/prei/betterbili/zhongwen-video:1761602568978",
+    "/home/prei/betterbili/zhongwen-video:1761602568991",
+    "/home/prei/betterbili/zhongwen-video:1761604538356",
+    "/home/prei/betterbili/zhongwen-video:1761604538400",
+    "/home/prei/betterbili/zhongwen-video:1761604543589",
+    "/home/prei/betterbili/zhongwen-video:1761604543635",
+    "/home/prei/betterbili/zhongwen-video:1761604543650"
   ],
   "dynamic_patterns": [
     {
@@ -5370,7 +5385,22 @@
     "/home/prei/betterbili/zhongwen-video:1761601427876": 1761601427,
     "/home/prei/betterbili/zhongwen-video:1761601449842": 1761601449,
     "/home/prei/betterbili/zhongwen-video:1761601449901": 1761601449,
-    "/home/prei/betterbili/zhongwen-video:1761601449916": 1761601449
+    "/home/prei/betterbili/zhongwen-video:1761601449916": 1761601449,
+    "51fe0503-0eda-49d1-a7ef-2e676e8b650f": 1761602568,
+    "c61fc304-7649-4b34-8138-f9e1c00f9d97": 0,
+    "7fa41a30-ee33-4157-b58f-2be3dd959fd5": 0,
+    "9d00f13e-8e5c-4197-99e3-e82e4362282f": 1761604543,
+    "b925a090-50dd-484f-a9e0-44f745c8a496": 0,
+    "/home/prei/betterbili/zhongwen-video:1761602536405": 1761602536,
+    "/home/prei/betterbili/zhongwen-video:1761602536468": 1761602536,
+    "/home/prei/betterbili/zhongwen-video:1761602568921": 1761602568,
+    "/home/prei/betterbili/zhongwen-video:1761602568978": 1761602568,
+    "/home/prei/betterbili/zhongwen-video:1761602568991": 1761602568,
+    "/home/prei/betterbili/zhongwen-video:1761604538356": 1761604538,
+    "/home/prei/betterbili/zhongwen-video:1761604538400": 1761604538,
+    "/home/prei/betterbili/zhongwen-video:1761604543589": 1761604543,
+    "/home/prei/betterbili/zhongwen-video:1761604543635": 1761604543,
+    "/home/prei/betterbili/zhongwen-video:1761604543650": 1761604543
   },
-  "updated_at": "2025-10-27T22:00:03+00:00"
+  "updated_at": "2025-10-27T23:00:04+00:00"
 }
