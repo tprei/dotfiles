@@ -11,6 +11,23 @@ CLAUDE_HISTORY_PATH="${HOME}/.claude/history.jsonl"
 BRANCH="claude/pattern-updates"
 BASE_BRANCH="master"
 
+# Load environment variables from .env file for OpenAI API access
+if [[ -f "${PROJECT_ROOT}/.env" ]]; then
+  echo "Loading environment from .env file..."
+  # Export each line from .env that's not a comment or empty
+  while IFS= read -r line; do
+    # Skip comments and empty lines
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ -z "${line// }" ]] && continue
+
+    # Export the variable
+    export "$line"
+  done < "${PROJECT_ROOT}/.env"
+  echo "Environment loaded successfully."
+else
+  echo "Warning: .env file not found at ${PROJECT_ROOT}/.env"
+fi
+
 if [[ -z "${PYTHON_BIN}" ]]; then
   echo "python3 not found on PATH" >&2
   exit 1

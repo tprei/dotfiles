@@ -6,11 +6,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import re
 import shutil
 import shlex
 import subprocess
 import textwrap
+import time
 import urllib.error
 import urllib.request
 from collections import defaultdict
@@ -18,6 +20,25 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("Loaded environment using python-dotenv")
+except ImportError:
+    # Fallback: manually parse .env file if dotenv not available
+    env_file = Path(__file__).parent / ".env"
+    if env_file.exists():
+        with open(env_file, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    os.environ[key.strip()] = value.strip()
+        print(f"Loaded environment from .env file, CODEX_PATTERN_CLAUDE_MODEL={os.environ.get('CODEX_PATTERN_CLAUDE_MODEL', 'NOT_SET')}")
+    else:
+        print("No .env file found")
 
 SCRIPT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -39,8 +60,8 @@ DEFAULT_AUTOMATION_BRANCH = "claude/pattern-updates"
 DEFAULT_BASE_BRANCH = "master"
 MAX_MEMORY_TOKENS = 100_000
 MAX_PATTERNS = 20
-DEFAULT_LLM_PROVIDER = "claude"
-DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-20250514"
+DEFAULT_LLM_PROVIDER = "openai"
+DEFAULT_CLAUDE_MODEL = "gpt-5-mini"
 ENABLE_DYNAMIC_DISCOVERY = True  # Allow discovery of truly new themes beyond static patterns
 STATIC_CALLOUTS: Sequence[str] = (
     "DO NOT IMPLEMENT FALLBACKS. If you are unsure how to do something or something isn't working, avoid quick hacks like mocked data or assuming functionality is impossible; pause and surface the blocker instead.",
@@ -466,7 +487,7 @@ def discover_patterns_with_llm(
     force_dynamic: bool = False,
 ) -> List[Pattern]:
     provider = os.environ.get("CODEX_PATTERN_PROVIDER", DEFAULT_LLM_PROVIDER).lower()
-    if provider == "claude":
+    if provider in ("claude", "openai"):
         return discover_patterns_with_claude(
             sessions,
             session_ids,
@@ -681,6 +702,170 @@ def discover_patterns_with_llm(
     return patterns
 
 
+def make_request_with_retry(endpoint: str, request_json: bytes, headers: Dict[str, str], max_retries: int = 3) -> Optional[str]:
+    """Make HTTP request with exponential backoff retry logic."""
+    for attempt in range(max_retries + 1):
+        try:
+            request = urllib.request.Request(endpoint, data=request_json, headers=headers, method="POST")
+
+            with urllib.request.urlopen(request, timeout=120) as response:
+                return response.read().decode("utf-8")
+
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode('utf-8') if hasattr(e, 'read') else ""
+            print(f"=== DEBUG: HTTP Error {e.code} - {e.reason} ===")
+            print(f"=== DEBUG: Error response body: {error_body[:500]} ===")
+
+            if e.code == 429:
+                if attempt < max_retries:
+                    # Exponential backoff with jitter
+                    base_delay = min(60, 2 ** attempt)  # Cap at 60 seconds
+                    jitter = random.uniform(0.1, 0.3) * base_delay  # Add 10-30% jitter
+                    delay = base_delay + jitter
+                    print(f"Rate limited on {endpoint}, retry {attempt + 1}/{max_retries + 1} in {delay:.1f}s...")
+                    time.sleep(delay)
+                    continue
+                else:
+                    print(f"Rate limited on endpoint {endpoint} after {max_retries + 1} retries, skipping LLM discovery for this run")
+                    return None
+            else:
+                if attempt < max_retries:
+                    print(f"Retrying {attempt + 1}/{max_retries + 1}...")
+                    time.sleep(1)  # Brief pause for non-rate-limit errors
+                continue
+        except Exception as e:
+            print(f"=== DEBUG: Endpoint {endpoint} failed: {e} ===")
+            if attempt < max_retries:
+                print(f"Retrying {attempt + 1}/{max_retries + 1}...")
+                time.sleep(1)  # Brief pause for other errors
+            continue
+    return None
+
+
+def call_openai_api_directly(
+    prompt: str,
+    model: str,
+    api_key: str,
+    max_tokens: int,
+    temperature: float,
+    top_p: Optional[float],
+    existing_titles: Sequence[str],
+    capacity: int,
+) -> List[Pattern]:
+    """Call OpenAI API directly without going through Codex CLI."""
+
+    # GPT-5 and newer models use max_completion_tokens instead of max_tokens
+    max_tokens_param = "max_completion_tokens" if model.startswith("gpt-5") else "max_tokens"
+
+    request_body = {
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt,
+            }
+        ],
+        max_tokens_param: max_tokens,
+    }
+
+    # Only add temperature for models that support it (not gpt-5 models)
+    if not model.startswith("gpt-5"):
+        request_body["temperature"] = temperature
+
+    if top_p is not None:
+        request_body["top_p"] = top_p
+
+    request_json = json.dumps(request_body).encode("utf-8")
+    headers = {
+        "content-type": "application/json",
+        "authorization": f"Bearer {api_key}",
+    }
+
+    # Use the same retry mechanism for direct API calls
+    body = make_request_with_retry("https://api.openai.com/v1/chat/completions", request_json, headers)
+
+    if body is None:
+        print("OpenAI API call failed after retries, returning no patterns")
+        return []
+
+    try:
+        api_response = json.loads(body)
+    except json.JSONDecodeError:
+        snippet = truncate_text(body.strip(), 400)
+        if snippet:
+            print(f"OpenAI API response (truncated): {snippet}")
+        print("LLM discovery returned no parsable JSON.")
+        return []
+
+    if "error" in api_response:
+        message = truncate_text(str(api_response.get("error", "")), 400)
+        print(f"LLM discovery skipped: API error {message}")
+        return []
+
+    # Parse OpenAI response format
+    choices = api_response.get("choices", [])
+    if not choices:
+        print("LLM discovery returned no choices in response")
+        return []
+
+    message = choices[0].get("message", {})
+    combined_output = message.get("content", "").strip()
+
+    if not combined_output:
+        print("LLM discovery returned empty content")
+        return []
+
+    parsed = parse_json_array(combined_output)
+    if not parsed:
+        snippet = truncate_text(combined_output, 400)
+        if snippet:
+            print(f"OpenAI response (truncated): {snippet}")
+        print("LLM discovery returned no parsable JSON.")
+        return []
+
+    patterns: List[Pattern] = []
+    existing = {title.lower() for title in existing_titles}
+    seen_titles: set[str] = set()
+    for entry in parsed:
+        if len(patterns) >= capacity:
+            break
+        title = str(entry.get("title", "")).strip()
+        if not title or title.lower() in existing or title.lower() in seen_titles:
+            continue
+        summary = str(entry.get("summary", "")).strip()
+        guidance = entry.get("guidance", []) or ([summary] if summary else [])
+        guidance_lines = [truncate_text(str(item).strip(), 180) for item in guidance if str(item).strip()]
+        if not guidance_lines:
+            continue
+        keywords = [truncate_text(str(k).lower().strip(), 40) for k in entry.get("keywords", [])]
+        if not keywords:
+            continue
+
+        # In dynamic mode, prioritize patterns with higher novelty scores
+        novelty_score = entry.get("novelty_score", 5)  # Default to 5 if not provided
+        if ENABLE_DYNAMIC_DISCOVERY:
+            if novelty_score < 3:  # Skip low novelty patterns in dynamic mode
+                print(f"Skipping low novelty pattern '{title}' (score: {novelty_score})")
+                continue
+
+        identifier = f"dynamic-{slugify(title)}"
+        bullets = tuple(guidance_lines[:3])
+        pattern = Pattern(
+            identifier=identifier,
+            title=title,
+            keywords=tuple(keywords[:6]),
+            bullets=bullets,
+        )
+        patterns.append(pattern)
+        seen_titles.add(title.lower())
+
+        # Log novelty information for dynamic patterns
+        if ENABLE_DYNAMIC_DISCOVERY:
+            print(f"Added dynamic pattern '{title}' with novelty score {novelty_score}")
+
+    return patterns
+
+
 def discover_patterns_with_claude(
     sessions: Dict[str, List[Dict[str, object]]],
     session_ids: Sequence[str],
@@ -692,11 +877,11 @@ def discover_patterns_with_claude(
         return []
 
     env = os.environ.copy()
-    api_key = env.get("GLM_API_KEY") or env.get("OPENAI_API_KEY") or env.get("ANTHROPIC_API_KEY") or env.get("ANTHROPIC_AUTH_TOKEN") or env.get("CLAUDE_API_KEY")
+    api_key = env.get("OPENAI_API_KEY") or env.get("GLM_API_KEY") or env.get("ANTHROPIC_API_KEY") or env.get("ANTHROPIC_AUTH_TOKEN") or env.get("CLAUDE_API_KEY")
     if not api_key:
         print(
-            "LLM discovery skipped: OPENAI_API_KEY, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN (or CLAUDE_API_KEY) not set "
-            "for claude provider."
+            "LLM discovery skipped: No API key found. Set OPENAI_API_KEY, GLM_API_KEY, ANTHROPIC_API_KEY, "
+            "ANTHROPIC_AUTH_TOKEN, or CLAUDE_API_KEY in environment."
         )
         return []
 
@@ -754,186 +939,13 @@ def discover_patterns_with_claude(
         ).strip()
 
     model = env.get("CODEX_PATTERN_CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL)
-    max_tokens = int(env.get("CODEX_PATTERN_CLAUDE_MAX_TOKENS", "1024"))
+    max_tokens = int(env.get("CODEX_PATTERN_CLAUDE_MAX_TOKENS", "4096"))
     temperature = float(env.get("CODEX_PATTERN_CLAUDE_TEMPERATURE", "0"))
     top_p = env.get("CODEX_PATTERN_CLAUDE_TOP_P")
     top_p_value = float(top_p) if top_p is not None else None
 
-    request_body: Dict[str, object] = {
-        "model": model,
-        "messages": [
-            {
-                "role": "user",
-                "content": prompt,
-            }
-        ],
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-    }
-    if top_p_value is not None:
-        request_body["top_p"] = top_p_value
-
-    request_json = json.dumps(request_body).encode("utf-8")
-    # Use OpenAI-style API for GLM
-    glm_base_url = env.get("OPENAI_BASE_URL", "https://api.z.ai/v1")
-    anthropic_base_url = env.get("ANTHROPIC_BASE_URL") or env.get("ANTHROPIC_API_URL", "https://api.anthropic.com/v1/messages")
-
-    # Try different endpoints for GLM compatibility (prioritize OpenAI style)
-    possible_endpoints = [
-        glm_base_url.rstrip('/') + '/chat/completions',  # GLM OpenAI style
-        anthropic_base_url.rstrip('/') + '/messages',  # Anthropic style (fallback)
-    ]
-
-    # Always use OpenAI format for GLM compatibility
-    request_body_for_openai = {
-        "model": model,
-        "messages": [
-            {
-                "role": "user",
-                "content": request_body["messages"][0]["content"],
-            }
-        ],
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-    }
-    if top_p_value is not None:
-        request_body_for_openai["top_p"] = top_p_value
-
-    last_error = None
-    for endpoint in possible_endpoints:
-        try:
-            if "chat/completions" in endpoint:
-                # Use OpenAI format for chat completions
-                request_json = json.dumps(request_body_for_openai).encode("utf-8")
-                headers = {
-                    "content-type": "application/json",
-                    "authorization": f"Bearer {api_key}",
-                }
-            else:
-                # Use Anthropic format (fallback)
-                request_json = json.dumps(request_body).encode("utf-8")
-                headers = {
-                    "content-type": "application/json",
-                    "x-api-key": api_key,
-                    "anthropic-version": env.get("ANTHROPIC_API_VERSION", "2023-06-01"),
-                }
-
-            request = urllib.request.Request(endpoint, data=request_json, headers=headers, method="POST")
-
-            with urllib.request.urlopen(request, timeout=120) as response:
-                body = response.read().decode("utf-8")
-
-            # If we get here, the request succeeded
-            print(f"Successfully used endpoint: {endpoint}")
-            break
-
-        except urllib.error.HTTPError as e:
-            print(f"=== DEBUG: Endpoint {endpoint} HTTP Error: {e.code} - {e.reason} ===")
-            last_error = e
-            continue
-        except Exception as e:
-            print(f"=== DEBUG: Endpoint {endpoint} failed: {e} ===")
-            last_error = e
-            continue
-    else:
-        # All endpoints failed
-        if last_error:
-            raise last_error
-        else:
-            raise RuntimeError("All API endpoints failed")
-
-    
-    try:
-        api_response = json.loads(body)
-    except json.JSONDecodeError:
-        snippet = truncate_text(body.strip(), 400)
-        if snippet:
-            print(f"Claude API response (truncated): {snippet}")
-        print("LLM discovery returned no parsable JSON.")
-        return []
-
-    
-    # Parse response based on format
-    if "choices" in api_response:
-        # OpenAI format
-        choices = api_response.get("choices", [])
-        if choices:
-            message = choices[0].get("message", {})
-            combined_output = message.get("content", "").strip()
-        else:
-            combined_output = ""
-    elif "content" in api_response:
-        # Anthropic format
-        content = api_response.get("content", [])
-        text_chunks = [
-            item.get("text", "")
-            for item in content
-            if isinstance(item, dict) and item.get("type") == "text"
-        ]
-        combined_output = "\n".join(chunk for chunk in text_chunks if chunk).strip()
-    else:
-        combined_output = ""
-
-    if "error" in api_response:
-        message = truncate_text(str(api_response.get("error", "")), 400)
-        print(f"LLM discovery skipped: API error {message}")
-        return []
-
-    # Debug: Log the extracted text
-    print("=== DEBUG: Extracted Text ===")
-    print(f"Combined output length: {len(combined_output)}")
-    print(f"Combined output (first 500 chars): {combined_output[:500]}")
-    print("=== END DEBUG ===")
-
-    parsed = parse_json_array(combined_output)
-    if not parsed:
-        snippet = truncate_text(combined_output, 400)
-        if snippet:
-            print(f"Claude response (truncated): {snippet}")
-        print("LLM discovery returned no parsable JSON.")
-        return []
-
-    patterns: List[Pattern] = []
-    existing = {title.lower() for title in existing_titles}
-    seen_titles: set[str] = set()
-    for entry in parsed:
-        if len(patterns) >= capacity:
-            break
-        title = str(entry.get("title", "")).strip()
-        if not title or title.lower() in existing or title.lower() in seen_titles:
-            continue
-        summary = str(entry.get("summary", "")).strip()
-        guidance = entry.get("guidance", []) or ([summary] if summary else [])
-        guidance_lines = [truncate_text(str(item).strip(), 180) for item in guidance if str(item).strip()]
-        if not guidance_lines:
-            continue
-        keywords = [truncate_text(str(k).lower().strip(), 40) for k in entry.get("keywords", [])]
-        if not keywords:
-            continue
-
-        # In dynamic mode, prioritize patterns with higher novelty scores
-        novelty_score = entry.get("novelty_score", 5)  # Default to 5 if not provided
-        if force_dynamic or ENABLE_DYNAMIC_DISCOVERY:
-            if novelty_score < 3:  # Skip low novelty patterns in dynamic mode
-                print(f"Skipping low novelty pattern '{title}' (score: {novelty_score})")
-                continue
-
-        identifier = f"dynamic-{slugify(title)}"
-        bullets = tuple(guidance_lines[:3])
-        pattern = Pattern(
-            identifier=identifier,
-            title=title,
-            keywords=tuple(keywords[:6]),
-            bullets=bullets,
-        )
-        patterns.append(pattern)
-        seen_titles.add(title.lower())
-
-        # Log novelty information for dynamic patterns
-        if force_dynamic or ENABLE_DYNAMIC_DISCOVERY:
-            print(f"Added dynamic pattern '{title}' with novelty score {novelty_score}")
-
-    return patterns
+    # Call OpenAI API directly instead of using Codex CLI
+    return call_openai_api_directly(prompt, model, api_key, max_tokens, temperature, top_p_value, existing_titles, capacity)
 
 
 def load_codex_history(path: Path) -> Dict[str, List[Dict[str, object]]]:
