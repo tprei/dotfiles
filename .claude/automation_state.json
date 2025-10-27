@@ -2569,7 +2569,8 @@
     "/home/prei/betterbili/zhongwen-video:1761533867585",
     "/home/prei/betterbili/zhongwen-video:1761533867634",
     "/home/prei/betterbili/zhongwen-video:1761533867649",
-    "/home/prei/dotfiles:1761533932569"
+    "/home/prei/dotfiles:1761533932569",
+    "/home/prei/dotfiles:1761534126215"
   ],
   "dynamic_patterns": [
     {
@@ -2705,6 +2706,53 @@
       "bullets": [
         "When a project lists custom agents/tools, summarize available agents and recommend one or two with a brief justification for the current task",
         "Offer example invocations or handoffs to those agents and indicate expected outputs to streamline handover"
+      ]
+    },
+    {
+      "identifier": "dynamic-unrecorded-environment-alterations",
+      "title": "Unrecorded environment alterations",
+      "keywords": [
+        "package install",
+        "apt pip npm",
+        "system change",
+        "unrecorded",
+        "reproducibility"
+      ],
+      "bullets": [
+        "Log every system or environment change as a reproducible script or manifest (e.g., Dockerfile, requirements.txt, apt list) before executing it",
+        "Prefer ephemeral, isolated environments for risky steps and ask for explicit permission before mutating the user's global system",
+        "Create and attach a rollback or uninstall plan (commands and checks) for any non-trivial system alteration"
+      ]
+    },
+    {
+      "identifier": "dynamic-assuming-user-specific-dotfile-contexts",
+      "title": "Assuming user-specific dotfile contexts",
+      "keywords": [
+        "dotfiles",
+        "home dir",
+        "shell assumption",
+        "platform mismatch",
+        "backup"
+      ],
+      "bullets": [
+        "Detect platform, shell, and existing dotfile structure automatically and surface differences before editing any user-scoped config",
+        "Ask explicit clarifying questions and produce a preview/patch and a backup of existing dotfiles prior to applying changes",
+        "Make edits idempotent and scoped (e.g., append guarded blocks or create named include files) rather than overwriting whole files"
+      ]
+    },
+    {
+      "identifier": "dynamic-aggressive-file-pruning-and-deletions",
+      "title": "Aggressive file pruning and deletions",
+      "keywords": [
+        "delete",
+        "cleanup",
+        "untracked files",
+        "hidden files",
+        "prune"
+      ],
+      "bullets": [
+        "Present a concise candidate deletion list and require explicit user confirmation before removing files, offering a dry-run and size/age filters",
+        "Move deletions to a timestamped quarantine directory or create compressed backups so recovery is trivial if a mistake occurs"
       ]
     }
   ],
@@ -5279,7 +5327,8 @@
     "/home/prei/betterbili/zhongwen-video:1761533867585": 1761533867,
     "/home/prei/betterbili/zhongwen-video:1761533867634": 1761533867,
     "/home/prei/betterbili/zhongwen-video:1761533867649": 1761533867,
-    "/home/prei/dotfiles:1761533932569": 1761533932
+    "/home/prei/dotfiles:1761533932569": 1761533932,
+    "/home/prei/dotfiles:1761534126215": 1761534126
   },
-  "updated_at": "2025-10-27T03:01:16+00:00"
+  "updated_at": "2025-10-27T04:00:23+00:00"
 }

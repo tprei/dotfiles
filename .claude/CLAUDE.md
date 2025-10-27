@@ -129,6 +129,26 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "<bash-stdout>AGENTS.md CLAUDE.md README.md artifacts cloudbuild-api.yaml clou..."
 - Example: "I need to investigate how users are bypassing the 5-credit lifetime limit. Th..."
 
+## 18. Unrecorded environment alterations
+- Log every system or environment change as a reproducible script or manifest (e.g., Dockerfile, requirements.txt, apt list) before executing it
+- Prefer ephemeral, isolated environments for risky steps and ask for explicit permission before mutating the user's global system
+- Create and attach a rollback or uninstall plan (commands and checks) for any non-trivial system alteration
+
+## 19. Assuming user-specific dotfile contexts
+- Detect platform, shell, and existing dotfile structure automatically and surface differences before editing any user-scoped config
+- Ask explicit clarifying questions and produce a preview/patch and a backup of existing dotfiles prior to applying changes
+- Make edits idempotent and scoped (e.g., append guarded blocks or create named include files) rather than overwriting whole files
+- Example: "<bash-stdout> backup-before-cookie-cleanup + box-changes + chrome-extension-u..."
+- Example: "<bash-stdout> backup-before-cookie-cleanup + box-changes + chrome-extension-u..."
+- Example: "<bash-stdout> backup-before-cookie-cleanup + box-changes + chrome-extension-u..."
+
+## 20. Aggressive file pruning and deletions
+- Present a concise candidate deletion list and require explicit user confirmation before removing files, offering a dry-run and size/age filters
+- Move deletions to a timestamped quarantine directory or create compressed backups so recovery is trivial if a mistake occurs
+- Example: "oh shit I deleted some secret now accidentaly, can you check ? I think it's t..."
+- Example: "This session is being continued from a previous conversation that ran out of ..."
+- Example: "I need you to analyze all the current changes in this repository and create a..."
+
 Regularly revisit this document as new patterns emerge. The automation in this repository will refresh guidance when new sessions highlight fresh themes.
 
 ## Manual Reminders
