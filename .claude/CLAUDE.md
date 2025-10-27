@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I am trying to implement a new UI for my extension, I have done some work but..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 122 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 120 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -19,7 +19,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I need to analyze the /home/prei/betterbili codebase to create a CLAUDE.md fi..."
 
 ## 3. Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. 87 session(s) demanded test coverage or reruns.
+- Default to running or adding tests whenever behavior shifts. 84 session(s) demanded test coverage or reruns.
 - If no automated test exists, outline a manual checklist and suggest how to automate it next.
 - Share test commands and results; avoid saying it works without evidence.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I updated the credits_balance directly in the supabase table to "simulate" gr..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 283 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 281 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
@@ -35,7 +35,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I need you to analyze all the current changes in this repository and create a..."
 
 ## 5. Minimize approval churn
-- Bundle related commands to reduce repetitive approval requests. 29 session(s) flagged approval fatigue.
+- Bundle related commands to reduce repetitive approval requests. 28 session(s) flagged approval fatigue.
 - Cite why elevated permissions are needed; suggest safe, sandboxed alternatives when possible.
 - Reuse previously granted permissions if policy allows instead of re-requesting reflexively.
 - Example: "Whats broken (root cause) You have two layers in play: Edge Function: supabas..."
@@ -51,7 +51,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "This session is being continued from a previous conversation that ran out of ..."
 
 ## 7. Leverage available tooling proactively
-- Highlight built-in tools before the user prompts you. 47 session(s) reminded Codex to employ local tooling.
+- Highlight built-in tools before the user prompts you. 46 session(s) reminded Codex to employ local tooling.
 - Prefer existing scripts or automation hooks over ad-hoc commands; update or create helpers when they are missing.
 - Cache learnings: when you discover an effective workflow, note it for future runs.
 - Example: "Cool now check out the changes in /home/prei/zhongwen-video-data-catalog-back..."
@@ -59,7 +59,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Can you debug why my cron for claude code / agents file meta analysis didnt w..."
 
 ## 8. Communicate like a teammate
-- Narrate trade-offs and residual risks instead of silently choosing a path. 47 session(s) asked for clearer communication.
+- Narrate trade-offs and residual risks instead of silently choosing a path. 46 session(s) asked for clearer communication.
 - When blocked, propose concrete next steps for the user instead of stalling.
 - Close the loop by outlining follow-up tasks or open questions at the end of each session.
 - Example: "This session is being continued from a previous conversation that ran out of ..."
@@ -128,6 +128,26 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "<local-command-stdout> Context Usage glm-4.6 50k/200k tokens (25%) System pro..."
 - Example: "<bash-stdout>AGENTS.md CLAUDE.md README.md artifacts cloudbuild-api.yaml clou..."
 - Example: "I need to investigate how users are bypassing the 5-credit lifetime limit. Th..."
+
+## 18. Unrecorded environment alterations
+- Log every system or environment change as a reproducible script or manifest (e.g., Dockerfile, requirements.txt, apt list) before executing it
+- Prefer ephemeral, isolated environments for risky steps and ask for explicit permission before mutating the user's global system
+- Create and attach a rollback or uninstall plan (commands and checks) for any non-trivial system alteration
+
+## 19. Assuming user-specific dotfile contexts
+- Detect platform, shell, and existing dotfile structure automatically and surface differences before editing any user-scoped config
+- Ask explicit clarifying questions and produce a preview/patch and a backup of existing dotfiles prior to applying changes
+- Make edits idempotent and scoped (e.g., append guarded blocks or create named include files) rather than overwriting whole files
+- Example: "<bash-stdout> backup-before-cookie-cleanup + box-changes + chrome-extension-u..."
+- Example: "<bash-stdout> backup-before-cookie-cleanup + box-changes + chrome-extension-u..."
+- Example: "<bash-stdout> backup-before-cookie-cleanup + box-changes + chrome-extension-u..."
+
+## 20. Aggressive file pruning and deletions
+- Present a concise candidate deletion list and require explicit user confirmation before removing files, offering a dry-run and size/age filters
+- Move deletions to a timestamped quarantine directory or create compressed backups so recovery is trivial if a mistake occurs
+- Example: "oh shit I deleted some secret now accidentaly, can you check ? I think it's t..."
+- Example: "This session is being continued from a previous conversation that ran out of ..."
+- Example: "I need you to analyze all the current changes in this repository and create a..."
 
 Regularly revisit this document as new patterns emerge. The automation in this repository will refresh guidance when new sessions highlight fresh themes.
 
