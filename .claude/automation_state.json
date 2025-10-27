@@ -2570,7 +2570,8 @@
     "/home/prei/betterbili/zhongwen-video:1761533867634",
     "/home/prei/betterbili/zhongwen-video:1761533867649",
     "/home/prei/dotfiles:1761533932569",
-    "/home/prei/dotfiles:1761534126215"
+    "/home/prei/dotfiles:1761534126215",
+    "9cf10a58-f134-419e-bcd8-84bdefc7f3ce"
   ],
   "dynamic_patterns": [
     {
@@ -5328,7 +5329,8 @@
     "/home/prei/betterbili/zhongwen-video:1761533867634": 1761533867,
     "/home/prei/betterbili/zhongwen-video:1761533867649": 1761533867,
     "/home/prei/dotfiles:1761533932569": 1761533932,
-    "/home/prei/dotfiles:1761534126215": 1761534126
+    "/home/prei/dotfiles:1761534126215": 1761534126,
+    "9cf10a58-f134-419e-bcd8-84bdefc7f3ce": 1761598760
   },
-  "updated_at": "2025-10-27T04:00:23+00:00"
+  "updated_at": "2025-10-27T21:00:05+00:00"
 }

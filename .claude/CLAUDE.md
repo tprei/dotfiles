@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I am trying to implement a new UI for my extension, I have done some work but..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 122 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 120 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -19,7 +19,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I need to analyze the /home/prei/betterbili codebase to create a CLAUDE.md fi..."
 
 ## 3. Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. 87 session(s) demanded test coverage or reruns.
+- Default to running or adding tests whenever behavior shifts. 84 session(s) demanded test coverage or reruns.
 - If no automated test exists, outline a manual checklist and suggest how to automate it next.
 - Share test commands and results; avoid saying it works without evidence.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I updated the credits_balance directly in the supabase table to "simulate" gr..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 283 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 281 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
@@ -35,7 +35,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I need you to analyze all the current changes in this repository and create a..."
 
 ## 5. Minimize approval churn
-- Bundle related commands to reduce repetitive approval requests. 29 session(s) flagged approval fatigue.
+- Bundle related commands to reduce repetitive approval requests. 28 session(s) flagged approval fatigue.
 - Cite why elevated permissions are needed; suggest safe, sandboxed alternatives when possible.
 - Reuse previously granted permissions if policy allows instead of re-requesting reflexively.
 - Example: "Whats broken (root cause) You have two layers in play: Edge Function: supabas..."
@@ -51,7 +51,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "This session is being continued from a previous conversation that ran out of ..."
 
 ## 7. Leverage available tooling proactively
-- Highlight built-in tools before the user prompts you. 47 session(s) reminded Codex to employ local tooling.
+- Highlight built-in tools before the user prompts you. 46 session(s) reminded Codex to employ local tooling.
 - Prefer existing scripts or automation hooks over ad-hoc commands; update or create helpers when they are missing.
 - Cache learnings: when you discover an effective workflow, note it for future runs.
 - Example: "Cool now check out the changes in /home/prei/zhongwen-video-data-catalog-back..."
@@ -59,7 +59,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Can you debug why my cron for claude code / agents file meta analysis didnt w..."
 
 ## 8. Communicate like a teammate
-- Narrate trade-offs and residual risks instead of silently choosing a path. 47 session(s) asked for clearer communication.
+- Narrate trade-offs and residual risks instead of silently choosing a path. 46 session(s) asked for clearer communication.
 - When blocked, propose concrete next steps for the user instead of stalling.
 - Close the loop by outlining follow-up tasks or open questions at the end of each session.
 - Example: "This session is being continued from a previous conversation that ran out of ..."
