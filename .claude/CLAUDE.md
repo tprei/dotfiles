@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I am trying to implement a new UI for my extension, I have done some work but..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 129 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 130 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I updated the credits_balance directly in the supabase table to "simulate" gr..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 288 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 289 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
@@ -55,8 +55,8 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Prefer existing scripts or automation hooks over ad-hoc commands; update or create helpers when they are missing.
 - Cache learnings: when you discover an effective workflow, note it for future runs.
 - Example: "Cool now check out the changes in /home/prei/zhongwen-video-data-catalog-back..."
+- Example: "Git Commit and Push Automation Complete"
 - Example: "<bash-stdout>83fa8f8 feat: implement environment-based CORS configuration 4ee..."
-- Example: "Git Commit and Pipeline Automation Complete"
 
 ## 8. Communicate like a teammate
 - Narrate trade-offs and residual risks instead of silently choosing a path. 46 session(s) asked for clearer communication.
