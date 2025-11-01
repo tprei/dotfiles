@@ -11,20 +11,20 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I am trying to implement a new UI for my extension, I have done some work but..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 132 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 133 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
+- Example: "GitHub Issues Created: Testing Document Analysis"
 - Example: "I need to commit the changes I made to fix the TypeError in the catalog page...."
-- Example: "I need to analyze the /home/prei/betterbili codebase to create a CLAUDE.md fi..."
 
 ## 3. Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. 86 session(s) demanded test coverage or reruns.
+- Default to running or adding tests whenever behavior shifts. 87 session(s) demanded test coverage or reruns.
 - If no automated test exists, outline a manual checklist and suggest how to automate it next.
 - Share test commands and results; avoid saying it works without evidence.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
+- Example: "GitHub Issues Created: Testing Document Analysis"
 - Example: "This session is being continued from a previous conversation that ran out of ..."
-- Example: "I updated the credits_balance directly in the supabase table to "simulate" gr..."
 
 ## 4. Be deliberate with commits and PRs
 - Keep commits scoped and narrated. 287 session(s) asked for clearer commits or change descriptions.
