@@ -2639,7 +2639,15 @@
     "94fbab28-7181-4bce-8163-80ce068f2ff2",
     "/home/prei/betterbili/zhongwen-video:1761994683473",
     "/home/prei/lidlplus:1761994738523",
-    "/home/prei/lidlplus:1761994802497"
+    "/home/prei/lidlplus:1761994802497",
+    "44ad9947-e918-4086-a0e3-7695b2c30ac7",
+    "/home/prei/lidlplus:1761995745643",
+    "/home/prei/lidlplus:1761995780737",
+    "/home/prei/betterbili/zhongwen-video:1761995940213",
+    "/home/prei/betterbili/zhongwen-video:1761995940214",
+    "/home/prei/betterbili/zhongwen-video:1761996058859",
+    "/home/prei/betterbili/zhongwen-video:1761996062393",
+    "/home/prei/betterbili/zhongwen-video:1761996062394"
   ],
   "dynamic_patterns": [
     {
@@ -5463,10 +5471,18 @@
     "/home/prei/betterbili/zhongwen-video:1761903407454": 1761903407,
     "3dbf56ed-1f10-40f7-9c92-f11e1cd8c02c": 0,
     "a4e863dd-bbb9-4245-8c97-503460994366": 1761994544,
-    "94fbab28-7181-4bce-8163-80ce068f2ff2": 1761994747,
+    "94fbab28-7181-4bce-8163-80ce068f2ff2": 1761995783,
     "/home/prei/betterbili/zhongwen-video:1761994683473": 1761994683,
     "/home/prei/lidlplus:1761994738523": 1761994738,
-    "/home/prei/lidlplus:1761994802497": 1761994802
+    "/home/prei/lidlplus:1761994802497": 1761994802,
+    "44ad9947-e918-4086-a0e3-7695b2c30ac7": 1761996062,
+    "/home/prei/lidlplus:1761995745643": 1761995745,
+    "/home/prei/lidlplus:1761995780737": 1761995780,
+    "/home/prei/betterbili/zhongwen-video:1761995940213": 1761995940,
+    "/home/prei/betterbili/zhongwen-video:1761995940214": 1761995940,
+    "/home/prei/betterbili/zhongwen-video:1761996058859": 1761996058,
+    "/home/prei/betterbili/zhongwen-video:1761996062393": 1761996062,
+    "/home/prei/betterbili/zhongwen-video:1761996062394": 1761996062
   },
-  "updated_at": "2025-11-01T11:00:04+00:00"
+  "updated_at": "2025-11-01T12:00:03+00:00"
 }
