@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I am trying to implement a new UI for my extension, I have done some work but..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 135 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 137 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -19,7 +19,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I need to commit the changes I made to fix the TypeError in the catalog page...."
 
 ## 3. Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. 89 session(s) demanded test coverage or reruns.
+- Default to running or adding tests whenever behavior shifts. 90 session(s) demanded test coverage or reruns.
 - If no automated test exists, outline a manual checklist and suggest how to automate it next.
 - Share test commands and results; avoid saying it works without evidence.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 288 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 290 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
@@ -59,7 +59,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "<bash-stdout>83fa8f8 feat: implement environment-based CORS configuration 4ee..."
 
 ## 8. Communicate like a teammate
-- Narrate trade-offs and residual risks instead of silently choosing a path. 44 session(s) asked for clearer communication.
+- Narrate trade-offs and residual risks instead of silently choosing a path. 45 session(s) asked for clearer communication.
 - When blocked, propose concrete next steps for the user instead of stalling.
 - Close the loop by outlining follow-up tasks or open questions at the end of each session.
 - Example: "This session is being continued from a previous conversation that ran out of ..."
@@ -146,9 +146,9 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 ## 20. Aggressive file pruning and deletions
 - Present a concise candidate deletion list and require explicit user confirmation before removing files, offering a dry-run and size/age filters
 - Move deletions to a timestamped quarantine directory or create compressed backups so recovery is trivial if a mistake occurs
+- Example: "index-Bz4ie9rN.js:344 POST https://psjekdyzsxxgbskwttuv.supabase.co/functions..."
 - Example: "oh shit I deleted some secret now accidentaly, can you check ? I think it's t..."
-- Example: "This session is being continued from a previous conversation that ran out of ..."
-- Example: "I need you to analyze all the current changes in this repository and create a..."
+- Example: "index-BnN_YI4n.js:354 GET https://psjekdyzsxxgbskwttuv.supabase.co/rest/v1/us..."
 
 Regularly revisit this document as new patterns emerge. The automation in this repository will refresh guidance when new sessions highlight fresh themes.
 
