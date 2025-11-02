@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I am trying to implement a new UI for my extension, I have done some work but..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 145 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 152 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,12 +27,12 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 298 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 305 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
 - Example: "Perfect that log is exactly the smoking gun. `planAllowance` is referenced in..."
-- Example: "I need to analyze all the current changes in this repository and create appro..."
+- Example: "I need to commit the current changes in the repository. Here's what I've obse..."
 
 ## 5. Minimize approval churn
 - Bundle related commands to reduce repetitive approval requests. 27 session(s) flagged approval fatigue.
