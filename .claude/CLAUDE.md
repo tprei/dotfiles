@@ -3,15 +3,15 @@
 Claude acts as an autonomous coding partner alongside Codex. The notes below distill recurrent themes from local Claude sessions (captured under `~/.claude/projects`) so future runs follow the same guardrails.
 
 ## 1. Shape the work before touching files
-- Always produce an explicit plan and confirm scope before editing. 31 session(s) asked for more upfront reasoning.
+- Always produce an explicit plan and confirm scope before editing. 33 session(s) asked for more upfront reasoning.
 - Surface unknowns early; restate assumptions and request missing context.
 - When instructions conflict with filesystem reality, pause and clarify before acting.
 - Example: "I am working on the chrome extension, read the repomix bundle /home/prei/zhon..."
+- Example: "dont make changes: I have an issue here: 1. I've made a new account testecode..."
 - Example: "Ultrathink Can you figure out why the catalog page is querying /api/v1 in the..."
-- Example: "I am trying to implement a new UI for my extension, I have done some work but..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 155 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 156 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -19,7 +19,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I need to commit the changes I made to fix the TypeError in the catalog page...."
 
 ## 3. Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. 92 session(s) demanded test coverage or reruns.
+- Default to running or adding tests whenever behavior shifts. 93 session(s) demanded test coverage or reruns.
 - If no automated test exists, outline a manual checklist and suggest how to automate it next.
 - Share test commands and results; avoid saying it works without evidence.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 308 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 309 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
@@ -51,12 +51,12 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "This session is being continued from a previous conversation that ran out of ..."
 
 ## 7. Leverage available tooling proactively
-- Highlight built-in tools before the user prompts you. 45 session(s) reminded Codex to employ local tooling.
+- Highlight built-in tools before the user prompts you. 46 session(s) reminded Codex to employ local tooling.
 - Prefer existing scripts or automation hooks over ad-hoc commands; update or create helpers when they are missing.
 - Cache learnings: when you discover an effective workflow, note it for future runs.
+- Example: "dont make changes: I have an issue here: 1. I've made a new account testecode..."
 - Example: "Cool now check out the changes in /home/prei/zhongwen-video-data-catalog-back..."
 - Example: "Git Commit and Push Automation Complete"
-- Example: "<bash-stdout>83fa8f8 feat: implement environment-based CORS configuration 4ee..."
 
 ## 8. Communicate like a teammate
 - Narrate trade-offs and residual risks instead of silently choosing a path. 47 session(s) asked for clearer communication.
