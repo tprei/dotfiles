@@ -3,39 +3,39 @@
 Claude acts as an autonomous coding partner alongside Codex. The notes below distill recurrent themes from local Claude sessions (captured under `~/.claude/projects`) so future runs follow the same guardrails.
 
 ## 1. Shape the work before touching files
-- Always produce an explicit plan and confirm scope before editing. 31 session(s) asked for more upfront reasoning.
+- Always produce an explicit plan and confirm scope before editing. 33 session(s) asked for more upfront reasoning.
 - Surface unknowns early; restate assumptions and request missing context.
 - When instructions conflict with filesystem reality, pause and clarify before acting.
 - Example: "I am working on the chrome extension, read the repomix bundle /home/prei/zhon..."
+- Example: "dont make changes: I have an issue here: 1. I've made a new account testecode..."
 - Example: "Ultrathink Can you figure out why the catalog page is querying /api/v1 in the..."
-- Example: "I am trying to implement a new UI for my extension, I have done some work but..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 130 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 157 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
+- Example: "GitHub Issues Created: Testing Document Analysis"
 - Example: "I need to commit the changes I made to fix the TypeError in the catalog page...."
-- Example: "I need to analyze the /home/prei/betterbili codebase to create a CLAUDE.md fi..."
 
 ## 3. Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. 84 session(s) demanded test coverage or reruns.
+- Default to running or adding tests whenever behavior shifts. 96 session(s) demanded test coverage or reruns.
 - If no automated test exists, outline a manual checklist and suggest how to automate it next.
 - Share test commands and results; avoid saying it works without evidence.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
-- Example: "This session is being continued from a previous conversation that ran out of ..."
-- Example: "I updated the credits_balance directly in the supabase table to "simulate" gr..."
+- Example: "GitHub Issues Created: Testing Document Analysis"
+- Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 289 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 310 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
-- Example: "I need you to analyze the current changes and create appropriate git commits ..."
-- Example: "I need you to analyze all the current changes in this repository and create a..."
+- Example: "Perfect that log is exactly the smoking gun. `planAllowance` is referenced in..."
+- Example: "I need to commit the current changes in the repository. Here's what I've obse..."
 
 ## 5. Minimize approval churn
-- Bundle related commands to reduce repetitive approval requests. 28 session(s) flagged approval fatigue.
+- Bundle related commands to reduce repetitive approval requests. 27 session(s) flagged approval fatigue.
 - Cite why elevated permissions are needed; suggest safe, sandboxed alternatives when possible.
 - Reuse previously granted permissions if policy allows instead of re-requesting reflexively.
 - Example: "Whats broken (root cause) You have two layers in play: Edge Function: supabas..."
@@ -51,15 +51,15 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "This session is being continued from a previous conversation that ran out of ..."
 
 ## 7. Leverage available tooling proactively
-- Highlight built-in tools before the user prompts you. 47 session(s) reminded Codex to employ local tooling.
+- Highlight built-in tools before the user prompts you. 46 session(s) reminded Codex to employ local tooling.
 - Prefer existing scripts or automation hooks over ad-hoc commands; update or create helpers when they are missing.
 - Cache learnings: when you discover an effective workflow, note it for future runs.
+- Example: "dont make changes: I have an issue here: 1. I've made a new account testecode..."
 - Example: "Cool now check out the changes in /home/prei/zhongwen-video-data-catalog-back..."
 - Example: "Git Commit and Push Automation Complete"
-- Example: "<bash-stdout>83fa8f8 feat: implement environment-based CORS configuration 4ee..."
 
 ## 8. Communicate like a teammate
-- Narrate trade-offs and residual risks instead of silently choosing a path. 46 session(s) asked for clearer communication.
+- Narrate trade-offs and residual risks instead of silently choosing a path. 47 session(s) asked for clearer communication.
 - When blocked, propose concrete next steps for the user instead of stalling.
 - Close the loop by outlining follow-up tasks or open questions at the end of each session.
 - Example: "This session is being continued from a previous conversation that ran out of ..."
@@ -112,8 +112,8 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Confirm and record session-level preferences when the user sets them and provide a short status command to re-show current preferences
 - Proactively mention which choices are temporary vs persisted and how to change or reset them
 - Example: "<local-command-stdout>Set model to Default (claude-sonnet-4-5-20250929)</loca..."
+- Example: "I can't log out after logging out from the extension: Failed to load resource..."
 - Example: "my extension is getting a status 500 when trying to log in now background.js:..."
-- Example: "In src/styles.css theres a broken selector block that uses SCSS-style nesting..."
 
 ## 16. Clarify vague designer-driven requests
 - Ask focused clarification questions (target breakpoints, accessibility needs, exact elements to mimic) and offer 2–3 constrained design variants with tradeoffs
@@ -133,6 +133,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Log every system or environment change as a reproducible script or manifest (e.g., Dockerfile, requirements.txt, apt list) before executing it
 - Prefer ephemeral, isolated environments for risky steps and ask for explicit permission before mutating the user's global system
 - Create and attach a rollback or uninstall plan (commands and checks) for any non-trivial system alteration
+- Example: "I need you to analyze all the current changes in this repository and create a..."
 
 ## 19. Assuming user-specific dotfile contexts
 - Detect platform, shell, and existing dotfile structure automatically and surface differences before editing any user-scoped config
@@ -145,9 +146,9 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 ## 20. Aggressive file pruning and deletions
 - Present a concise candidate deletion list and require explicit user confirmation before removing files, offering a dry-run and size/age filters
 - Move deletions to a timestamped quarantine directory or create compressed backups so recovery is trivial if a mistake occurs
+- Example: "index-Bz4ie9rN.js:344 POST https://psjekdyzsxxgbskwttuv.supabase.co/functions..."
 - Example: "oh shit I deleted some secret now accidentaly, can you check ? I think it's t..."
-- Example: "This session is being continued from a previous conversation that ran out of ..."
-- Example: "I need you to analyze all the current changes in this repository and create a..."
+- Example: "index-BnN_YI4n.js:354 GET https://psjekdyzsxxgbskwttuv.supabase.co/rest/v1/us..."
 
 Regularly revisit this document as new patterns emerge. The automation in this repository will refresh guidance when new sessions highlight fresh themes.
 
