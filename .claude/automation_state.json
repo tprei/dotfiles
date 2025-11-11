@@ -2865,7 +2865,17 @@
     "/home/prei/betterbili/betterbili-landing-studio:1762123057082",
     "/home/prei/betterbili/betterbili-landing-studio:1762123408543",
     "/home/prei/betterbili/betterbili-landing-studio:1762123408544",
-    "/home/prei/betterbili/betterbili-landing-studio:1762123890201"
+    "/home/prei/betterbili/betterbili-landing-studio:1762123890201",
+    "a6df3029-8c93-4685-99da-232f2e3b5bb0",
+    "68071c5c-4e19-47d3-847c-db893a14c7c5",
+    "fc8bb78e-cf27-4292-9655-9ab4b57fe97d",
+    "41054560-58a8-460d-8c55-3ea34677e0f8",
+    "3260eb65-1bb8-4759-a45e-f6a0e28d3cc4",
+    "/home/prei/betterbili/zhongwen-video:1762896131502",
+    "/home/prei/betterbili/zhongwen-video:1762896316538",
+    "/home/prei/betterbili/zhongwen-video:1762896362136",
+    "/home/prei/betterbili/zhongwen-video:1762896362137",
+    "/home/prei/betterbili/betterbili-landing-studio:1762896505573"
   ],
   "dynamic_patterns": [
     {
@@ -5918,7 +5928,17 @@
     "/home/prei/betterbili/betterbili-landing-studio:1762123057082": 1762123057,
     "/home/prei/betterbili/betterbili-landing-studio:1762123408543": 1762123408,
     "/home/prei/betterbili/betterbili-landing-studio:1762123408544": 1762123408,
-    "/home/prei/betterbili/betterbili-landing-studio:1762123890201": 1762123890
+    "/home/prei/betterbili/betterbili-landing-studio:1762123890201": 1762123890,
+    "a6df3029-8c93-4685-99da-232f2e3b5bb0": 1762896376,
+    "68071c5c-4e19-47d3-847c-db893a14c7c5": 0,
+    "fc8bb78e-cf27-4292-9655-9ab4b57fe97d": 0,
+    "41054560-58a8-460d-8c55-3ea34677e0f8": 0,
+    "3260eb65-1bb8-4759-a45e-f6a0e28d3cc4": 1762896362,
+    "/home/prei/betterbili/zhongwen-video:1762896131502": 1762896131,
+    "/home/prei/betterbili/zhongwen-video:1762896316538": 1762896316,
+    "/home/prei/betterbili/zhongwen-video:1762896362136": 1762896362,
+    "/home/prei/betterbili/zhongwen-video:1762896362137": 1762896362,
+    "/home/prei/betterbili/betterbili-landing-studio:1762896505573": 1762896505
   },
-  "updated_at": "2025-11-02T23:00:05+00:00"
+  "updated_at": "2025-11-11T22:00:03+00:00"
 }
