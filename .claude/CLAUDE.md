@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "This session is being continued from a previous conversation that ran out of ..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 141 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 142 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 302 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 303 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
@@ -51,7 +51,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "This session is being continued from a previous conversation that ran out of ..."
 
 ## 7. Leverage available tooling proactively
-- Highlight built-in tools before the user prompts you. 32 session(s) reminded Codex to employ local tooling.
+- Highlight built-in tools before the user prompts you. 31 session(s) reminded Codex to employ local tooling.
 - Prefer existing scripts or automation hooks over ad-hoc commands; update or create helpers when they are missing.
 - Cache learnings: when you discover an effective workflow, note it for future runs.
 - Example: "dont make changes: I have an issue here: 1. I've made a new account testecode..."
