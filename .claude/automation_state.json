@@ -2931,7 +2931,13 @@
     "217ebdeb-ab47-49ff-ab98-33c4fbb7bb85",
     "/home/prei/betterbili/zhongwen-video:1762957291128",
     "/home/prei/betterbili/betterbili-landing-studio:1762957299857",
-    "/home/prei/betterbili/betterbili-landing-studio:1762957299858"
+    "/home/prei/betterbili/betterbili-landing-studio:1762957299858",
+    "a18d0a94-2960-4fc1-a60e-5beff120d0e8",
+    "85f0663e-fe5e-49a3-8217-b627701eb89c",
+    "7b3d54b1-33b7-4969-a715-594d4e402b35",
+    "bb91ffd8-b945-4065-94e3-f6393d23e34e",
+    "/home/prei/betterbili/betterbili-landing-studio:1762961918134",
+    "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1762962409473"
   ],
   "dynamic_patterns": [
     {
@@ -6050,7 +6056,13 @@
     "217ebdeb-ab47-49ff-ab98-33c4fbb7bb85": 0,
     "/home/prei/betterbili/zhongwen-video:1762957291128": 1762957291,
     "/home/prei/betterbili/betterbili-landing-studio:1762957299857": 1762957299,
-    "/home/prei/betterbili/betterbili-landing-studio:1762957299858": 1762957299
+    "/home/prei/betterbili/betterbili-landing-studio:1762957299858": 1762957299,
+    "a18d0a94-2960-4fc1-a60e-5beff120d0e8": 1762961822,
+    "85f0663e-fe5e-49a3-8217-b627701eb89c": 0,
+    "7b3d54b1-33b7-4969-a715-594d4e402b35": 1762962197,
+    "bb91ffd8-b945-4065-94e3-f6393d23e34e": 0,
+    "/home/prei/betterbili/betterbili-landing-studio:1762961918134": 1762961918,
+    "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1762962409473": 1762962409
   },
-  "updated_at": "2025-11-12T15:00:03+00:00"
+  "updated_at": "2025-11-12T16:00:03+00:00"
 }
