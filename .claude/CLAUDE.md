@@ -19,7 +19,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I need to commit the changes I made to fix the TypeError in the catalog page...."
 
 ## 3. Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. 83 session(s) demanded test coverage or reruns.
+- Default to running or adding tests whenever behavior shifts. 85 session(s) demanded test coverage or reruns.
 - If no automated test exists, outline a manual checklist and suggest how to automate it next.
 - Share test commands and results; avoid saying it works without evidence.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,12 +27,12 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 291 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 293 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
+- Example: "Yeah, thats a solid plan overall just a couple tweaks so it actually compiles..."
 - Example: "Perfect that log is exactly the smoking gun. `planAllowance` is referenced in..."
-- Example: "I want to allow yearly plans as well as make some fixes for prorations. Here'..."
 
 ## 5. Minimize approval churn
 - Bundle related commands to reduce repetitive approval requests. 19 session(s) flagged approval fatigue.
@@ -90,9 +90,9 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 ## 12. Visual asset-driven UI workflow
 - Collect and catalog referenced screenshots and competitor examples, then create a short visual spec or wireframe before changing code
 - Propose concrete UI changes (layout rules, CSS adjustments, responsive constraints) plus a small visual prototype and acceptance criteria to validate similarity without copying
+- Example: "The short version: your **Cancel scheduled change calls `subscriptionSchedule..."
 - Example: "Because your backend told the modal this is an **upgrade**, even though from ..."
 - Example: "I want to allow yearly plans as well as make some fixes for prorations. Here'..."
-- Example: "Yeah, that makes sense the backend is *technically* downgraded (plan = `"lear..."
 
 ## 13. Generated-bundle vs source confusion
 - Detect when a file appears to be an assembled/generated artifact and ask whether the user wants analysis of the bundle or mapping back to original source files
@@ -148,7 +148,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Move deletions to a timestamped quarantine directory or create compressed backups so recovery is trivial if a mistake occurs
 - Example: "index-Bz4ie9rN.js:344 POST https://psjekdyzsxxgbskwttuv.supabase.co/functions..."
 - Example: "oh shit I deleted some secret now accidentaly, can you check ? I think it's t..."
-- Example: "index-BnN_YI4n.js:354 GET https://psjekdyzsxxgbskwttuv.supabase.co/rest/v1/us..."
+- Example: "The short version: your **Cancel scheduled change calls `subscriptionSchedule..."
 
 Regularly revisit this document as new patterns emerge. The automation in this repository will refresh guidance when new sessions highlight fresh themes.
 
