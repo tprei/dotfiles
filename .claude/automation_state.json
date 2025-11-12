@@ -2945,7 +2945,15 @@
     "/home/prei/betterbili/zhongwen-video:1762970886313",
     "6689bdcc-c5c1-41bd-a802-ed0ac24a3e75",
     "d6b3b621-e198-474d-a882-62ef380a53f1",
-    "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1762980704265"
+    "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1762980704265",
+    "1e95402c-f88d-494a-97af-518a9734655b",
+    "0aea6ac2-06f2-49b0-80ca-4ccac479311b",
+    "2afc7b62-c812-491b-8f4d-4f2a6f3a57fd",
+    "77eea496-be2d-47b0-b35a-bd8b5c7cec28",
+    "/home/prei/betterbili/zhongwen-video:1762983017309",
+    "/home/prei/betterbili/zhongwen-video:1762983017310",
+    "/home/prei/betterbili/zhongwen-video:1762984183101",
+    "/home/prei/betterbili/zhongwen-video:1762984183102"
   ],
   "dynamic_patterns": [
     {
@@ -6078,7 +6086,15 @@
     "/home/prei/betterbili/zhongwen-video:1762970886313": 1762970886,
     "6689bdcc-c5c1-41bd-a802-ed0ac24a3e75": 1762979846,
     "d6b3b621-e198-474d-a882-62ef380a53f1": 0,
-    "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1762980704265": 1762980704
+    "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1762980704265": 1762980704,
+    "1e95402c-f88d-494a-97af-518a9734655b": 0,
+    "0aea6ac2-06f2-49b0-80ca-4ccac479311b": 0,
+    "2afc7b62-c812-491b-8f4d-4f2a6f3a57fd": 1762984103,
+    "77eea496-be2d-47b0-b35a-bd8b5c7cec28": 1762982862,
+    "/home/prei/betterbili/zhongwen-video:1762983017309": 1762983017,
+    "/home/prei/betterbili/zhongwen-video:1762983017310": 1762983017,
+    "/home/prei/betterbili/zhongwen-video:1762984183101": 1762984183,
+    "/home/prei/betterbili/zhongwen-video:1762984183102": 1762984183
   },
-  "updated_at": "2025-11-12T21:00:03+00:00"
+  "updated_at": "2025-11-12T22:00:02+00:00"
 }
