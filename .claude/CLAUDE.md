@@ -19,7 +19,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I need to commit the changes I made to fix the TypeError in the catalog page...."
 
 ## 3. Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. 81 session(s) demanded test coverage or reruns.
+- Default to running or adding tests whenever behavior shifts. 80 session(s) demanded test coverage or reruns.
 - If no automated test exists, outline a manual checklist and suggest how to automate it next.
 - Share test commands and results; avoid saying it works without evidence.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 304 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 305 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
@@ -35,7 +35,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Perfect that log is exactly the smoking gun. `planAllowance` is referenced in..."
 
 ## 5. Minimize approval churn
-- Bundle related commands to reduce repetitive approval requests. 15 session(s) flagged approval fatigue.
+- Bundle related commands to reduce repetitive approval requests. 14 session(s) flagged approval fatigue.
 - Cite why elevated permissions are needed; suggest safe, sandboxed alternatives when possible.
 - Reuse previously granted permissions if policy allows instead of re-requesting reflexively.
 - Example: "Whats broken (root cause) You have two layers in play: Edge Function: supabas..."
@@ -43,7 +43,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "This session is being continued from a previous conversation that ran out of ..."
 
 ## 6. Stay within the correct workspace
-- Confirm target directories before writing—spell out the intended path in your plan. Mentioned in 6 session(s).
+- Confirm target directories before writing—spell out the intended path in your plan. Mentioned in 5 session(s).
 - When unsure, list candidate locations and ask for confirmation instead of guessing.
 - After edits, echo file paths so the user can audit quickly.
 - Example: "I need you to analyze the current git status and changes, then create appropr..."
@@ -59,7 +59,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Git Commit and Push Automation Complete"
 
 ## 8. Communicate like a teammate
-- Narrate trade-offs and residual risks instead of silently choosing a path. 27 session(s) asked for clearer communication.
+- Narrate trade-offs and residual risks instead of silently choosing a path. 26 session(s) asked for clearer communication.
 - When blocked, propose concrete next steps for the user instead of stalling.
 - Close the loop by outlining follow-up tasks or open questions at the end of each session.
 - Example: "This session is being continued from a previous conversation that ran out of ..."
