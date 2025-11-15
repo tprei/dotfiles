@@ -2983,7 +2983,17 @@
     "/home/prei/betterbili/betterbili-landing-studio:1763235222100",
     "/home/prei/betterbili/betterbili-landing-studio:1763235222101",
     "/home/prei/betterbili/betterbili-landing-studio:1763235436938",
-    "/home/prei/betterbili/betterbili-landing-studio:1763235436939"
+    "/home/prei/betterbili/betterbili-landing-studio:1763235436939",
+    "d59ddd1f-cc42-4b11-b045-3c71e57d1a75",
+    "5ab73a7c-0ab1-4447-bc86-8ae32b8e1582",
+    "bcee3a01-e577-4fff-8723-3e00757aa9fe",
+    "35b8a649-a254-4816-8581-fe5e1577ef0a",
+    "0a0e1a23-1f6b-42fa-b213-ff244a9c7f6b",
+    "a9626edc-6052-4d4f-a939-9391aa5670e7",
+    "/home/prei/betterbili/betterbili-landing-studio:1763237917617",
+    "/home/prei/betterbili/betterbili-landing-studio:1763237917618",
+    "/home/prei/betterbili/zhongwen-video:1763239982340",
+    "/home/prei/betterbili/zhongwen-video:1763240375978"
   ],
   "dynamic_patterns": [
     {
@@ -6154,7 +6164,17 @@
     "/home/prei/betterbili/betterbili-landing-studio:1763235222100": 1763235222,
     "/home/prei/betterbili/betterbili-landing-studio:1763235222101": 1763235222,
     "/home/prei/betterbili/betterbili-landing-studio:1763235436938": 1763235436,
-    "/home/prei/betterbili/betterbili-landing-studio:1763235436939": 1763235436
+    "/home/prei/betterbili/betterbili-landing-studio:1763235436939": 1763235436,
+    "d59ddd1f-cc42-4b11-b045-3c71e57d1a75": 1763237824,
+    "5ab73a7c-0ab1-4447-bc86-8ae32b8e1582": 0,
+    "bcee3a01-e577-4fff-8723-3e00757aa9fe": 0,
+    "35b8a649-a254-4816-8581-fe5e1577ef0a": 0,
+    "0a0e1a23-1f6b-42fa-b213-ff244a9c7f6b": 1763240338,
+    "a9626edc-6052-4d4f-a939-9391aa5670e7": 1763239951,
+    "/home/prei/betterbili/betterbili-landing-studio:1763237917617": 1763237917,
+    "/home/prei/betterbili/betterbili-landing-studio:1763237917618": 1763237917,
+    "/home/prei/betterbili/zhongwen-video:1763239982340": 1763239982,
+    "/home/prei/betterbili/zhongwen-video:1763240375978": 1763240375
   },
-  "updated_at": "2025-11-15T20:00:01+00:00"
+  "updated_at": "2025-11-15T21:00:03+00:00"
 }
