@@ -3,15 +3,15 @@
 Claude acts as an autonomous coding partner alongside Codex. The notes below distill recurrent themes from local Claude sessions (captured under `~/.claude/projects`) so future runs follow the same guardrails.
 
 ## 1. Shape the work before touching files
-- Always produce an explicit plan and confirm scope before editing. 19 session(s) asked for more upfront reasoning.
+- Always produce an explicit plan and confirm scope before editing. 20 session(s) asked for more upfront reasoning.
 - Surface unknowns early; restate assumptions and request missing context.
 - When instructions conflict with filesystem reality, pause and clarify before acting.
+- Example: "Let's fix two issues: ------------ Youve basically got two separate things go..."
 - Example: "dont make changes: I have an issue here: 1. I've made a new account testecode..."
 - Example: "Ultrathink Can you figure out why the catalog page is querying /api/v1 in the..."
-- Example: "You are within a git worktree. Let's work on this: <original-complaint> I nee..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 144 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 143 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -19,7 +19,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I need to commit the changes I made to fix the TypeError in the catalog page...."
 
 ## 3. Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. 79 session(s) demanded test coverage or reruns.
+- Default to running or adding tests whenever behavior shifts. 80 session(s) demanded test coverage or reruns.
 - If no automated test exists, outline a manual checklist and suggest how to automate it next.
 - Share test commands and results; avoid saying it works without evidence.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 305 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 304 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
@@ -148,7 +148,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Move deletions to a timestamped quarantine directory or create compressed backups so recovery is trivial if a mistake occurs
 - Example: "index-Bz4ie9rN.js:344 POST https://psjekdyzsxxgbskwttuv.supabase.co/functions..."
 - Example: "oh shit I deleted some secret now accidentaly, can you check ? I think it's t..."
-- Example: "The short version: your **Cancel scheduled change calls `subscriptionSchedule..."
+- Example: "Let's fix two issues: ------------ Youve basically got two separate things go..."
 
 Regularly revisit this document as new patterns emerge. The automation in this repository will refresh guidance when new sessions highlight fresh themes.
 
