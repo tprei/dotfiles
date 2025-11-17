@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Ultrathink Can you figure out why the catalog page is querying /api/v1 in the..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 143 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 139 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -19,7 +19,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I need to commit the changes I made to fix the TypeError in the catalog page...."
 
 ## 3. Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. 82 session(s) demanded test coverage or reruns.
+- Default to running or adding tests whenever behavior shifts. 84 session(s) demanded test coverage or reruns.
 - If no automated test exists, outline a manual checklist and suggest how to automate it next.
 - Share test commands and results; avoid saying it works without evidence.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 304 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 302 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
@@ -59,7 +59,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "The build is failing for the API in github workflow: Downloading ffmpeg_pytho..."
 
 ## 8. Communicate like a teammate
-- Narrate trade-offs and residual risks instead of silently choosing a path. 24 session(s) asked for clearer communication.
+- Narrate trade-offs and residual risks instead of silently choosing a path. 23 session(s) asked for clearer communication.
 - When blocked, propose concrete next steps for the user instead of stalling.
 - Close the loop by outlining follow-up tasks or open questions at the end of each session.
 - Example: "This session is being continued from a previous conversation that ran out of ..."
@@ -71,14 +71,14 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Provide a concise way for users to re-check or persist the model/config (e.g., a one-line command or status output) so they don’t need to ask repeatedly
 - Example: "I need to investigate a failing cancel subscription edge function that's show..."
 - Example: "[SUPABASE] Failed to get user context: 500 It's clearly a secrets issue: Coul..."
-- Example: "zhongwen-video/subtitle-saas/chrome-extension on feature/chrome-extension-con..."
+- Example: "zhongwen-video/subtitle-saas/chrome-extension on main [$] via v20.14.0 on v T..."
 
 ## 10. Large-file reading strategy
 - Detect file size and explicitly propose chunking, summaries, or streaming reads before attempting to ingest the entire file
 - Offer a clear plan: extract key sections first, provide progressive summarization, and give commands the user can run to fetch larger slices if needed
 - Example: "Whats broken (root cause) You have two layers in play: Edge Function: supabas..."
-- Example: "<bash-stdout>On branch main Your branch is ahead of 'origin/main' by 3 commit..."
 - Example: "{ "video_hash": "be5ad803935f8af2", "title": "", "title_en": "First_Time_Expe..."
+- Example: "I have changes in the codebase that need to be committed. Here's what I found..."
 
 ## 11. Meta-tool-output parsing
 - Treat tool-generated headers and 'do not respond' caveats as meta-log entries and either ignore them for task intent or explicitly confirm with the user when unclear
@@ -113,7 +113,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Proactively mention which choices are temporary vs persisted and how to change or reset them
 - Example: "I can't log out after logging out from the extension: Failed to load resource..."
 - Example: "my extension is getting a status 500 when trying to log in now background.js:..."
-- Example: "In src/styles.css theres a broken selector block that uses SCSS-style nesting..."
+- Example: "zhongwen-video/subtitle-saas/chrome-extension on main [$] via v20.14.0 on v T..."
 
 ## 16. Clarify vague designer-driven requests
 - Ask focused clarification questions (target breakpoints, accessibility needs, exact elements to mimic) and offer 2–3 constrained design variants with tradeoffs
@@ -126,8 +126,8 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - When a project lists custom agents/tools, summarize available agents and recommend one or two with a brief justification for the current task
 - Offer example invocations or handoffs to those agents and indicate expected outputs to streamline handover
 - Example: "I need to investigate how users are bypassing the 5-credit lifetime limit. Th..."
+- Example: "zhongwen-video/subtitle-saas/chrome-extension on main [$] via v20.14.0 on v T..."
 - Example: "Goals Auto-refresh account + jobs every 60s while the popup is open. Manual R..."
-- Example: "supabase db push Initialising login role... Connecting to remote database... ..."
 
 ## 18. Unrecorded environment alterations
 - Log every system or environment change as a reproducible script or manifest (e.g., Dockerfile, requirements.txt, apt list) before executing it
@@ -147,8 +147,8 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Present a concise candidate deletion list and require explicit user confirmation before removing files, offering a dry-run and size/age filters
 - Move deletions to a timestamped quarantine directory or create compressed backups so recovery is trivial if a mistake occurs
 - Example: "index-Bz4ie9rN.js:344 POST https://psjekdyzsxxgbskwttuv.supabase.co/functions..."
+- Example: "I'll manually delete the rows, anything else I need to do? Just deploy the ed..."
 - Example: "oh shit I deleted some secret now accidentaly, can you check ? I think it's t..."
-- Example: "Let's fix two issues: ------------ Youve basically got two separate things go..."
 
 Regularly revisit this document as new patterns emerge. The automation in this repository will refresh guidance when new sessions highlight fresh themes.
 
