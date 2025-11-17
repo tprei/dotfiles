@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 301 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 303 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
@@ -35,12 +35,12 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Perfect that log is exactly the smoking gun. `planAllowance` is referenced in..."
 
 ## 5. Minimize approval churn
-- Bundle related commands to reduce repetitive approval requests. 18 session(s) flagged approval fatigue.
+- Bundle related commands to reduce repetitive approval requests. 28 session(s) flagged approval fatigue.
 - Cite why elevated permissions are needed; suggest safe, sandboxed alternatives when possible.
 - Reuse previously granted permissions if policy allows instead of re-requesting reflexively.
 - Example: "Whats broken (root cause) You have two layers in play: Edge Function: supabas..."
-- Example: "The build is failing **before Cloud Build even runs** it dies in the **GitHub..."
-- Example: "<bash-stdout>83fa8f8 feat: implement environment-based CORS configuration 4ee..."
+- Example: "Fix GitHub WIF prod build permissions issues"
+- Example: "WIF Auth Fix: Audience & Service Account Permissions"
 
 ## 6. Stay within the correct workspace
 - Confirm target directories before writing—spell out the intended path in your plan. Mentioned in 4 session(s).
@@ -51,7 +51,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "This session is being continued from a previous conversation that ran out of ..."
 
 ## 7. Leverage available tooling proactively
-- Highlight built-in tools before the user prompts you. 35 session(s) reminded Codex to employ local tooling.
+- Highlight built-in tools before the user prompts you. 37 session(s) reminded Codex to employ local tooling.
 - Prefer existing scripts or automation hooks over ad-hoc commands; update or create helpers when they are missing.
 - Cache learnings: when you discover an effective workflow, note it for future runs.
 - Example: "dont make changes: I have an issue here: 1. I've made a new account testecode..."
