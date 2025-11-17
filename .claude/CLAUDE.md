@@ -27,12 +27,12 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 302 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 304 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
+- Example: "Let's fix a few things on the extension @zhongwen-video/subtitle-saas/chrome-..."
 - Example: "Yeah, thats a solid plan overall just a couple tweaks so it actually compiles..."
-- Example: "Perfect that log is exactly the smoking gun. `planAllowance` is referenced in..."
 
 ## 5. Minimize approval churn
 - Bundle related commands to reduce repetitive approval requests. 28 session(s) flagged approval fatigue.
@@ -148,7 +148,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Move deletions to a timestamped quarantine directory or create compressed backups so recovery is trivial if a mistake occurs
 - Example: "index-Bz4ie9rN.js:344 POST https://psjekdyzsxxgbskwttuv.supabase.co/functions..."
 - Example: "I'll manually delete the rows, anything else I need to do? Just deploy the ed..."
-- Example: "oh shit I deleted some secret now accidentaly, can you check ? I think it's t..."
+- Example: "Short answer: **your plan is *mostly* good, but its missing one critical piec..."
 
 Regularly revisit this document as new patterns emerge. The automation in this repository will refresh guidance when new sessions highlight fresh themes.
 
