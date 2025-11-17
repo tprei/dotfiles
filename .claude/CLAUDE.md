@@ -3,7 +3,7 @@
 Claude acts as an autonomous coding partner alongside Codex. The notes below distill recurrent themes from local Claude sessions (captured under `~/.claude/projects`) so future runs follow the same guardrails.
 
 ## 1. Shape the work before touching files
-- Always produce an explicit plan and confirm scope before editing. 20 session(s) asked for more upfront reasoning.
+- Always produce an explicit plan and confirm scope before editing. 21 session(s) asked for more upfront reasoning.
 - Surface unknowns early; restate assumptions and request missing context.
 - When instructions conflict with filesystem reality, pause and clarify before acting.
 - Example: "Let's fix two issues: ------------ Youve basically got two separate things go..."
@@ -19,7 +19,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I need to commit the changes I made to fix the TypeError in the catalog page...."
 
 ## 3. Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. 80 session(s) demanded test coverage or reruns.
+- Default to running or adding tests whenever behavior shifts. 81 session(s) demanded test coverage or reruns.
 - If no automated test exists, outline a manual checklist and suggest how to automate it next.
 - Share test commands and results; avoid saying it works without evidence.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
