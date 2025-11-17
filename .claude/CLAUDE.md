@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Ultrathink Can you figure out why the catalog page is querying /api/v1 in the..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 138 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 136 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -19,7 +19,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I need to commit the changes I made to fix the TypeError in the catalog page...."
 
 ## 3. Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. 87 session(s) demanded test coverage or reruns.
+- Default to running or adding tests whenever behavior shifts. 84 session(s) demanded test coverage or reruns.
 - If no automated test exists, outline a manual checklist and suggest how to automate it next.
 - Share test commands and results; avoid saying it works without evidence.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 304 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 303 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
@@ -43,12 +43,12 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "WIF Auth Fix: Audience & Service Account Permissions"
 
 ## 6. Stay within the correct workspace
-- Confirm target directories before writing—spell out the intended path in your plan. Mentioned in 4 session(s).
+- Confirm target directories before writing—spell out the intended path in your plan. Mentioned in 3 session(s).
 - When unsure, list candidate locations and ask for confirmation instead of guessing.
 - After edits, echo file paths so the user can audit quickly.
 - Example: "I need you to analyze the current git status and changes, then create appropr..."
 - Example: "This session is being continued from a previous conversation that ran out of ..."
-- Example: "This session is being continued from a previous conversation that ran out of ..."
+- Example: "I've implemented everything, see all changes, use repomix as well, ultrathink..."
 
 ## 7. Leverage available tooling proactively
 - Highlight built-in tools before the user prompts you. 37 session(s) reminded Codex to employ local tooling.
@@ -59,7 +59,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "The build is failing for the API in github workflow: Downloading ffmpeg_pytho..."
 
 ## 8. Communicate like a teammate
-- Narrate trade-offs and residual risks instead of silently choosing a path. 23 session(s) asked for clearer communication.
+- Narrate trade-offs and residual risks instead of silently choosing a path. 22 session(s) asked for clearer communication.
 - When blocked, propose concrete next steps for the user instead of stalling.
 - Close the loop by outlining follow-up tasks or open questions at the end of each session.
 - Example: "This session is being continued from a previous conversation that ran out of ..."
@@ -92,7 +92,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Propose concrete UI changes (layout rules, CSS adjustments, responsive constraints) plus a small visual prototype and acceptance criteria to validate similarity without copying
 - Example: "The short version: your **Cancel scheduled change calls `subscriptionSchedule..."
 - Example: "Because your backend told the modal this is an **upgrade**, even though from ..."
-- Example: "I want to allow yearly plans as well as make some fixes for prorations. Here'..."
+- Example: "We have to fix a few other issues related to cancellation now. ## 0. High-lev..."
 
 ## 13. Generated-bundle vs source confusion
 - Detect when a file appears to be an assembled/generated artifact and ask whether the user wants analysis of the bundle or mapping back to original source files
