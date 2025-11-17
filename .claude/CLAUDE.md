@@ -35,7 +35,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Perfect that log is exactly the smoking gun. `planAllowance` is referenced in..."
 
 ## 5. Minimize approval churn
-- Bundle related commands to reduce repetitive approval requests. 14 session(s) flagged approval fatigue.
+- Bundle related commands to reduce repetitive approval requests. 18 session(s) flagged approval fatigue.
 - Cite why elevated permissions are needed; suggest safe, sandboxed alternatives when possible.
 - Reuse previously granted permissions if policy allows instead of re-requesting reflexively.
 - Example: "Whats broken (root cause) You have two layers in play: Edge Function: supabas..."
