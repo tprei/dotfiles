@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Ultrathink Can you figure out why the catalog page is querying /api/v1 in the..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 136 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 120 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -19,7 +19,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I need to commit the changes I made to fix the TypeError in the catalog page...."
 
 ## 3. Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. 84 session(s) demanded test coverage or reruns.
+- Default to running or adding tests whenever behavior shifts. 80 session(s) demanded test coverage or reruns.
 - If no automated test exists, outline a manual checklist and suggest how to automate it next.
 - Share test commands and results; avoid saying it works without evidence.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 304 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 286 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
@@ -51,15 +51,15 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I've implemented everything, see all changes, use repomix as well, ultrathink..."
 
 ## 7. Leverage available tooling proactively
-- Highlight built-in tools before the user prompts you. 37 session(s) reminded Codex to employ local tooling.
+- Highlight built-in tools before the user prompts you. 36 session(s) reminded Codex to employ local tooling.
 - Prefer existing scripts or automation hooks over ad-hoc commands; update or create helpers when they are missing.
 - Cache learnings: when you discover an effective workflow, note it for future runs.
 - Example: "dont make changes: I have an issue here: 1. I've made a new account testecode..."
-- Example: "Cool now check out the changes in /home/prei/zhongwen-video-data-catalog-back..."
 - Example: "The build is failing for the API in github workflow: Downloading ffmpeg_pytho..."
+- Example: "Infrastructure Deployment: Production Automation & Secrets"
 
 ## 8. Communicate like a teammate
-- Narrate trade-offs and residual risks instead of silently choosing a path. 22 session(s) asked for clearer communication.
+- Narrate trade-offs and residual risks instead of silently choosing a path. 20 session(s) asked for clearer communication.
 - When blocked, propose concrete next steps for the user instead of stalling.
 - Close the loop by outlining follow-up tasks or open questions at the end of each session.
 - Example: "This session is being continued from a previous conversation that ran out of ..."
@@ -77,8 +77,8 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Detect file size and explicitly propose chunking, summaries, or streaming reads before attempting to ingest the entire file
 - Offer a clear plan: extract key sections first, provide progressive summarization, and give commands the user can run to fetch larger slices if needed
 - Example: "Whats broken (root cause) You have two layers in play: Edge Function: supabas..."
-- Example: "{ "video_hash": "be5ad803935f8af2", "title": "", "title_en": "First_Time_Expe..."
-- Example: "I have changes in the codebase that need to be committed. Here's what I found..."
+- Example: "What to change 1) Simplify the hook to return the proxy URL string, not a dat..."
+- Example: "Thumbnail Proxy Streaming Fix Commit"
 
 ## 11. Meta-tool-output parsing
 - Treat tool-generated headers and 'do not respond' caveats as meta-log entries and either ignore them for task intent or explicitly confirm with the user when unclear
