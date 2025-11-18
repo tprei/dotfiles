@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "You are within a git worktree. Let's work on this: <original-complaint> I nee..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 123 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 122 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 291 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 290 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
@@ -43,10 +43,9 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "WIF Auth Fix: Audience & Service Account Permissions"
 
 ## 6. Stay within the correct workspace
-- Confirm target directories before writing—spell out the intended path in your plan. Mentioned in 3 session(s).
+- Confirm target directories before writing—spell out the intended path in your plan. Mentioned in 2 session(s).
 - When unsure, list candidate locations and ask for confirmation instead of guessing.
 - After edits, echo file paths so the user can audit quickly.
-- Example: "I need you to analyze the current git status and changes, then create appropr..."
 - Example: "This session is being continued from a previous conversation that ran out of ..."
 - Example: "I've implemented everything, see all changes, use repomix as well, ultrathink..."
 
