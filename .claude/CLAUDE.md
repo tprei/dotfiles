@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "You are within a git worktree. Let's work on this: <original-complaint> I nee..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 128 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 129 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -19,7 +19,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I need to commit the changes I made to fix the TypeError in the catalog page...."
 
 ## 3. Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. 84 session(s) demanded test coverage or reruns.
+- Default to running or adding tests whenever behavior shifts. 87 session(s) demanded test coverage or reruns.
 - If no automated test exists, outline a manual checklist and suggest how to automate it next.
 - Share test commands and results; avoid saying it works without evidence.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 290 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 291 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
@@ -118,8 +118,8 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Ask focused clarification questions (target breakpoints, accessibility needs, exact elements to mimic) and offer 2–3 constrained design variants with tradeoffs
 - Define measurable acceptance criteria (pixel tolerances, component sizes, overflow behavior) before making UI changes
 - Example: "This session is being continued from a previous conversation that ran out of ..."
+- Example: "Claude Code v2.0.45 glm-4.6 API Usage Billing /home/prei/betterbili/zhongwen-..."
 - Example: "Its solid. Youve hit the 4 right levers: 1. **stop hardcoding `monthly` on th..."
-- Example: "This session is being continued from a previous conversation that ran out of ..."
 
 ## 17. Agent registry introspection
 - When a project lists custom agents/tools, summarize available agents and recommend one or two with a brief justification for the current task
