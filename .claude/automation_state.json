@@ -3260,7 +3260,17 @@
     "18798480-0705-4757-8fd6-08063844beee",
     "/home/prei/betterbili/zhongwen-video:1763508087756",
     "/home/prei/betterbili/zhongwen-video:1763508087757",
-    "/home/prei/betterbili/zhongwen-video:1763508386112"
+    "/home/prei/betterbili/zhongwen-video:1763508386112",
+    "3c303109-2a3e-47e8-8ee8-05e8c95fad6a",
+    "/home/prei/betterbili/betterbili-landing-studio:1763588342961",
+    "/home/prei/betterbili/betterbili-landing-studio:1763588659551",
+    "/home/prei/betterbili/betterbili-landing-studio:1763588764981",
+    "/home/prei/betterbili/betterbili-landing-studio:1763588802880",
+    "/home/prei/betterbili/betterbili-landing-studio:1763588989032",
+    "/home/prei/betterbili/betterbili-landing-studio:1763589112025",
+    "/home/prei/betterbili/betterbili-landing-studio:1763589521616",
+    "/home/prei/betterbili/betterbili-landing-studio:1763589547660",
+    "/home/prei/betterbili/betterbili-landing-studio:1763589581418"
   ],
   "dynamic_patterns": [
     {
@@ -6708,7 +6718,17 @@
     "18798480-0705-4757-8fd6-08063844beee": 0,
     "/home/prei/betterbili/zhongwen-video:1763508087756": 1763508087,
     "/home/prei/betterbili/zhongwen-video:1763508087757": 1763508087,
-    "/home/prei/betterbili/zhongwen-video:1763508386112": 1763508386
+    "/home/prei/betterbili/zhongwen-video:1763508386112": 1763508386,
+    "3c303109-2a3e-47e8-8ee8-05e8c95fad6a": 1763589578,
+    "/home/prei/betterbili/betterbili-landing-studio:1763588342961": 1763588342,
+    "/home/prei/betterbili/betterbili-landing-studio:1763588659551": 1763588659,
+    "/home/prei/betterbili/betterbili-landing-studio:1763588764981": 1763588764,
+    "/home/prei/betterbili/betterbili-landing-studio:1763588802880": 1763588802,
+    "/home/prei/betterbili/betterbili-landing-studio:1763588989032": 1763588989,
+    "/home/prei/betterbili/betterbili-landing-studio:1763589112025": 1763589112,
+    "/home/prei/betterbili/betterbili-landing-studio:1763589521616": 1763589521,
+    "/home/prei/betterbili/betterbili-landing-studio:1763589547660": 1763589547,
+    "/home/prei/betterbili/betterbili-landing-studio:1763589581418": 1763589581
   },
-  "updated_at": "2025-11-19T09:00:02+00:00"
+  "updated_at": "2025-11-19T22:00:02+00:00"
 }
