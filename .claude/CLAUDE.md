@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "You are within a git worktree. Let's work on this: <original-complaint> I nee..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 133 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 132 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 295 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 291 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
@@ -35,7 +35,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Yeah, thats a solid plan overall just a couple tweaks so it actually compiles..."
 
 ## 5. Minimize approval churn
-- Bundle related commands to reduce repetitive approval requests. 29 session(s) flagged approval fatigue.
+- Bundle related commands to reduce repetitive approval requests. 31 session(s) flagged approval fatigue.
 - Cite why elevated permissions are needed; suggest safe, sandboxed alternatives when possible.
 - Reuse previously granted permissions if policy allows instead of re-requesting reflexively.
 - Example: "Whats broken (root cause) You have two layers in play: Edge Function: supabas..."
@@ -58,7 +58,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Infrastructure Deployment: Production Automation & Secrets"
 
 ## 8. Communicate like a teammate
-- Narrate trade-offs and residual risks instead of silently choosing a path. 21 session(s) asked for clearer communication.
+- Narrate trade-offs and residual risks instead of silently choosing a path. 20 session(s) asked for clearer communication.
 - When blocked, propose concrete next steps for the user instead of stalling.
 - Close the loop by outlining follow-up tasks or open questions at the end of each session.
 - Example: "This session is being continued from a previous conversation that ran out of ..."
