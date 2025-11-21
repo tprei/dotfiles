@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "You are within a git worktree. Let's work on this: <original-complaint> I nee..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 125 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 124 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 283 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 282 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
@@ -76,8 +76,8 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Detect file size and explicitly propose chunking, summaries, or streaming reads before attempting to ingest the entire file
 - Offer a clear plan: extract key sections first, provide progressive summarization, and give commands the user can run to fetch larger slices if needed
 - Example: "Whats broken (root cause) You have two layers in play: Edge Function: supabas..."
-- Example: "Let's migrate @netlify/functions/ to cloudflare pages functions Repomix: This..."
 - Example: "VAD Chunking System: Configurable Transcription Improvements"
+- Example: "0. Goal Improve the difficulty / HSK derivation for videos so that: Difficult..."
 
 ## 11. Meta-tool-output parsing
 - Treat tool-generated headers and 'do not respond' caveats as meta-log entries and either ignore them for task intent or explicitly confirm with the user when unclear
