@@ -3406,7 +3406,14 @@
     "/home/prei/betterbili/betterbili-landing-studio:1763839072955",
     "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1763839152477",
     "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1763839215806",
-    "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1763839360012"
+    "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1763839360012",
+    "08b64639-63fc-45d2-8eda-608f08c5f691",
+    "c2ba0111-77e6-42de-b413-d4bbd212e189",
+    "d27d40ad-1546-4cba-b846-90259d69e942",
+    "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1764016821693",
+    "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1764016914007",
+    "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1764017190261",
+    "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1764017223308"
   ],
   "dynamic_patterns": [
     {
@@ -7000,7 +7007,14 @@
     "/home/prei/betterbili/betterbili-landing-studio:1763839072955": 1763839072,
     "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1763839152477": 1763839152,
     "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1763839215806": 1763839215,
-    "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1763839360012": 1763839360
+    "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1763839360012": 1763839360,
+    "08b64639-63fc-45d2-8eda-608f08c5f691": 1764016913,
+    "c2ba0111-77e6-42de-b413-d4bbd212e189": 0,
+    "d27d40ad-1546-4cba-b846-90259d69e942": 1764017223,
+    "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1764016821693": 1764016821,
+    "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1764016914007": 1764016914,
+    "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1764017190261": 1764017190,
+    "/home/prei/betterbili/zhongwen-video/subtitle-saas/chrome-extension:1764017223308": 1764017223
   },
-  "updated_at": "2025-11-22T20:00:03+00:00"
+  "updated_at": "2025-11-24T21:00:03+00:00"
 }
