@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I am working on the chrome extension, read the repomix bundle /home/prei/zhon..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 117 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 115 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 277 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 274 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
@@ -138,8 +138,8 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Ask explicit clarifying questions and produce a preview/patch and a backup of existing dotfiles prior to applying changes
 - Make edits idempotent and scoped (e.g., append guarded blocks or create named include files) rather than overwriting whole files
 - Example: "<bash-stdout> backup-before-cookie-cleanup + box-changes + chrome-extension-u..."
-- Example: "<bash-stdout> backup-before-cookie-cleanup + box-changes + chrome-extension-u..."
 - Example: "zhongwen-video on staging [$!] on v27.5.1 using default/zhongwen-438308 z dot..."
+- Example: "Dotfiles Warmup Task Preparation"
 
 ## 20. Aggressive file pruning and deletions
 - Present a concise candidate deletion list and require explicit user confirmation before removing files, offering a dry-run and size/age filters
