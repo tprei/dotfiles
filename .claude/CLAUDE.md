@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I am working on the chrome extension, read the repomix bundle /home/prei/zhon..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 112 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 111 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 272 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 271 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "Let's fix a few things on the extension @zhongwen-video/subtitle-saas/chrome-..."
