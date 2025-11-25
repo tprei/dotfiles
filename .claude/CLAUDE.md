@@ -11,15 +11,15 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I am working on the chrome extension, read the repomix bundle /home/prei/zhon..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 114 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 112 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
 - Example: "GitHub Issues Created: Testing Document Analysis"
-- Example: "I need to commit the changes I made to fix the TypeError in the catalog page...."
+- Example: "I have a single modified file `src/components/dashboard/BillingTab.tsx` with ..."
 
 ## 3. Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. 96 session(s) demanded test coverage or reruns.
+- Default to running or adding tests whenever behavior shifts. 95 session(s) demanded test coverage or reruns.
 - If no automated test exists, outline a manual checklist and suggest how to automate it next.
 - Share test commands and results; avoid saying it works without evidence.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,12 +27,12 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 273 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 272 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
-- Example: "I made a change so that only staging / deployment branches of cloudflare page..."
 - Example: "Let's fix a few things on the extension @zhongwen-video/subtitle-saas/chrome-..."
 - Example: "Yeah, thats a solid plan overall just a couple tweaks so it actually compiles..."
+- Example: "Perfect that log is exactly the smoking gun. `planAllowance` is referenced in..."
 
 ## 5. Minimize approval churn
 - Bundle related commands to reduce repetitive approval requests. 36 session(s) flagged approval fatigue.
@@ -76,7 +76,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Offer a clear plan: extract key sections first, provide progressive summarization, and give commands the user can run to fetch larger slices if needed
 - Example: "VAD Chunking System: Configurable Transcription Improvements"
 - Example: "0. Goal Improve the difficulty / HSK derivation for videos so that: Difficult..."
-- Example: "git push origin staging ERROR: no healthy upstream fatal: Could not read from..."
+- Example: "<bash-stdout>On branch staging Your branch is up to date with 'origin/staging..."
 
 ## 11. Meta-tool-output parsing
 - Treat tool-generated headers and 'do not respond' caveats as meta-log entries and either ignore them for task intent or explicitly confirm with the user when unclear
@@ -104,7 +104,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Recommend and offer commands to safely rotate or remove leaked secrets and to sanitize logs before sharing
 - Example: "Cancel subscription edge function is failing now: Billing secret error: null"
 - Example: "zhongwen-video/subtitle-saas/chrome-extension on main [$] via v20.14.0 on v T..."
-- Example: "Python Environment Setup Completion"
+- Example: "Let's fix two issues: ------------ Youve basically got two separate things go..."
 
 ## 15. Preference persistence and status
 - Confirm and record session-level preferences when the user sets them and provide a short status command to re-show current preferences
