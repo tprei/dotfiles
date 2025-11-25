@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I am working on the chrome extension, read the repomix bundle /home/prei/zhon..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 115 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 114 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -19,7 +19,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I need to commit the changes I made to fix the TypeError in the catalog page...."
 
 ## 3. Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. 97 session(s) demanded test coverage or reruns.
+- Default to running or adding tests whenever behavior shifts. 96 session(s) demanded test coverage or reruns.
 - If no automated test exists, outline a manual checklist and suggest how to automate it next.
 - Share test commands and results; avoid saying it works without evidence.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 274 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 273 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "I made a change so that only staging / deployment branches of cloudflare page..."
@@ -35,7 +35,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Yeah, thats a solid plan overall just a couple tweaks so it actually compiles..."
 
 ## 5. Minimize approval churn
-- Bundle related commands to reduce repetitive approval requests. 37 session(s) flagged approval fatigue.
+- Bundle related commands to reduce repetitive approval requests. 36 session(s) flagged approval fatigue.
 - Cite why elevated permissions are needed; suggest safe, sandboxed alternatives when possible.
 - Reuse previously granted permissions if policy allows instead of re-requesting reflexively.
 - Example: "This session is being continued from a previous conversation that ran out of ..."
@@ -49,7 +49,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I've implemented everything, see all changes, use repomix as well, ultrathink..."
 
 ## 7. Leverage available tooling proactively
-- Highlight built-in tools before the user prompts you. 36 session(s) reminded Codex to employ local tooling.
+- Highlight built-in tools before the user prompts you. 35 session(s) reminded Codex to employ local tooling.
 - Prefer existing scripts or automation hooks over ad-hoc commands; update or create helpers when they are missing.
 - Cache learnings: when you discover an effective workflow, note it for future runs.
 - Example: "dont make changes: I have an issue here: 1. I've made a new account testecode..."
@@ -137,9 +137,9 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Detect platform, shell, and existing dotfile structure automatically and surface differences before editing any user-scoped config
 - Ask explicit clarifying questions and produce a preview/patch and a backup of existing dotfiles prior to applying changes
 - Make edits idempotent and scoped (e.g., append guarded blocks or create named include files) rather than overwriting whole files
-- Example: "<bash-stdout> backup-before-cookie-cleanup + box-changes + chrome-extension-u..."
 - Example: "zhongwen-video on staging [$!] on v27.5.1 using default/zhongwen-438308 z dot..."
 - Example: "Dotfiles Warmup Task Preparation"
+- Example: "<bash-stdout> backup-before-cookie-cleanup + box-changes + chrome-extension-u..."
 
 ## 20. Aggressive file pruning and deletions
 - Present a concise candidate deletion list and require explicit user confirmation before removing files, offering a dry-run and size/age filters
