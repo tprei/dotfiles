@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I am working on the chrome extension, read the repomix bundle /home/prei/zhon..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 111 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 107 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -19,7 +19,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I have a single modified file `src/components/dashboard/BillingTab.tsx` with ..."
 
 ## 3. Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. 95 session(s) demanded test coverage or reruns.
+- Default to running or adding tests whenever behavior shifts. 93 session(s) demanded test coverage or reruns.
 - If no automated test exists, outline a manual checklist and suggest how to automate it next.
 - Share test commands and results; avoid saying it works without evidence.
 - Example: "I need to explore the betterbili-landing-studio codebase to understand the st..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: ""Error updating billing status: {\n code: \"23514\",\n details: \"Failing row..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 271 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 267 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "Let's fix a few things on the extension @zhongwen-video/subtitle-saas/chrome-..."
@@ -35,7 +35,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Perfect that log is exactly the smoking gun. `planAllowance` is referenced in..."
 
 ## 5. Minimize approval churn
-- Bundle related commands to reduce repetitive approval requests. 36 session(s) flagged approval fatigue.
+- Bundle related commands to reduce repetitive approval requests. 35 session(s) flagged approval fatigue.
 - Cite why elevated permissions are needed; suggest safe, sandboxed alternatives when possible.
 - Reuse previously granted permissions if policy allows instead of re-requesting reflexively.
 - Example: "This session is being continued from a previous conversation that ran out of ..."
@@ -43,13 +43,15 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "WIF Auth Fix: Audience & Service Account Permissions"
 
 ## 6. Stay within the correct workspace
-- Confirm target directories before writing—spell out the intended path in your plan. Mentioned in 1 session(s).
+- Confirm target directories before writing—spell out the intended path in your plan. Mentioned in 3 session(s).
 - When unsure, list candidate locations and ask for confirmation instead of guessing.
 - After edits, echo file paths so the user can audit quickly.
+- Example: "apply these: Yes, the browser **absolutely** tries to cache video, but there ..."
 - Example: "I've implemented everything, see all changes, use repomix as well, ultrathink..."
+- Example: "apply these: Yes, the browser **absolutely** tries to cache video, but there ..."
 
 ## 7. Leverage available tooling proactively
-- Highlight built-in tools before the user prompts you. 35 session(s) reminded Codex to employ local tooling.
+- Highlight built-in tools before the user prompts you. 33 session(s) reminded Codex to employ local tooling.
 - Prefer existing scripts or automation hooks over ad-hoc commands; update or create helpers when they are missing.
 - Cache learnings: when you discover an effective workflow, note it for future runs.
 - Example: "dont make changes: I have an issue here: 1. I've made a new account testecode..."
@@ -57,7 +59,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Infrastructure Deployment: Production Automation & Secrets"
 
 ## 8. Communicate like a teammate
-- Narrate trade-offs and residual risks instead of silently choosing a path. 11 session(s) asked for clearer communication.
+- Narrate trade-offs and residual risks instead of silently choosing a path. 10 session(s) asked for clearer communication.
 - When blocked, propose concrete next steps for the user instead of stalling.
 - Close the loop by outlining follow-up tasks or open questions at the end of each session.
 - Example: "This session is being continued from a previous conversation that ran out of ..."
@@ -75,8 +77,8 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Detect file size and explicitly propose chunking, summaries, or streaming reads before attempting to ingest the entire file
 - Offer a clear plan: extract key sections first, provide progressive summarization, and give commands the user can run to fetch larger slices if needed
 - Example: "VAD Chunking System: Configurable Transcription Improvements"
-- Example: "0. Goal Improve the difficulty / HSK derivation for videos so that: Difficult..."
-- Example: "<bash-stdout>On branch staging Your branch is up to date with 'origin/staging..."
+- Example: "Video Streaming API: PR Creation Complete"
+- Example: "Video Streaming: API Commit and PR Creation"
 
 ## 11. Meta-tool-output parsing
 - Treat tool-generated headers and 'do not respond' caveats as meta-log entries and either ignore them for task intent or explicitly confirm with the user when unclear
