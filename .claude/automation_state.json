@@ -3482,7 +3482,11 @@
     "/home/prei/betterbili/betterbili-pwa:1764197442652",
     "/home/prei/betterbili/betterbili-pwa:1764197442653",
     "81f2ed45-a0d6-42f7-84b2-c85e3292d1dc",
-    "/home/prei/betterbili/betterbili-pwa:1764330884629"
+    "/home/prei/betterbili/betterbili-pwa:1764330884629",
+    "f6a3d171-7685-4ccc-9526-9433ab71fe28",
+    "91594838-d77a-4a4c-9424-fd5309f42edf",
+    "/home/prei/betterbili/betterbili-pwa:1764332994510",
+    "/home/prei/betterbili/betterbili-pwa:1764332994511"
   ],
   "dynamic_patterns": [
     {
@@ -7152,7 +7156,11 @@
     "/home/prei/betterbili/betterbili-pwa:1764197442652": 1764197442,
     "/home/prei/betterbili/betterbili-pwa:1764197442653": 1764197442,
     "81f2ed45-a0d6-42f7-84b2-c85e3292d1dc": 1764330884,
-    "/home/prei/betterbili/betterbili-pwa:1764330884629": 1764330884
+    "/home/prei/betterbili/betterbili-pwa:1764330884629": 1764330884,
+    "f6a3d171-7685-4ccc-9526-9433ab71fe28": 1764332994,
+    "91594838-d77a-4a4c-9424-fd5309f42edf": 0,
+    "/home/prei/betterbili/betterbili-pwa:1764332994510": 1764332994,
+    "/home/prei/betterbili/betterbili-pwa:1764332994511": 1764332994
   },
-  "updated_at": "2025-11-28T12:00:02+00:00"
+  "updated_at": "2025-11-28T13:00:02+00:00"
 }
