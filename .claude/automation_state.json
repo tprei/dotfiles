@@ -3531,7 +3531,18 @@
     "02ba616c-e8a3-48b4-a13c-77403cb0bdc5",
     "f14965d5-fd53-462c-9eb3-5cb35540db55",
     "/home/prei/betterbili/betterbili-landing-studio:1764362418237",
-    "/home/prei/betterbili/betterbili-landing-studio:1764362985792"
+    "/home/prei/betterbili/betterbili-landing-studio:1764362985792",
+    "45a46add-4f45-4025-a7f3-3b10c36fb8d7",
+    "c683b30c-3577-4350-83f9-070522115db2",
+    "58cc823e-fc57-49d4-ae7b-15dd29ca16a2",
+    "8d42aafa-06c7-439f-9e69-42e38d5b3e92",
+    "68258373-3f8c-445f-9b8d-d234a5b05435",
+    "71b5426c-5578-4032-8e7d-f083558ca4af",
+    "/home/prei/betterbili/betterbili-landing-studio:1764367656136",
+    "/home/prei/betterbili/betterbili-landing-studio:1764369472239",
+    "/home/prei/betterbili/zhongwen-video:1764369473866",
+    "/home/prei/betterbili/betterbili-landing-studio:1764370436818",
+    "/home/prei/betterbili/betterbili-landing-studio:1764370436819"
   ],
   "dynamic_patterns": [
     {
@@ -7250,7 +7261,18 @@
     "02ba616c-e8a3-48b4-a13c-77403cb0bdc5": 0,
     "f14965d5-fd53-462c-9eb3-5cb35540db55": 1764362985,
     "/home/prei/betterbili/betterbili-landing-studio:1764362418237": 1764362418,
-    "/home/prei/betterbili/betterbili-landing-studio:1764362985792": 1764362985
+    "/home/prei/betterbili/betterbili-landing-studio:1764362985792": 1764362985,
+    "45a46add-4f45-4025-a7f3-3b10c36fb8d7": 1764369472,
+    "c683b30c-3577-4350-83f9-070522115db2": 0,
+    "58cc823e-fc57-49d4-ae7b-15dd29ca16a2": 1764367656,
+    "8d42aafa-06c7-439f-9e69-42e38d5b3e92": 1764370436,
+    "68258373-3f8c-445f-9b8d-d234a5b05435": 0,
+    "71b5426c-5578-4032-8e7d-f083558ca4af": 1764369473,
+    "/home/prei/betterbili/betterbili-landing-studio:1764367656136": 1764367656,
+    "/home/prei/betterbili/betterbili-landing-studio:1764369472239": 1764369472,
+    "/home/prei/betterbili/zhongwen-video:1764369473866": 1764369473,
+    "/home/prei/betterbili/betterbili-landing-studio:1764370436818": 1764370436,
+    "/home/prei/betterbili/betterbili-landing-studio:1764370436819": 1764370436
   },
-  "updated_at": "2025-11-28T21:00:02+00:00"
+  "updated_at": "2025-11-28T23:00:01+00:00"
 }
