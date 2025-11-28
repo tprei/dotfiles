@@ -3486,7 +3486,23 @@
     "f6a3d171-7685-4ccc-9526-9433ab71fe28",
     "91594838-d77a-4a4c-9424-fd5309f42edf",
     "/home/prei/betterbili/betterbili-pwa:1764332994510",
-    "/home/prei/betterbili/betterbili-pwa:1764332994511"
+    "/home/prei/betterbili/betterbili-pwa:1764332994511",
+    "3615f10a-2786-4ac7-8951-66330ce3b6b7",
+    "a17814a1-d8cf-409f-b266-355afe8ea0de",
+    "a1fd9882-2595-4ff6-8532-02e518b96f04",
+    "ce711168-7f42-4712-bfdb-b43c0e0213ce",
+    "94e15a49-2a6f-48ef-a29c-3c9e07dc4fbc",
+    "4c3e0013-9f6d-4e0e-971e-46f752ba6ace",
+    "446b4ebb-be1f-46f5-a7b5-811a8136b4f0",
+    "cf09d210-008b-4f56-ad70-ffdf20dd1523",
+    "/home/prei/betterbili/betterbili-pwa:1764336494289",
+    "/home/prei/betterbili/betterbili-pwa:1764337377330",
+    "/home/prei/betterbili/betterbili-pwa:1764337377331",
+    "/home/prei/betterbili/betterbili-landing-studio:1764337698578",
+    "/home/prei/betterbili/betterbili-landing-studio:1764337760241",
+    "/home/prei/betterbili/betterbili-landing-studio:1764337988299",
+    "/home/prei/betterbili/betterbili-landing-studio:1764338156764",
+    "/home/prei/betterbili/betterbili-landing-studio:1764338222398"
   ],
   "dynamic_patterns": [
     {
@@ -7160,7 +7176,23 @@
     "f6a3d171-7685-4ccc-9526-9433ab71fe28": 1764332994,
     "91594838-d77a-4a4c-9424-fd5309f42edf": 0,
     "/home/prei/betterbili/betterbili-pwa:1764332994510": 1764332994,
-    "/home/prei/betterbili/betterbili-pwa:1764332994511": 1764332994
+    "/home/prei/betterbili/betterbili-pwa:1764332994511": 1764332994,
+    "3615f10a-2786-4ac7-8951-66330ce3b6b7": 1764338156,
+    "a17814a1-d8cf-409f-b266-355afe8ea0de": 0,
+    "a1fd9882-2595-4ff6-8532-02e518b96f04": 1764338222,
+    "ce711168-7f42-4712-bfdb-b43c0e0213ce": 0,
+    "94e15a49-2a6f-48ef-a29c-3c9e07dc4fbc": 1764337377,
+    "4c3e0013-9f6d-4e0e-971e-46f752ba6ace": 0,
+    "446b4ebb-be1f-46f5-a7b5-811a8136b4f0": 0,
+    "cf09d210-008b-4f56-ad70-ffdf20dd1523": 1764336494,
+    "/home/prei/betterbili/betterbili-pwa:1764336494289": 1764336494,
+    "/home/prei/betterbili/betterbili-pwa:1764337377330": 1764337377,
+    "/home/prei/betterbili/betterbili-pwa:1764337377331": 1764337377,
+    "/home/prei/betterbili/betterbili-landing-studio:1764337698578": 1764337698,
+    "/home/prei/betterbili/betterbili-landing-studio:1764337760241": 1764337760,
+    "/home/prei/betterbili/betterbili-landing-studio:1764337988299": 1764337988,
+    "/home/prei/betterbili/betterbili-landing-studio:1764338156764": 1764338156,
+    "/home/prei/betterbili/betterbili-landing-studio:1764338222398": 1764338222
   },
-  "updated_at": "2025-11-28T13:00:02+00:00"
+  "updated_at": "2025-11-28T14:00:01+00:00"
 }
