@@ -3474,7 +3474,13 @@
     "/home/prei/betterbili/zhongwen-video:1764114457614",
     "/home/prei/betterbili/zhongwen-video:1764114566443",
     "/home/prei/betterbili/zhongwen-video:1764114709565",
-    "/home/prei/betterbili/betterbili-pwa:1764114751586"
+    "/home/prei/betterbili/betterbili-pwa:1764114751586",
+    "7fe08af8-145f-47ae-b165-372d00a1d1ed",
+    "42d0f242-30cb-4d7b-88f9-a0b0dffd773b",
+    "c7525a21-3003-40e1-bf46-60e896cc1333",
+    "/home/prei/betterbili/betterbili-pwa:1764197119717",
+    "/home/prei/betterbili/betterbili-pwa:1764197442652",
+    "/home/prei/betterbili/betterbili-pwa:1764197442653"
   ],
   "dynamic_patterns": [
     {
@@ -7136,7 +7142,13 @@
     "/home/prei/betterbili/zhongwen-video:1764114457614": 1764114457,
     "/home/prei/betterbili/zhongwen-video:1764114566443": 1764114566,
     "/home/prei/betterbili/zhongwen-video:1764114709565": 1764114709,
-    "/home/prei/betterbili/betterbili-pwa:1764114751586": 1764114751
+    "/home/prei/betterbili/betterbili-pwa:1764114751586": 1764114751,
+    "7fe08af8-145f-47ae-b165-372d00a1d1ed": 1764197119,
+    "42d0f242-30cb-4d7b-88f9-a0b0dffd773b": 0,
+    "c7525a21-3003-40e1-bf46-60e896cc1333": 1764197442,
+    "/home/prei/betterbili/betterbili-pwa:1764197119717": 1764197119,
+    "/home/prei/betterbili/betterbili-pwa:1764197442652": 1764197442,
+    "/home/prei/betterbili/betterbili-pwa:1764197442653": 1764197442
   },
-  "updated_at": "2025-11-26T00:00:03+00:00"
+  "updated_at": "2025-11-28T11:00:02+00:00"
 }
