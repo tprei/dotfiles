@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I am working on the chrome extension, read the repomix bundle /home/prei/zhon..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 92 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 93 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "GitHub Issues Created: Testing Document Analysis"
@@ -76,9 +76,9 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 ## 10. Large-file reading strategy
 - Detect file size and explicitly propose chunking, summaries, or streaming reads before attempting to ingest the entire file
 - Offer a clear plan: extract key sections first, provide progressive summarization, and give commands the user can run to fetch larger slices if needed
+- Example: "Git Commit Agent Streamlines API Config"
 - Example: "VAD Chunking System: Configurable Transcription Improvements"
 - Example: "Video Streaming API: PR Creation Complete"
-- Example: "Video Streaming: API Commit and PR Creation"
 
 ## 11. Meta-tool-output parsing
 - Treat tool-generated headers and 'do not respond' caveats as meta-log entries and either ignore them for task intent or explicitly confirm with the user when unclear
