@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I am working on the chrome extension, read the repomix bundle /home/prei/zhon..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 106 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 107 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "GitHub Issues Created: Testing Document Analysis"
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "even though I built my extension with npm run build:prod it is still hitting ..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 269 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 273 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "Let's fix a few things on the extension @zhongwen-video/subtitle-saas/chrome-..."
@@ -51,12 +51,12 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "apply these: Yes, the browser **absolutely** tries to cache video, but there ..."
 
 ## 7. Leverage available tooling proactively
-- Highlight built-in tools before the user prompts you. 32 session(s) reminded Codex to employ local tooling.
+- Highlight built-in tools before the user prompts you. 33 session(s) reminded Codex to employ local tooling.
 - Prefer existing scripts or automation hooks over ad-hoc commands; update or create helpers when they are missing.
 - Cache learnings: when you discover an effective workflow, note it for future runs.
 - Example: "dont make changes: I have an issue here: 1. I've made a new account testecode..."
 - Example: "Git Commit Automation with Changelog Updates"
-- Example: "The build is failing for the API in github workflow: Downloading ffmpeg_pytho..."
+- Example: "Git Commit Automation with Changelog Updates"
 
 ## 8. Communicate like a teammate
 - Narrate trade-offs and residual risks instead of silently choosing a path. 7 session(s) asked for clearer communication.
