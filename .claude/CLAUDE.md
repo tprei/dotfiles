@@ -51,12 +51,12 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "apply these: Yes, the browser **absolutely** tries to cache video, but there ..."
 
 ## 7. Leverage available tooling proactively
-- Highlight built-in tools before the user prompts you. 32 session(s) reminded Codex to employ local tooling.
+- Highlight built-in tools before the user prompts you. 33 session(s) reminded Codex to employ local tooling.
 - Prefer existing scripts or automation hooks over ad-hoc commands; update or create helpers when they are missing.
 - Cache learnings: when you discover an effective workflow, note it for future runs.
 - Example: "dont make changes: I have an issue here: 1. I've made a new account testecode..."
 - Example: "Git Commit Automation with Changelog Updates"
-- Example: "Git Commit Automation with Changelog Updates"
+- Example: "Git Commit Automation: Four Changes Logged"
 
 ## 8. Communicate like a teammate
 - Narrate trade-offs and residual risks instead of silently choosing a path. 7 session(s) asked for clearer communication.
@@ -77,8 +77,8 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Detect file size and explicitly propose chunking, summaries, or streaming reads before attempting to ingest the entire file
 - Offer a clear plan: extract key sections first, provide progressive summarization, and give commands the user can run to fetch larger slices if needed
 - Example: "Git Commit Agent Streamlines API Config"
-- Example: "Backend Video Streaming Commit Changelog Update"
-- Example: "Git Commits for Video Streaming & Layout Fixes"
+- Example: "Git Commit Special: Video Streaming & Layout"
+- Example: "Video Streaming Implementation Commit Complete"
 
 ## 11. Meta-tool-output parsing
 - Treat tool-generated headers and 'do not respond' caveats as meta-log entries and either ignore them for task intent or explicitly confirm with the user when unclear
