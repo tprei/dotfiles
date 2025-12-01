@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I am working on the chrome extension, read the repomix bundle /home/prei/zhon..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 105 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 108 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "GitHub Issues Created: Testing Document Analysis"
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "even though I built my extension with npm run build:prod it is still hitting ..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 270 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 274 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "Let's fix a few things on the extension @zhongwen-video/subtitle-saas/chrome-..."
@@ -77,8 +77,8 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Detect file size and explicitly propose chunking, summaries, or streaming reads before attempting to ingest the entire file
 - Offer a clear plan: extract key sections first, provide progressive summarization, and give commands the user can run to fetch larger slices if needed
 - Example: "Git Commit Agent Streamlines API Config"
-- Example: "VAD Chunking System: Configurable Transcription Improvements"
-- Example: "Video Streaming API: PR Creation Complete"
+- Example: "Backend Video Streaming Commit Changelog Update"
+- Example: "Git Commits for Video Streaming & Layout Fixes"
 
 ## 11. Meta-tool-output parsing
 - Treat tool-generated headers and 'do not respond' caveats as meta-log entries and either ignore them for task intent or explicitly confirm with the user when unclear
