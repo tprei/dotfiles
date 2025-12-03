@@ -3,23 +3,23 @@
 Claude acts as an autonomous coding partner alongside Codex. The notes below distill recurrent themes from local Claude sessions (captured under `~/.claude/projects`) so future runs follow the same guardrails.
 
 ## 1. Shape the work before touching files
-- Always produce an explicit plan and confirm scope before editing. 19 session(s) asked for more upfront reasoning.
+- Always produce an explicit plan and confirm scope before editing. 18 session(s) asked for more upfront reasoning.
 - Surface unknowns early; restate assumptions and request missing context.
 - When instructions conflict with filesystem reality, pause and clarify before acting.
 - Example: "Let's fix two issues: ------------ Youve basically got two separate things go..."
-- Example: "dont make changes: I have an issue here: 1. I've made a new account testecode..."
 - Example: "I am working on the chrome extension, read the repomix bundle /home/prei/zhon..."
+- Example: "I am trying to implement a new UI for my extension, I have done some work but..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 92 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 77 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "Git Commit: PWA Layout & Changelog Updates"
 - Example: "Git Commit Changes and Changelog Update"
-- Example: "I have a single modified file `src/components/dashboard/BillingTab.tsx` with ..."
+- Example: "Git Commit and Changelog Update Complete"
 
 ## 3. Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. 80 session(s) demanded test coverage or reruns.
+- Default to running or adding tests whenever behavior shifts. 75 session(s) demanded test coverage or reruns.
 - If no automated test exists, outline a manual checklist and suggest how to automate it next.
 - Share test commands and results; avoid saying it works without evidence.
 - Example: "even though I built my extension with npm run build:prod it is still hitting ..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Chrome Extension Build: Test vs Live Mode Mismatch"
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 262 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 248 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "Let's fix a few things on the extension @zhongwen-video/subtitle-saas/chrome-..."
@@ -51,12 +51,12 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "apply these: Yes, the browser **absolutely** tries to cache video, but there ..."
 
 ## 7. Leverage available tooling proactively
-- Highlight built-in tools before the user prompts you. 33 session(s) reminded Codex to employ local tooling.
+- Highlight built-in tools before the user prompts you. 32 session(s) reminded Codex to employ local tooling.
 - Prefer existing scripts or automation hooks over ad-hoc commands; update or create helpers when they are missing.
 - Cache learnings: when you discover an effective workflow, note it for future runs.
-- Example: "dont make changes: I have an issue here: 1. I've made a new account testecode..."
 - Example: "Git Commit Automation with Changelog Updates"
 - Example: "Git Commit Automation: Four Changes Logged"
+- Example: "Git Commit Automation with Changelog Updates"
 
 ## 8. Communicate like a teammate
 - Narrate trade-offs and residual risks instead of silently choosing a path. 4 session(s) asked for clearer communication.
@@ -92,7 +92,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Propose concrete UI changes (layout rules, CSS adjustments, responsive constraints) plus a small visual prototype and acceptance criteria to validate similarity without copying
 - Example: "The short version: your **Cancel scheduled change calls `subscriptionSchedule..."
 - Example: "We have to fix a few other issues related to cancellation now. ## 0. High-lev..."
-- Example: "I want to allow yearly plans as well as make some fixes for prorations. Here'..."
+- Example: "Heres how Id implement each of your four tweaks. Ill show the relevant code c..."
 
 ## 13. Generated-bundle vs source confusion
 - Detect when a file appears to be an assembled/generated artifact and ask whether the user wants analysis of the bundle or mapping back to original source files
@@ -119,8 +119,8 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Ask focused clarification questions (target breakpoints, accessibility needs, exact elements to mimic) and offer 2–3 constrained design variants with tradeoffs
 - Define measurable acceptance criteria (pixel tolerances, component sizes, overflow behavior) before making UI changes
 - Example: "Claude Code v2.0.45 glm-4.6 API Usage Billing /home/prei/betterbili/zhongwen-..."
-- Example: "Its solid. Youve hit the 4 right levers: 1. **stop hardcoding `monthly` on th..."
 - Example: "This session is being continued from a previous conversation that ran out of ..."
+- Example: "````markdown # Billing / Stripe Mode Refactor Spec Owner: Backend / Supabase ..."
 
 ## 17. Agent registry introspection
 - When a project lists custom agents/tools, summarize available agents and recommend one or two with a brief justification for the current task
