@@ -3798,7 +3798,15 @@
     "/home/prei/betterbili/betterbili-landing-studio:1764841024746",
     "4c1d5b6c-4316-414a-b3af-641832b5d754",
     "/home/prei/betterbili/betterbili-landing-studio:1764850922129",
-    "/home/prei/betterbili/betterbili-landing-studio:1764850923700"
+    "/home/prei/betterbili/betterbili-landing-studio:1764850923700",
+    "d7d8ec50-3909-4c2c-9f2b-e22c3eebdeec",
+    "69684336-84e2-4c9a-b333-18353c44d31b",
+    "d55ea5ea-2d5f-408d-aab7-e20460697316",
+    "/home/prei/betterbili/betterbili-landing-studio:1764853967857",
+    "/home/prei/betterbili/betterbili-landing-studio:1764854541831",
+    "/home/prei/betterbili/betterbili-landing-studio:1764854541832",
+    "/home/prei/betterbili/betterbili-landing-studio:1764854972127",
+    "/home/prei/betterbili/betterbili-landing-studio:1764855089844"
   ],
   "dynamic_patterns": [
     {
@@ -7782,9 +7790,17 @@
     "cf66a394-44ee-4ca8-9df1-f5e24e0da74b": 1764841024,
     "/home/prei/betterbili/betterbili-landing-studio:1764840611701": 1764840611,
     "/home/prei/betterbili/betterbili-landing-studio:1764841024746": 1764841024,
-    "4c1d5b6c-4316-414a-b3af-641832b5d754": 1764850923,
+    "4c1d5b6c-4316-414a-b3af-641832b5d754": 1764854972,
     "/home/prei/betterbili/betterbili-landing-studio:1764850922129": 1764850922,
-    "/home/prei/betterbili/betterbili-landing-studio:1764850923700": 1764850923
+    "/home/prei/betterbili/betterbili-landing-studio:1764850923700": 1764850923,
+    "d7d8ec50-3909-4c2c-9f2b-e22c3eebdeec": 1764855089,
+    "69684336-84e2-4c9a-b333-18353c44d31b": 0,
+    "d55ea5ea-2d5f-408d-aab7-e20460697316": 0,
+    "/home/prei/betterbili/betterbili-landing-studio:1764853967857": 1764853967,
+    "/home/prei/betterbili/betterbili-landing-studio:1764854541831": 1764854541,
+    "/home/prei/betterbili/betterbili-landing-studio:1764854541832": 1764854541,
+    "/home/prei/betterbili/betterbili-landing-studio:1764854972127": 1764854972,
+    "/home/prei/betterbili/betterbili-landing-studio:1764855089844": 1764855089
   },
-  "updated_at": "2025-12-04T13:00:02+00:00"
+  "updated_at": "2025-12-04T14:00:03+00:00"
 }
