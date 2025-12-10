@@ -3867,7 +3867,15 @@
     "/home/prei/betterbili/betterbili-landing-studio:1765302517216",
     "/home/prei/betterbili/betterbili-landing-studio:1765302707672",
     "/home/prei/betterbili/betterbili-landing-studio:1765302732431",
-    "/home/prei/betterbili/betterbili-landing-studio:1765302753010"
+    "/home/prei/betterbili/betterbili-landing-studio:1765302753010",
+    "5335fe98-7b5a-42b0-ad90-d10baa7b0b72",
+    "d6326c43-5bad-4262-9a12-3054e08f021e",
+    "61cd96a7-be49-4a12-b208-7046fe86fa75",
+    "f31f11e9-43f9-4538-9c1e-dd32d144de0d",
+    "/home/prei/betterbili/betterbili-landing-studio:1765322880371",
+    "/home/prei/betterbili/betterbili-landing-studio:1765322994338",
+    "/home/prei/betterbili/betterbili-landing-studio:1765323000629",
+    "/home/prei/betterbili/betterbili-landing-studio:1765323087823"
   ],
   "dynamic_patterns": [
     {
@@ -7922,7 +7930,15 @@
     "/home/prei/betterbili/betterbili-landing-studio:1765302517216": 1765302517,
     "/home/prei/betterbili/betterbili-landing-studio:1765302707672": 1765302707,
     "/home/prei/betterbili/betterbili-landing-studio:1765302732431": 1765302732,
-    "/home/prei/betterbili/betterbili-landing-studio:1765302753010": 1765302753
+    "/home/prei/betterbili/betterbili-landing-studio:1765302753010": 1765302753,
+    "5335fe98-7b5a-42b0-ad90-d10baa7b0b72": 0,
+    "d6326c43-5bad-4262-9a12-3054e08f021e": 0,
+    "61cd96a7-be49-4a12-b208-7046fe86fa75": 1765322879,
+    "f31f11e9-43f9-4538-9c1e-dd32d144de0d": 1765323007,
+    "/home/prei/betterbili/betterbili-landing-studio:1765322880371": 1765322880,
+    "/home/prei/betterbili/betterbili-landing-studio:1765322994338": 1765322994,
+    "/home/prei/betterbili/betterbili-landing-studio:1765323000629": 1765323000,
+    "/home/prei/betterbili/betterbili-landing-studio:1765323087823": 1765323087
   },
-  "updated_at": "2025-12-09T18:00:02+00:00"
+  "updated_at": "2025-12-10T12:00:03+00:00"
 }
