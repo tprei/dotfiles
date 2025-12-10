@@ -3875,7 +3875,12 @@
     "/home/prei/betterbili/betterbili-landing-studio:1765322880371",
     "/home/prei/betterbili/betterbili-landing-studio:1765322994338",
     "/home/prei/betterbili/betterbili-landing-studio:1765323000629",
-    "/home/prei/betterbili/betterbili-landing-studio:1765323087823"
+    "/home/prei/betterbili/betterbili-landing-studio:1765323087823",
+    "bd4c6a31-91ef-4e90-af60-c12ba1f78970",
+    "71ad78f6-ae62-4491-9f28-e05aa2355c77",
+    "/home/prei/betterbili/zhongwen-video:1765369110822",
+    "/home/prei/betterbili/zhongwen-video:1765369115969",
+    "/home/prei/betterbili/zhongwen-video:1765371271098"
   ],
   "dynamic_patterns": [
     {
@@ -7938,7 +7943,12 @@
     "/home/prei/betterbili/betterbili-landing-studio:1765322880371": 1765322880,
     "/home/prei/betterbili/betterbili-landing-studio:1765322994338": 1765322994,
     "/home/prei/betterbili/betterbili-landing-studio:1765323000629": 1765323000,
-    "/home/prei/betterbili/betterbili-landing-studio:1765323087823": 1765323087
+    "/home/prei/betterbili/betterbili-landing-studio:1765323087823": 1765323087,
+    "bd4c6a31-91ef-4e90-af60-c12ba1f78970": 1765369121,
+    "71ad78f6-ae62-4491-9f28-e05aa2355c77": 0,
+    "/home/prei/betterbili/zhongwen-video:1765369110822": 1765369110,
+    "/home/prei/betterbili/zhongwen-video:1765369115969": 1765369115,
+    "/home/prei/betterbili/zhongwen-video:1765371271098": 1765371271
   },
-  "updated_at": "2025-12-10T12:00:03+00:00"
+  "updated_at": "2025-12-10T13:00:02+00:00"
 }
