@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I am trying to implement a new UI for my extension, I have done some work but..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 85 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 86 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "Git Commit: PWA Layout & Changelog Updates"
@@ -19,7 +19,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Git Commit and Changelog Update Complete"
 
 ## 3. Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. 75 session(s) demanded test coverage or reruns.
+- Default to running or adding tests whenever behavior shifts. 76 session(s) demanded test coverage or reruns.
 - If no automated test exists, outline a manual checklist and suggest how to automate it next.
 - Share test commands and results; avoid saying it works without evidence.
 - Example: "even though I built my extension with npm run build:prod it is still hitting ..."
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Chrome Extension Build: Test vs Live Mode Mismatch"
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 270 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 271 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "Let's fix a few things on the extension @zhongwen-video/subtitle-saas/chrome-..."
