@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I am trying to implement a new UI for my extension, I have done some work but..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 70 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 81 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "Git Commit: PWA Layout & Changelog Updates"
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "can you please pull main and rebase these changes? theres some refresh bug th..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 252 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 263 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "Git Commit: PWA Layout & Changelog Updates"
@@ -43,12 +43,12 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "cool but now we need the identity tag because we have google auth, help me ex..."
 
 ## 6. Stay within the correct workspace
-- Confirm target directories before writing—spell out the intended path in your plan. Mentioned in 3 session(s).
+- Confirm target directories before writing—spell out the intended path in your plan. Mentioned in 4 session(s).
 - When unsure, list candidate locations and ask for confirmation instead of guessing.
 - After edits, echo file paths so the user can audit quickly.
+- Example: "I need to create a pull request from the current staging branch to the main b..."
 - Example: "apply these: Yes, the browser **absolutely** tries to cache video, but there ..."
 - Example: "I've implemented everything, see all changes, use repomix as well, ultrathink..."
-- Example: "apply these: Yes, the browser **absolutely** tries to cache video, but there ..."
 
 ## 7. Leverage available tooling proactively
 - Highlight built-in tools before the user prompts you. 28 session(s) reminded Codex to employ local tooling.
@@ -59,12 +59,12 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Git Commit Automation with Changelog Updates"
 
 ## 8. Communicate like a teammate
-- Narrate trade-offs and residual risks instead of silently choosing a path. 3 session(s) asked for clearer communication.
+- Narrate trade-offs and residual risks instead of silently choosing a path. 4 session(s) asked for clearer communication.
 - When blocked, propose concrete next steps for the user instead of stalling.
 - Close the loop by outlining follow-up tasks or open questions at the end of each session.
+- Example: "I need to create a pull request from the current staging branch to the main b..."
 - Example: "I need to commit the current changes in the repository. Based on the git stat..."
 - Example: "Update this issue with our learnings (summarized version), link our md: https..."
-- Example: "Why? I mean this was already all implemented and working before our .ts migra..."
 
 ## 9. Model and runtime transparency
 - Always state the active model name, version, and any notable runtime settings (e.g., max tokens, temperature) when starting or changing tasks
@@ -144,9 +144,9 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 ## 20. Aggressive file pruning and deletions
 - Present a concise candidate deletion list and require explicit user confirmation before removing files, offering a dry-run and size/age filters
 - Move deletions to a timestamped quarantine directory or create compressed backups so recovery is trivial if a mistake occurs
-- Example: "Git Commit Changes with Code Cleanup"
-- Example: "DONT DELETE BRANCH"
+- Example: "Terminal Command Session Cleanup"
 - Example: "Git Commit Cleanup in Watch.tsx"
+- Example: "Git Commit Changes with Code Cleanup"
 
 Regularly revisit this document as new patterns emerge. The automation in this repository will refresh guidance when new sessions highlight fresh themes.
 
