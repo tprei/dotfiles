@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I am trying to implement a new UI for my extension, I have done some work but..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 60 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 64 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "Git Commit: PWA Layout & Changelog Updates"
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "can you please pull main and rebase these changes? theres some refresh bug th..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 238 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 245 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "Git Commit: PWA Layout & Changelog Updates"
@@ -35,12 +35,12 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Pull Request from Staging to Main"
 
 ## 5. Minimize approval churn
-- Bundle related commands to reduce repetitive approval requests. 27 session(s) flagged approval fatigue.
+- Bundle related commands to reduce repetitive approval requests. 28 session(s) flagged approval fatigue.
 - Cite why elevated permissions are needed; suggest safe, sandboxed alternatives when possible.
 - Reuse previously granted permissions if policy allows instead of re-requesting reflexively.
+- Example: "<bash-stdout>commit 7bb058e4b9a815f41a16549473e1869f6f64ea4c Author: tprei <t..."
 - Example: "Here is the implementation specification for the coding agent. ````markdown #..."
 - Example: "cool but now we need the identity tag because we have google auth, help me ex..."
-- Example: "Chrome Extension Permission Justifications"
 
 ## 6. Stay within the correct workspace
 - Confirm target directories before writing—spell out the intended path in your plan. Mentioned in 3 session(s).
@@ -75,8 +75,8 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 ## 10. Large-file reading strategy
 - Detect file size and explicitly propose chunking, summaries, or streaming reads before attempting to ingest the entire file
 - Offer a clear plan: extract key sections first, provide progressive summarization, and give commands the user can run to fetch larger slices if needed
-- Example: "Git Commit Agent Streamlines API Config"
 - Example: "Video Player PR: Multi-Format Streaming Commit"
+- Example: "Git Commit Agent Streamlines API Config"
 - Example: "Git Commit Special: Video Streaming & Layout"
 
 ## 11. Meta-tool-output parsing
@@ -90,7 +90,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Collect and catalog referenced screenshots and competitor examples, then create a short visual spec or wireframe before changing code
 - Propose concrete UI changes (layout rules, CSS adjustments, responsive constraints) plus a small visual prototype and acceptance criteria to validate similarity without copying
 - Example: "The "stupid" look in the screenshot is caused by a layout issue where the inn..."
-- Example: "The styling in channel / space page is completely broken now, check out @scre..."
+- Example: "<bash-stdout>commit 7bb058e4b9a815f41a16549473e1869f6f64ea4c Author: tprei <t..."
 - Example: "The styling in channel / space page is completely broken now, check out @scre..."
 
 ## 13. Generated-bundle vs source confusion
@@ -103,23 +103,23 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 ## 14. Environment and secret leakage
 - Scan session logs for environment variables and token-like values, mask or flag them, and warn the user about potential secrets exposure
 - Recommend and offer commands to safely rotate or remove leaked secrets and to sanitize logs before sharing
+- Example: "<bash-stdout>commit 7bb058e4b9a815f41a16549473e1869f6f64ea4c Author: tprei <t..."
 - Example: "apply these: Yes, the browser **absolutely** tries to cache video, but there ..."
 - Example: "I need to commit the current changes to git. Based on the git status, there a..."
-- Example: "I need to commit the current changes and update changelogs. Please: 1. First,..."
 
 ## 15. Preference persistence and status
 - Confirm and record session-level preferences when the user sets them and provide a short status command to re-show current preferences
 - Proactively mention which choices are temporary vs persisted and how to change or reset them
 - Example: "<bash-stdout></bash-stdout><bash-stderr>From github.com:tprei/betterbili-land..."
 - Example: "Analyze the current git status and changes to create an appropriate commit wi..."
-- Example: "I have changes to commit in the betterbili-landing-studio repository. Please ..."
+- Example: "I need to commit the current changes in the betterbili-landing-studio reposit..."
 
 ## 16. Clarify vague designer-driven requests
 - Ask focused clarification questions (target breakpoints, accessibility needs, exact elements to mimic) and offer 2–3 constrained design variants with tradeoffs
 - Define measurable acceptance criteria (pixel tolerances, component sizes, overflow behavior) before making UI changes
+- Example: "<bash-stdout>commit 7bb058e4b9a815f41a16549473e1869f6f64ea4c Author: tprei <t..."
 - Example: "Heres a straight review of your implementation plan, phase by phase, plus a f..."
 - Example: "Claude Code v2.0.45 glm-4.6 API Usage Billing /home/prei/betterbili/zhongwen-..."
-- Example: "````markdown # Billing / Stripe Mode Refactor Spec Owner: Backend / Supabase ..."
 
 ## 17. Agent registry introspection
 - When a project lists custom agents/tools, summarize available agents and recommend one or two with a brief justification for the current task
@@ -145,7 +145,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Move deletions to a timestamped quarantine directory or create compressed backups so recovery is trivial if a mistake occurs
 - Example: "Git Commit Changes with Code Cleanup"
 - Example: "DONT DELETE BRANCH"
-- Example: "Please analyze the current git status and create an appropriate commit with c..."
+- Example: "Git commit cleanup and push"
 
 Regularly revisit this document as new patterns emerge. The automation in this repository will refresh guidance when new sessions highlight fresh themes.
 
