@@ -11,12 +11,12 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I am trying to implement a new UI for my extension, I have done some work but..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 64 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 70 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "Git Commit: PWA Layout & Changelog Updates"
 - Example: "Git Commit Changes and Changelog Update"
-- Example: "Home.tsx Pagination Commit & Changelog Update"
+- Example: "Analyze the current git status and create an appropriate commit with changelo..."
 
 ## 3. Build verification into the loop
 - Default to running or adding tests whenever behavior shifts. 56 session(s) demanded test coverage or reruns.
@@ -27,12 +27,12 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "can you please pull main and rebase these changes? theres some refresh bug th..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 245 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 252 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "Git Commit: PWA Layout & Changelog Updates"
 - Example: "Git Commit Changes and Changelog Update"
-- Example: "Pull Request from Staging to Main"
+- Example: "Analyze the current git status and create an appropriate commit with changelo..."
 
 ## 5. Minimize approval churn
 - Bundle related commands to reduce repetitive approval requests. 28 session(s) flagged approval fatigue.
@@ -59,9 +59,10 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "Git Commit Automation with Changelog Updates"
 
 ## 8. Communicate like a teammate
-- Narrate trade-offs and residual risks instead of silently choosing a path. 2 session(s) asked for clearer communication.
+- Narrate trade-offs and residual risks instead of silently choosing a path. 3 session(s) asked for clearer communication.
 - When blocked, propose concrete next steps for the user instead of stalling.
 - Close the loop by outlining follow-up tasks or open questions at the end of each session.
+- Example: "I need to commit the current changes in the repository. Based on the git stat..."
 - Example: "Update this issue with our learnings (summarized version), link our md: https..."
 - Example: "Why? I mean this was already all implemented and working before our .ts migra..."
 
@@ -110,9 +111,9 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 ## 15. Preference persistence and status
 - Confirm and record session-level preferences when the user sets them and provide a short status command to re-show current preferences
 - Proactively mention which choices are temporary vs persisted and how to change or reset them
+- Example: "Analyze the current git status and create an appropriate commit with changelo..."
 - Example: "<bash-stdout></bash-stdout><bash-stderr>From github.com:tprei/betterbili-land..."
 - Example: "Analyze the current git status and changes to create an appropriate commit wi..."
-- Example: "I need to commit the current changes in the betterbili-landing-studio reposit..."
 
 ## 16. Clarify vague designer-driven requests
 - Ask focused clarification questions (target breakpoints, accessibility needs, exact elements to mimic) and offer 2–3 constrained design variants with tradeoffs
@@ -145,7 +146,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Move deletions to a timestamped quarantine directory or create compressed backups so recovery is trivial if a mistake occurs
 - Example: "Git Commit Changes with Code Cleanup"
 - Example: "DONT DELETE BRANCH"
-- Example: "Git commit cleanup and push"
+- Example: "Git Commit Cleanup in Watch.tsx"
 
 Regularly revisit this document as new patterns emerge. The automation in this repository will refresh guidance when new sessions highlight fresh themes.
 
