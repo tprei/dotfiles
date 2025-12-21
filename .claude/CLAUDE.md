@@ -11,7 +11,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "I am trying to implement a new UI for my extension, I have done some work but..."
 
 ## 2. Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. 87 session(s) explicitly requested docs or READMEs.
+- Treat documentation as a first-class deliverable. 88 session(s) explicitly requested docs or READMEs.
 - Provide contextual summaries with every change: why, what, and how to validate.
 - When adding or modifying tooling, append usage notes or examples for the next agent.
 - Example: "Git Commit: PWA Layout & Changelog Updates"
@@ -27,7 +27,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Example: "can you please pull main and rebase these changes? theres some refresh bug th..."
 
 ## 4. Be deliberate with commits and PRs
-- Keep commits scoped and narrated. 269 session(s) asked for clearer commits or change descriptions.
+- Keep commits scoped and narrated. 270 session(s) asked for clearer commits or change descriptions.
 - Stage only relevant files, double-check paths, and mention side effects.
 - Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
 - Example: "Git Commit: PWA Layout & Changelog Updates"
@@ -119,8 +119,8 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - Ask focused clarification questions (target breakpoints, accessibility needs, exact elements to mimic) and offer 2–3 constrained design variants with tradeoffs
 - Define measurable acceptance criteria (pixel tolerances, component sizes, overflow behavior) before making UI changes
 - Example: "<bash-stdout>commit 7bb058e4b9a815f41a16549473e1869f6f64ea4c Author: tprei <t..."
+- Example: "I need to create a commit for changes made to the supabase/functions/analyze-..."
 - Example: "Heres a straight review of your implementation plan, phase by phase, plus a f..."
-- Example: "Claude Code v2.0.45 glm-4.6 API Usage Billing /home/prei/betterbili/zhongwen-..."
 
 ## 17. Agent registry introspection
 - When a project lists custom agents/tools, summarize available agents and recommend one or two with a brief justification for the current task
