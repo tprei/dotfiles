@@ -46,5 +46,8 @@
   },
   "feedbackSurveyState": {
     "lastShownTime": 1753994647675
+  },
+  "enabledPlugins": {
+    "repomix-mcp@repomix": true
   }
 }
