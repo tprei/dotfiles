@@ -113,3 +113,5 @@ export PATH=$HOME/chrome-linux64:$PATH
 
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 export PATH="$(npm bin -g):$PATH"
+
+alias commit='claude -p "/commit"'
