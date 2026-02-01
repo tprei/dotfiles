@@ -97,6 +97,7 @@ Regularly revisit this document as new patterns emerge. The automation in this r
 
 <!-- manual-claude-guidance:start -->
 
+- Always look at content as a whole, never ever take code out of context. Use repomix to package code neatly. If code is way too large, then use compress=true in repomix. Try to get exactly the files you need to package
 - Use context7 for context
 - Always write .MD plan/todo files to separate folder. If docs already exists, write it there, otherwise create one
 - After you make significant changes, always engage the git commit specialist agent
