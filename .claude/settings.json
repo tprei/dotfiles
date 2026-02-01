@@ -15,7 +15,12 @@
   "includeCoAuthoredBy": false,
   "permissions": {
     "allow": [
-      "mcp__serena__*"
+      "mcp__serena__*",
+      "Grep*",
+      "Glob*",
+      "Read*",
+      "mcp__repomix__*",
+      "Search*"
     ]
   },
   "model": "glm-4.6",
