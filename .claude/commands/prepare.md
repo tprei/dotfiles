@@ -6,6 +6,15 @@ description: Package relevant code context using two-pass repomix
 ## Purpose
 Automatically package relevant code context using a two-pass repomix strategy for efficient codebase analysis.
 
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| scope | string | No | Short description of what the bundle is for (e.g., "authentication refactor", "add payment flow") |
+
+If no scope is provided, prompt: "Briefly describe the scope of this bundle (e.g., 'fixing login bug', 'adding user settings'):"
+Store the scope description for use in LLM queries and final output.
+
 ## Execution Flow
 
 ### Pass 0: Check for existing bundle
@@ -60,12 +69,15 @@ For each entry point:
 - Go: `**/*_types.go`, `**/types.go`
 
 #### LLM-assisted discovery
-Query the discovery pack with: "For these entry points, list domain neighbors and shared utilities that are relevant. Exclude test files and changelogs."
+Query the discovery pack with scope context:
+"For these entry points, list domain neighbors and shared utilities that are relevant for: **{scope}**. Exclude test files and changelogs."
 
 ### Pass 4: Present candidates
-Display findings in format:
+Display findings with scope context:
 
 ```
+Bundle scope: {scope}
+
 Candidate files for context packaging:
 
 Entry points:
@@ -96,6 +108,8 @@ Construct includePatterns from confirmed files. Run `mcp__repomix__pack_codebase
 
 Attach output to session using `mcp__repomix__attach_packed_output`.
 
+Report: "Bundle attached for scope: {scope} ({N} files)"
+
 ## Language Auto-Detection
 
 Detect primary language from entry point extensions and apply corresponding test/type patterns:
@@ -116,6 +130,6 @@ Detect primary language from entry point extensions and apply corresponding test
 
 ## Exit Conditions
 
-- Success: Bundle attached, report file count and output path
+- Success: Bundle attached, report file count, output path, and scope
 - Skipped: Existing bundle detected or user aborted
 - Error: Invalid entry point, repomix failure (report stderr)
