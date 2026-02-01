@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Incrementally analyze Codex session history and refresh AGENTS.md guidance."""
+"""Incrementally analyze Claude session history and refresh CLAUDE.md guidance."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ except ImportError:
                 if line and not line.startswith('#') and '=' in line:
                     key, value = line.split('=', 1)
                     os.environ[key.strip()] = value.strip()
-        print(f"Loaded environment from .env file, CODEX_PATTERN_CLAUDE_MODEL={os.environ.get('CODEX_PATTERN_CLAUDE_MODEL', 'NOT_SET')}")
+        print(f"Loaded environment from .env file, PATTERN_CLAUDE_MODEL={os.environ.get('CODEX_PATTERN_CLAUDE_MODEL', 'NOT_SET')}")
     else:
         print("No .env file found")
 
@@ -49,11 +49,10 @@ def resolve_workspace_path(path: Path) -> Path:
     return (SCRIPT_ROOT / path).resolve()
 
 
-DEFAULT_HISTORY_PATH = Path.home() / ".codex" / "history.jsonl"
-DEFAULT_STATE_PATH = Path("automation_state.json")
-DEFAULT_CODEX_PATH = Path("AGENTS.md")
-DEFAULT_CLAUDE_DOC_PATH = Path("..") / ".claude" / "CLAUDE.md"
-DEFAULT_CLAUDE_STATE_PATH = Path("..") / ".claude" / "automation_state.json"
+DEFAULT_CLAUDE_PROJECTS_PATH = Path.home() / ".claude" / "projects"
+DEFAULT_CLAUDE_TOP_HISTORY_PATH = Path.home() / ".claude" / "history.jsonl"
+DEFAULT_CLAUDE_STATE_PATH = Path(".claude" / "automation_state.json")
+DEFAULT_CLAUDE_DOC_PATH = Path(".claude" / "CLAUDE.md")
 DEFAULT_CLAUDE_PROJECTS_PATH = Path.home() / ".claude" / "projects"
 DEFAULT_CLAUDE_TOP_HISTORY_PATH = Path.home() / ".claude" / "history.jsonl"
 DEFAULT_AUTOMATION_BRANCH = "claude/pattern-updates"
@@ -245,7 +244,7 @@ STATIC_PATTERNS: Sequence[Pattern] = (
             "use pydoll",
         ),
         bullets=(
-            "Highlight built-in tools before the user prompts you. {count} session(s) reminded Codex to employ local tooling.",
+            "Highlight built-in tools before the user prompts you.",
             "Prefer existing scripts or automation hooks over ad-hoc commands; update or create helpers when they are missing.",
             "Cache learnings: when you discover an effective workflow, note it for future runs.",
         ),
@@ -325,24 +324,6 @@ class AgentRunResult:
 
 
 DEFAULT_AGENT_CONFIGS: Dict[str, AgentConfig] = {
-    "codex": AgentConfig(
-        key="codex",
-        history_loader="codex",
-        history_path=DEFAULT_HISTORY_PATH,
-        state_path=DEFAULT_STATE_PATH,
-        output_path=DEFAULT_CODEX_PATH,
-        doc_title="Codex Improvement Guidelines",
-        doc_intro=(
-            "Codex acts as an autonomous coding partner. The notes below distill common "
-            "issues spotted across past sessions in `~/.codex/history.jsonl` and turn "
-            "them into guardrails that apply to any repo."
-        ),
-        callout_header="# Callouts",
-        static_callouts=STATIC_CALLOUTS,
-        manual_section=None,
-        branch=DEFAULT_AUTOMATION_BRANCH,
-        base_branch=DEFAULT_BASE_BRANCH,
-    ),
     "claude": AgentConfig(
         key="claude",
         history_loader="claude",
@@ -351,8 +332,7 @@ DEFAULT_AGENT_CONFIGS: Dict[str, AgentConfig] = {
         output_path=DEFAULT_CLAUDE_DOC_PATH,
         doc_title="Claude Improvement Guidelines",
         doc_intro=(
-            "Claude acts as an autonomous coding partner alongside Codex. The notes below "
-            "distill recurrent themes from local Claude sessions (captured under "
+            "The notes below distill recurrent themes from local Claude sessions (captured under "
             "`~/.claude/projects`) so future runs follow the same guardrails."
         ),
         callout_header="# Callouts",
@@ -486,220 +466,13 @@ def discover_patterns_with_llm(
     repo_root: Optional[Path],
     force_dynamic: bool = False,
 ) -> List[Pattern]:
-    provider = os.environ.get("CODEX_PATTERN_PROVIDER", DEFAULT_LLM_PROVIDER).lower()
-    if provider in ("claude", "openai"):
-        return discover_patterns_with_claude(
-            sessions,
-            session_ids,
-            existing_titles,
-            capacity,
-            force_dynamic,
-        )
-
-    if capacity <= 0 or not session_ids:
-        return []
-
-    codex_bin = shutil.which("codex")
-    if codex_bin is None:
-        print("LLM discovery skipped: codex CLI not available.")
-        return []
-
-    excerpts = summarize_sessions_for_prompt(sessions, session_ids[:10])
-    if not excerpts:
-        return []
-
-    existing_titles_text = ", ".join(existing_titles) if existing_titles else "None"
-
-    # Dynamic discovery mode - look for truly novel themes
-    if force_dynamic or ENABLE_DYNAMIC_DISCOVERY:
-        prompt = textwrap.dedent(
-            f"""
-            You are analyzing new coding agent sessions to discover emerging themes and patterns.
-            Existing patterns: {existing_titles_text}
-
-            Review the session excerpts below and identify up to {capacity} NOVEL themes or recurring issues that:
-            1. Are NOT well-covered by existing patterns above
-            2. Represent genuine emerging behaviors, challenges, or opportunities
-            3. Could evolve into new guidance categories over time
-
-            Prioritize truly novel insights over minor variations of existing patterns. If no new themes exist, return an empty array.
-
-            Respond with a JSON array (no extra text) where each element has:
-            - "title": short descriptive theme title (max 7 words)
-            - "summary": one-sentence explanation of the new theme/issue
-            - "guidance": array of 2-3 actionable best-practice bullets for the agent (present tense)
-            - "keywords": array of 3-6 lowercase keywords to detect similar cases
-            - "novelty_score": number 1-10 indicating how novel this theme is compared to existing patterns
-
-            Session excerpts:
-            {excerpts}
-
-            Return only the JSON array.
-            """
-        ).strip()
-    else:
-        # Original pattern matching mode
-        prompt = textwrap.dedent(
-            f"""
-            You are maintaining a set of improvement patterns for the Codex coding agent. Existing patterns are: {existing_titles_text}.
-            Review the new session excerpts below and propose up to {capacity} additional patterns that capture recurring issues not already addressed.
-
-            Respond with a JSON array (no extra text) where each element has:
-            - "title": short descriptive pattern title (max 7 words)
-            - "summary": one-sentence explanation of the issue/opportunity
-            - "guidance": array of 2-3 actionable best-practice bullets for Codex (present tense)
-            - "keywords": array of 3-6 lowercase keywords to detect similar cases
-
-            Session excerpts:
-            {excerpts}
-
-            Return only the JSON array.
-            """
-        ).strip()
-
-    env = os.environ.copy()
-
-    # Ensure the Codex CLI writes any session artifacts inside the workspace so it
-    # stays within sandbox permissions (writing to $HOME/.codex fails here).
-    workspace_root = Path(__file__).resolve().parent.parent
-    if not workspace_root.exists():
-        workspace_root = Path.cwd()
-    codex_home = env.get("CODEX_HOME")
-    if codex_home:
-        codex_home_path = Path(codex_home)
-    else:
-        codex_home_path = workspace_root / ".codex_cli"
-        try:
-            codex_home_path.mkdir(parents=True, exist_ok=True)
-        except Exception as exc:
-            print(f"Warning: could not create CODEX_HOME at {codex_home_path}: {exc}")
-        env["CODEX_HOME"] = str(codex_home_path)
-
-    rollout_dir_value = env.get("CODEX_ROLLOUT_DIR")
-    if rollout_dir_value:
-        rollout_dir = Path(rollout_dir_value)
-    else:
-        rollout_dir = Path(env.get("CODEX_HOME", workspace_root)) / "rollouts"
-        try:
-            rollout_dir.mkdir(parents=True, exist_ok=True)
-        except Exception as exc:
-            print(f"Warning: could not create rollout directory at {rollout_dir}: {exc}")
-        env["CODEX_ROLLOUT_DIR"] = str(rollout_dir)
-
-    sandbox_mode = env.get("CODEX_PATTERN_SANDBOX", "workspace-write")
-    approval_mode = env.get("CODEX_PATTERN_APPROVAL", "never")
-    working_dir = str(repo_root or Path.cwd())
-
-    command: List[str] = [
-        codex_bin,
-        "-a",
-        approval_mode,
-        "exec",
-        "--sandbox",
-        sandbox_mode,
-        "--cd",
-        working_dir,
-    ]
-
-    if (
-        sandbox_mode == "workspace-write"
-        and env.get("CODEX_PATTERN_DISABLE_NETWORK_CONFIG", "0").lower()
-        not in {"1", "true", "yes"}
-    ):
-        command.extend(["-c", "sandbox_workspace_write.network_access=true"])
-
-    command.append(prompt)
-
-    try:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            env=env,
-            timeout=120,
-        )
-    except Exception as exc:
-        print(f"LLM discovery skipped: {exc}")
-        return []
-
-    if result.returncode != 0:
-        error_text = result.stderr.strip() or result.stdout.strip()
-        print("LLM discovery skipped: command failed", error_text)
-        lowered = error_text.lower()
-        if "permission denied" in lowered and "rollout" in lowered:
-            print(
-                "Hint: Codex CLI could not write rollout data. Set CODEX_HOME to a"
-                " writable directory or let the updater manage it."
-            )
-        elif "error sending request" in lowered:
-            print(
-                "Hint: Codex CLI could not reach the OpenAI API. Confirm network"
-                " access before rerunning."
-            )
-        snippet = (result.stdout or "").strip()
-        if snippet:
-            preview = truncate_text(snippet, 400)
-            print(f"Codex CLI output (truncated): {preview}")
-        return []
-
-    combined_lower = f"{result.stdout}\n{result.stderr}".lower()
-    if "error sending request" in combined_lower:
-        print(
-            "LLM discovery skipped: Codex CLI could not reach the OpenAI API."
-            " Confirm network access before rerunning."
-        )
-        return []
-
-    parsed = parse_json_array(result.stdout)
-    if not parsed:
-        print("LLM discovery returned no parsable JSON.")
-        snippet = (result.stdout or "").strip()
-        if snippet:
-            preview = truncate_text(snippet, 400)
-            print(f"Codex CLI output (truncated): {preview}")
-        return []
-
-    patterns: List[Pattern] = []
-    existing = {title.lower() for title in existing_titles}
-    seen_titles: set[str] = set()
-    for entry in parsed:
-        if len(patterns) >= capacity:
-            break
-        title = str(entry.get("title", "")).strip()
-        if not title or title.lower() in existing or title.lower() in seen_titles:
-            continue
-        summary = str(entry.get("summary", "")).strip()
-        guidance = entry.get("guidance", []) or ([summary] if summary else [])
-        guidance_lines = [truncate_text(str(item).strip(), 180) for item in guidance if str(item).strip()]
-        if not guidance_lines:
-            continue
-        keywords = [truncate_text(str(k).lower().strip(), 40) for k in entry.get("keywords", [])]
-        if not keywords:
-            continue
-
-        # In dynamic mode, prioritize patterns with higher novelty scores
-        novelty_score = entry.get("novelty_score", 5)  # Default to 5 if not provided
-        if force_dynamic or ENABLE_DYNAMIC_DISCOVERY:
-            if novelty_score < 3:  # Skip low novelty patterns in dynamic mode
-                print(f"Skipping low novelty pattern '{title}' (score: {novelty_score})")
-                continue
-
-        identifier = f"dynamic-{slugify(title)}"
-        bullets = tuple(guidance_lines[:3])
-        pattern = Pattern(
-            identifier=identifier,
-            title=title,
-            keywords=tuple(keywords[:6]),
-            bullets=bullets,
-        )
-        patterns.append(pattern)
-        seen_titles.add(title.lower())
-
-        # Log novelty information for dynamic patterns
-        if force_dynamic or ENABLE_DYNAMIC_DISCOVERY:
-            print(f"Added dynamic pattern '{title}' with novelty score {novelty_score}")
-
-    return patterns
+    return discover_patterns_with_claude(
+        sessions,
+        session_ids,
+        existing_titles,
+        capacity,
+        force_dynamic,
+    )
 
 
 def make_request_with_retry(endpoint: str, request_json: bytes, headers: Dict[str, str], max_retries: int = 3) -> Optional[str]:
@@ -752,7 +525,7 @@ def call_openai_api_directly(
     existing_titles: Sequence[str],
     capacity: int,
 ) -> List[Pattern]:
-    """Call OpenAI API directly without going through Codex CLI."""
+    """Call OpenAI API directly."""
 
     # GPT-5 and newer models use max_completion_tokens instead of max_tokens
     max_tokens_param = "max_completion_tokens" if model.startswith("gpt-5") else "max_tokens"
@@ -944,30 +717,7 @@ def discover_patterns_with_claude(
     top_p = env.get("CODEX_PATTERN_CLAUDE_TOP_P")
     top_p_value = float(top_p) if top_p is not None else None
 
-    # Call OpenAI API directly instead of using Codex CLI
     return call_openai_api_directly(prompt, model, api_key, max_tokens, temperature, top_p_value, existing_titles, capacity)
-
-
-def load_codex_history(path: Path) -> Dict[str, List[Dict[str, object]]]:
-    sessions: Dict[str, List[Dict[str, object]]] = defaultdict(list)
-    if not path.exists():
-        raise FileNotFoundError(f"History file not found: {path}")
-    with path.open("r", encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
-                continue
-            entry = json.loads(line)
-            session_id = entry["session_id"]
-            sessions[session_id].append(
-                {
-                    "ts": entry.get("ts", 0),
-                    "text": sanitize_text(entry.get("text", "")),
-                }
-            )
-    for message_list in sessions.values():
-        message_list.sort(key=lambda item: item.get("ts") or 0)
-    return sessions
 
 
 def _normalize_timestamp(raw: object) -> int:
@@ -1372,15 +1122,14 @@ def process_agent(
     branch_name = branch or agent.branch
     base_branch_name = base_branch or agent.base_branch
 
-    if agent.history_loader == "codex":
-        history_source = history_path or agent.history_path
-        sessions = load_codex_history(history_source)
-    elif agent.history_loader == "claude":
+    if agent.history_loader == "claude":
         projects_root = history_path or agent.history_path
         top_history_path = claude_top_history or DEFAULT_CLAUDE_TOP_HISTORY_PATH
         sessions = load_claude_history(projects_root, top_history_path)
     else:
         raise ValueError(f"Unsupported history loader: {agent.history_loader}")
+
+    state = load_state(resolved_state_path)
 
     state = load_state(resolved_state_path)
     session_progress: Dict[str, int] = {
@@ -1633,7 +1382,7 @@ def build_pr_body_multi(results: Sequence[AgentRunResult]) -> str:
     if len(results) == len(DEFAULT_AGENT_CONFIGS):
         dry_run_flag = "--agent all"
     else:
-        dry_run_flag = " ".join(f"--agent {result.agent.key}" for result in results) or "--agent codex"
+        dry_run_flag = " ".join(f"--agent {result.agent.key}" for result in results) or "--agent claude"
 
     body = f"""
 ## Summary
@@ -1649,7 +1398,7 @@ def build_pr_body_multi(results: Sequence[AgentRunResult]) -> str:
 {"\\n".join(updated_sessions_lines)}
 
 ## Testing
-- scripts/codex_pattern_updater.py --dry-run {dry_run_flag}
+- scripts/claude_pattern_updater.py --dry-run {dry_run_flag}
 """
     return textwrap.dedent(body).strip() + "\n"
 
@@ -1753,14 +1502,8 @@ if __name__ == "__main__":
         "--agent",
         action="append",
         choices=[*DEFAULT_AGENT_CONFIGS.keys(), "all"],
-        help="Agent(s) to process (defaults to codex). Repeat to specify multiple or use 'all'.",
+        help="Agent(s) to process (defaults to claude). Repeat to specify multiple or use 'all'.",
     )
-    parser.add_argument("--history", type=Path, help="Override Codex history.jsonl path")
-    parser.add_argument("--state", type=Path, help="Override Codex automation state path")
-    parser.add_argument("--codex", type=Path, help="Override Codex guidance output path")
-    parser.add_argument("--codex-history", type=Path, help="Alias for --history")
-    parser.add_argument("--codex-state", type=Path, help="Alias for --state")
-    parser.add_argument("--codex-output", type=Path, help="Alias for --codex")
     parser.add_argument("--claude-projects", type=Path, help="Override Claude projects directory")
     parser.add_argument(
         "--claude-history",
@@ -1775,7 +1518,7 @@ if __name__ == "__main__":
     parser.add_argument("--base-branch", help="Base branch for PRs overriding defaults")
     args = parser.parse_args()
 
-    selected = args.agent or ["codex"]
+    selected = args.agent or ["claude"]
     if "all" in selected:
         agent_keys = list(DEFAULT_AGENT_CONFIGS.keys())
     else:
@@ -1789,10 +1532,6 @@ if __name__ == "__main__":
                 agent_keys.append(key)
 
     overrides: Dict[str, Dict[str, Optional[Path]]] = {key: {} for key in agent_keys}
-    if "codex" in overrides:
-        overrides["codex"]["history_path"] = args.codex_history or args.history
-        overrides["codex"]["state_path"] = args.codex_state or args.state
-        overrides["codex"]["output_path"] = args.codex_output or args.codex
     if "claude" in overrides:
         overrides["claude"]["history_path"] = args.claude_projects
         overrides["claude"]["claude_top_history"] = args.claude_history

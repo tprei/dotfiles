@@ -1,6 +1,6 @@
 # Claude Improvement Guidelines
 
-Claude acts as an autonomous coding partner alongside Codex. The notes below distill recurrent themes from local Claude sessions (captured under `~/.claude/projects`) so future runs follow the same guardrails.
+The notes below distill recurrent themes from local Claude sessions (captured under `~/.claude/projects`) so future runs follow the same guardrails.
 
 ## 1. Shape the work before touching files
 - Always produce an explicit plan and confirm scope before editing. 17 session(s) asked for more upfront reasoning.
@@ -32,7 +32,7 @@ Claude acts as an autonomous coding partner alongside Codex. The notes below dis
 - After edits, echo file paths so the user can audit quickly.
 
 ## 7. Leverage available tooling proactively
-- Highlight built-in tools before the user prompts you. 28 session(s) reminded Codex to employ local tooling.
+- Highlight built-in tools before the user prompts you.
 - Prefer existing scripts or automation hooks over ad-hoc commands; update or create helpers when they are missing.
 - Cache learnings: when you discover an effective workflow, note it for future runs.
 
