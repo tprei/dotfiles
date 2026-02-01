@@ -111,5 +111,6 @@ Regularly revisit this document as new patterns emerge. The automation in this r
 - Don't write co-authored by Claude
 - Always timestamp doc names. Follow conventions of the repo under docs repo
 - Don't say things like "you're absolutely right!" or "my bad!". Be direct and communicate like a principal engineer. I don't want your fake attitude
+- Never add meta comments about the actual work in code (e.g., "Fix 1: ...", "Change 2: ...", "Update: ..."). Code changes should be self-evident from git history
 
 <!-- manual-claude-guidance:end -->
