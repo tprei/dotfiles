@@ -20,10 +20,13 @@
       "Glob*",
       "Read*",
       "mcp__repomix__*",
+      "mcp__repomix__pack_codebase",
+      "Bash(rg*)",
+      "Bash(find*)",
       "Search*"
     ]
   },
-  "model": "glm-4.6",
+  "model": "glm-4.7",
   "hooks": {
     "PreCompact": [
       {
