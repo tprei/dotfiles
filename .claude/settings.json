@@ -1,11 +1,11 @@
 {
   "env": {
-    "ANTHROPIC_AUTH_TOKEN": "277a4b23ba2643b0b1742f866448e17d.Cm0GgmGD1uR5JyxU",
+    "ANTHROPIC_AUTH_TOKEN": "3abc9a1daf1c4ab582e77e12f3524bff.7mMd7ElEdUJcmlZL",
     "ANTHROPIC_BASE_URL": "https://api.z.ai/api/anthropic",
     "API_TIMEOUT_MS": "10000000",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-4.5-air",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-4.6",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-4.6",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-4.7",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-4.7",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-4.7",
     "MAX_THINKING_TOKENS": "200000",
     "ENABLE_STREAMING": "true",
     "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "264000",
@@ -36,7 +36,6 @@
     "type": "command",
     "command": "printf \"\\033[01;32m%s@%s\\033[00m:\\033[01;34m%s\\033[00m\" \"$(whoami)\" \"$(hostname -s)\" \"$(pwd)\""
   },
-  "alwaysThinkingEnabled": false,
   "feedbackSurveyState": {
     "lastShownTime": 1753994647675
   }
