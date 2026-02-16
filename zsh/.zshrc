@@ -115,3 +115,7 @@ eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 export PATH="$(npm bin -g):$PATH"
 
 alias commit='claude -p "/commit"'
+
+# Added by flyctl installer
+export FLYCTL_INSTALL="/home/diyage/.fly"
+export PATH="$FLYCTL_INSTALL/bin:$PATH"

@@ -1,0 +1,73 @@
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "3abc9a1daf1c4ab582e77e12f3524bff.7mMd7ElEdUJcmlZL",
+    "ANTHROPIC_BASE_URL": "https://api.z.ai/api/anthropic",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-4.7",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-4.7",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-4.7",
+    "API_TIMEOUT_MS": "10000000",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "264000",
+    "DISABLE_COST_WARNINGS": "1",
+    "ENABLE_STREAMING": "true",
+    "MAX_MCP_OUTPUT_TOKENS": "264000",
+    "MAX_THINKING_TOKENS": "200000"
+  },
+  "includeCoAuthoredBy": false,
+  "permissions": {
+    "allow": [
+      "mcp__serena__*",
+      "Grep*",
+      "Glob*",
+      "Read*",
+      "mcp__repomix__*",
+      "mcp__repomix__pack_codebase",
+      "Bash(rg*)",
+      "Bash(find*)",
+      "Search*"
+    ]
+  },
+  "model": "GLM-5",
+  "hooks": {
+    "PreCompact": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude -p \"If you believe current changes can be compacted into a commit, use the git commit specialist to store changes and update changelogs. Otherwise do nothing\" --allowedTools \"Bash(git ls-files:*), Bash(rg:*), Bash(git:*), WebSearch, mcp__repomix__pack_codebase, mcp__repomix__pack_remote_repository, mcp__repomix__attach_packed_output, mcp__repomix__read_repomix_output, mcp__repomix__grep_repomix_output, mcp__repomix__file_system_read_file, mcp__repomix__file_system_read_directory\""
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bd prime"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bd prime"
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "printf \"\\033[01;32m%s@%s\\033[00m:\\033[01;34m%s\\033[00m\" \"$(whoami)\" \"$(hostname -s)\" \"$(pwd)\""
+  },
+  "enabledPlugins": {
+    "repomix-mcp@repomix": true
+  },
+  "feedbackSurveyState": {
+    "lastShownTime": 1753994647675
+  }
+}
