@@ -2,6 +2,7 @@
 name: technical-architect
 description: Use this agent when you need to plan and architect technical solutions before implementation. This includes breaking down complex features, designing system architecture, planning refactoring efforts, or creating implementation roadmaps. Examples: <example>Context: User wants to add a new feature to process video subtitles with multiple language support. user: 'I want to add support for processing Japanese videos with romaji transliteration' assistant: 'I'll use the technical-architect agent to plan this feature implementation' <commentary>Since this requires planning a complex feature with multiple components (video processing, language detection, transliteration), use the technical-architect agent to create a comprehensive implementation plan.</commentary></example> <example>Context: User is facing performance issues and needs to plan optimization strategy. user: 'The video processing is taking too long, we need to optimize it' assistant: 'Let me use the technical-architect agent to analyze and plan the optimization approach' <commentary>Performance optimization requires systematic planning and analysis, making this perfect for the technical-architect agent.</commentary></example>
 model: opus
+thinking: high
 color: blue
 ---
 

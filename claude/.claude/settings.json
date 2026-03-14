@@ -69,15 +69,6 @@
   "hooks": {
     "PreCompact": [
       {
-        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "claude -p \"If you believe current changes can be compacted into a commit, use the git commit specialist to store changes and update changelogs. Otherwise do nothing\" --allowedTools \"Bash(git ls-files:*), Bash(rg:*), Bash(git:*), WebSearch, mcp__repomix__pack_codebase, mcp__repomix__pack_remote_repository, mcp__repomix__attach_packed_output, mcp__repomix__read_repomix_output, mcp__repomix__grep_repomix_output, mcp__repomix__file_system_read_file, mcp__repomix__file_system_read_directory\""
-          }
-        ]
-      },
-      {
         "matcher": "",
         "hooks": [
           {
@@ -95,6 +86,11 @@
             "type": "command",
             "command": "npx tsx /home/prei/scripts/telegram-notify/src/notify.ts",
             "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "claude --model claude-haiku-4-5-20251001 -p \"Check git status. If there are unstaged or staged changes that look like a complete unit of work (feature, fix, refactor), commit them with a conventional commit message. If changes look incomplete or there's nothing meaningful, do nothing.\" --allowedTools \"Bash(git status:*),Bash(git diff:*),Bash(git add:*),Bash(git commit:*)\"",
+            "timeout": 30
           }
         ]
       }
