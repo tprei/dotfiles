@@ -1,10 +1,10 @@
 {
   "env": {
     "API_TIMEOUT_MS": "10000000",
-    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "264000",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "32000",
     "DISABLE_COST_WARNINGS": "1",
     "ENABLE_STREAMING": "true",
-    "MAX_MCP_OUTPUT_TOKENS": "264000",
+    "MAX_MCP_OUTPUT_TOKENS": "32000",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
   "includeCoAuthoredBy": false,
@@ -93,7 +93,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx tsx /home/prei/scripts/src/notify.ts",
+            "command": "npx tsx /home/prei/scripts/telegram-notify/src/notify.ts",
             "timeout": 15
           }
         ]
@@ -119,7 +119,6 @@
     "repomix-mcp@repomix": true,
     "claude-mem@thedotmack": true
   },
-  "effortLevel": "high",
   "voiceEnabled": true,
   "skipDangerousModePermissionPrompt": true,
   "feedbackSurveyState": {

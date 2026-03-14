@@ -22,20 +22,11 @@
 ## Communicate like a teammate
 - Narrate trade-offs and residual risks instead of silently choosing a path. When blocked, propose concrete next steps for the user instead of stalling. Close the loop by outlining follow-up tasks or open questions at the end of each session.
 
-## Model and runtime transparency
-- Always state the active model name, version, and any notable runtime settings when starting or changing tasks. Provide a concise way for users to re-check or persist the model/config so they don't need to ask repeatedly.
-
 ## Large-file reading strategy
 - Detect file size and explicitly propose chunking, summaries, or streaming reads before attempting to ingest the entire file. Offer a clear plan: extract key sections first, provide progressive summarization, and give commands the user can run to fetch larger slices if needed.
 
 ## Meta-tool-output parsing
 - Treat tool-generated headers and 'do not respond' caveats as meta-log entries and either ignore them for task intent or explicitly confirm with the user when unclear. When presenting findings, separate user-sent content from tool-run metadata to avoid acting on or echoing irrelevant artifacts.
-
-## Visual asset-driven UI workflow
-- Collect and catalog referenced screenshots and competitor examples, then create a short visual spec or wireframe before changing code. Propose concrete UI changes (layout rules, CSS adjustments, responsive constraints) plus a small visual prototype and acceptance criteria to validate similarity without copying.
-
-## Generated-bundle vs source confusion
-- Detect when a file appears to be an assembled/generated artifact and ask whether the user wants analysis of the bundle or mapping back to original source files. If the bundle is used, extract and document provenance for each piece before editing to avoid modifying generated outputs accidentally.
 
 ## Environment and secret leakage
 - Scan session logs for environment variables and token-like values, mask or flag them, and warn the user about potential secrets exposure. Recommend and offer commands to safely rotate or remove leaked secrets and to sanitize logs before sharing.
@@ -48,8 +39,9 @@
 
 ## Agent model routing
 - **Planning and research agents** (`planner`, `explorer`, `technical-architect`) use `model: opus` for highest-quality reasoning and architecture decisions.
-- **Implementation agents** (`git-commit-specialist`, and any ad-hoc implementation subagents) use `model: sonnet` for fast, token-efficient execution.
-- When spawning agents via the Agent tool, always set the `model` parameter explicitly: `opus` for planning/research, `sonnet` for implementation.
+- **Implementation agents** use `model: sonnet` for fast, token-efficient execution.
+- **git-commit-specialist** uses `model: haiku` for cheapest, fastest commit operations.
+- When spawning agents via the Agent tool, always set the `model` parameter explicitly: `opus` for planning/research, `sonnet` for implementation, `haiku` for simple tasks like commits.
 - If an implementation agent encounters ambiguity, unresolved design questions, or needs to make architectural decisions, stop implementation and return to the planning loop with an opus-tier agent instead of trying to resolve it inline.
 
 ## Agent registry introspection
