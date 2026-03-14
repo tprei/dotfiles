@@ -172,3 +172,4 @@ claude-commit() {
 
 export PULSE_SERVER=/mnt/wslg/PulseServer
 export SDL_AUDIODRIVER=pulseaudio
+
