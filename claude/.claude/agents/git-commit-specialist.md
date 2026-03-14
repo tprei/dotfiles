@@ -2,7 +2,7 @@
 name: git-commit-specialist
 description: PROACTIVELY use this agent when you have made code changes that need to be committed to git with proper documentation. Examples: <example>Context: User has just finished implementing a new feature for video processing. user: 'I've added a new subtitle extraction module and updated the main processing pipeline' assistant: 'Let me use the git-commit-specialist agent to analyze these changes and create proper commits with changelog updates' <commentary>Since the user has made significant code changes that need proper git management, use the git-commit-specialist agent to handle the commits and documentation.</commentary></example> <example>Context: User has made several bug fixes and improvements across multiple files. user: 'I fixed the audio sync issue and optimized the video encoding performance' assistant: 'I'll use the git-commit-specialist agent to review all your changes and create appropriate commits with proper documentation' <commentary>Multiple changes need to be properly analyzed and committed with context preservation, so use the git-commit-specialist agent.</commentary></example>
 tools: Bash(git add:*), Bash(git commit:*), Bash(git ls-files:*), Bash(rg:*), Bash(git:*), Glob, Grep, Read, Edit, MultiEdit, Write, WebFetch, TodoWrite, WebSearch, mcp__repomix__pack_codebase, mcp__repomix__pack_remote_repository, mcp__repomix__attach_packed_output, mcp__repomix__read_repomix_output, mcp__repomix__grep_repomix_output, mcp__repomix__file_system_read_file, mcp__repomix__file_system_read_directory, mcp__context7__resolve-library-id, mcp__context7__get-library-docs
-model: sonnet
+model: haiku
 color: purple
 ---
 
