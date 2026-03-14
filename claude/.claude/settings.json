@@ -5,7 +5,6 @@
     "DISABLE_COST_WARNINGS": "1",
     "ENABLE_STREAMING": "true",
     "MAX_MCP_OUTPUT_TOKENS": "264000",
-    "MAX_THINKING_TOKENS": "200000",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
   "includeCoAuthoredBy": false,
@@ -84,6 +83,18 @@
           {
             "type": "command",
             "command": "bd prime"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx tsx /home/prei/scripts/src/notify.ts",
+            "timeout": 15
           }
         ]
       }
