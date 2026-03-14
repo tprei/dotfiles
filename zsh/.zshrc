@@ -114,7 +114,6 @@ export PATH=$HOME/chrome-linux64:$PATH
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 export PATH="$(npm bin -g):$PATH"
 
-alias commit='claude -p "/commit"'
 
 # bun completions
 [ -s "/home/prei/.bun/_bun" ] && source "/home/prei/.bun/_bun"
@@ -166,5 +165,10 @@ tmux-help() {
   local message="How to do this in tmux: $1. Keep it super short, only answer this question specifically"
   claude --model haiku --effort low -p "$message" --dangerously-skip-permissions | cat
 }
+
+claude-commit() {
+  z-claude -p "commit changes"
+}
+
 export PULSE_SERVER=/mnt/wslg/PulseServer
 export SDL_AUDIODRIVER=pulseaudio
