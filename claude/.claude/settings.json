@@ -84,7 +84,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "tmux set-window-option -t \"$TMUX_PANE\" window-status-current-style 'bg=red,fg=white' 2>/dev/null || true",
+            "command": "tmux set-window-option -t \"$TMUX_PANE\" window-status-style 'bg=red,fg=white' 2>/dev/null || true",
             "timeout": 5
           },
           {
@@ -101,7 +101,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "tmux set-window-option -t \"$TMUX_PANE\" -u window-status-current-style 2>/dev/null || true",
+            "command": "tmux set-window-option -t \"$TMUX_PANE\" -u window-status-style 2>/dev/null || true",
             "timeout": 5
           }
         ]
