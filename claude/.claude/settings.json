@@ -86,11 +86,6 @@
             "type": "command",
             "command": "npx tsx /home/prei/scripts/telegram-notify/src/notify.ts",
             "timeout": 15
-          },
-          {
-            "type": "command",
-            "command": "claude --model claude-haiku-4-5-20251001 -p \"Check git status. If there are unstaged or staged changes that look like a complete unit of work (feature, fix, refactor), commit them with a conventional commit message. If changes look incomplete or there's nothing meaningful, do nothing.\" --allowedTools \"Bash(git status:*),Bash(git diff:*),Bash(git add:*),Bash(git commit:*)\"",
-            "timeout": 30
           }
         ]
       }
@@ -114,6 +109,19 @@
   "enabledPlugins": {
     "repomix-mcp@repomix": true,
     "claude-mem@thedotmack": true
+  },
+  "sandbox": {
+    "enabled": true,
+    "mode": "auto-allow",
+    "allowUnsandboxedCommands": true,
+    "network": {
+      "allowedDomains": [
+        "api.z.ai",
+        "api.anthropic.com",
+        "api.github.com",
+        "github.com"
+      ]
+    }
   },
   "voiceEnabled": true,
   "skipDangerousModePermissionPrompt": true,
