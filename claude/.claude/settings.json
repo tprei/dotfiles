@@ -103,6 +103,23 @@
             "type": "command",
             "command": "tmux set-window-option -t \"$TMUX_PANE\" -u window-status-format 2>/dev/null || true",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "npx tsx /home/prei/scripts/telegram-notify/src/notify.ts",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx tsx /home/prei/scripts/telegram-notify/src/notify.ts",
+            "timeout": 10
           }
         ]
       }
@@ -148,5 +165,6 @@
   "skipDangerousModePermissionPrompt": true,
   "feedbackSurveyState": {
     "lastShownTime": 1753994647675
-  }
+  },
+  "effortLevel": "high"
 }
