@@ -66,6 +66,7 @@
       "Bash(npm run dev)"
     ]
   },
+  "model": "opus[1m]",
   "hooks": {
     "PreCompact": [
       {
