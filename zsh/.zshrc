@@ -141,7 +141,7 @@ claude() {
     (
         unset ANTHROPIC_BASE_URL
         unset ANTHROPIC_AUTH_TOKEN
-        command claude --model opusplan "$@"
+        command claude "$@"
     )
 }
 
