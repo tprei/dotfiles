@@ -64,8 +64,10 @@
       "Bash(npx tsc*)",
       "Bash(npm run build)",
       "Bash(npm run dev)"
-    ]
+    ],
+    "defaultMode": "bypassPermissions"
   },
+  "model": "opus[1m]",
   "hooks": {
     "Stop": [
       {
@@ -113,10 +115,10 @@
     "mode": "auto-allow"
   },
   "effortLevel": "high",
+  "showClearContextOnPlanAccept": true,
   "voiceEnabled": true,
   "skipDangerousModePermissionPrompt": true,
   "feedbackSurveyState": {
     "lastShownTime": 1753994647675
-  },
-  "model": "opus[1m]"
+  }
 }
