@@ -91,5 +91,6 @@ Regularly revisit this document as new patterns emerge. The automation in this r
 - Prefer `rg` over `grep` for all content searches; use the Grep tool (which uses ripgrep) rather than raw `grep` commands
 - When asked about tmux commands, keybindings, or configuration, use the /tmux-specialist skill for quick answers
 - When creating a new Claude Code skill, use the /add-skill skill to scaffold the directory structure and SKILL.md
+- When asked to review a PR, use the /review skill
 
 <!-- manual-claude-guidance:end -->
