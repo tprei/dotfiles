@@ -76,7 +76,7 @@ Regularly revisit this document as new patterns emerge. The automation in this r
 - Always write .MD plan/todo files to separate folder. If docs already exists, write it there, otherwise create one
 - After you make significant changes, always engage the git commit specialist agent
 - When working on a new issue, create a new worktree and branch so that other agents do not conflict with your work in the same environment
-- Never add fallbacks
+- NEVER add fallbacks. Before making any change, ask yourself: "Is this a definitive solution, or is this a fallback/workaround?" If it's the latter, keep searching for the root cause. Exhaust all investigation avenues. If you genuinely cannot find the right fix, tell the user directly instead of shipping a fallback
 - Never add "🤖 Generated with Claude Code" to PRs
 - Never put "commited by agent" or "committed by claude code" -- same for PRs
 - Don't write co-authored by Claude
@@ -90,5 +90,6 @@ Regularly revisit this document as new patterns emerge. The automation in this r
 - Avoid set, cat, pipes for writing/reading files
 - Prefer `rg` over `grep` for all content searches; use the Grep tool (which uses ripgrep) rather than raw `grep` commands
 - When asked about tmux commands, keybindings, or configuration, use the /tmux-specialist skill for quick answers
+- When creating a new Claude Code skill, use the /add-skill skill to scaffold the directory structure and SKILL.md
 
 <!-- manual-claude-guidance:end -->
