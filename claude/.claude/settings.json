@@ -99,7 +99,7 @@
     "command": "printf \"\\033[01;32m%s@%s\\033[00m:\\033[01;34m%s\\033[00m\" \"$(whoami)\" \"$(hostname -s)\" \"$(pwd)\""
   },
   "enabledPlugins": {
-    "repomix-mcp@repomix": true
+    "repomix-mcp@repomix": false
   },
   "sandbox": {
     "enabled": true,
@@ -116,9 +116,10 @@
   },
   "effortLevel": "high",
   "showClearContextOnPlanAccept": true,
-  "voiceEnabled": true,
   "skipDangerousModePermissionPrompt": true,
+  "voiceEnabled": true,
   "feedbackSurveyState": {
     "lastShownTime": 1753994647675
-  }
+  },
+  "skipAutoPermissionPrompt": true
 }

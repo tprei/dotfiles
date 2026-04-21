@@ -1,62 +1,15 @@
-## Shape the work before touching files
-- Produce an explicit plan and confirm scope before editing. Surface unknowns early, restate assumptions, and request missing context. When instructions conflict with filesystem reality, pause and clarify before acting.
-
-## Document intent and outcomes as you go
-- Treat documentation as a first-class deliverable. Provide contextual summaries with every change: why, what, and how to validate. When adding or modifying tooling, append usage notes or examples for the next agent.
-
-## Build verification into the loop
-- Default to running or adding tests whenever behavior shifts. If no automated test exists, outline a manual checklist and suggest how to automate it next. Share test commands and results; avoid saying it works without evidence.
-
-## Be deliberate with commits and PRs
-- Keep commits scoped and narrated. Stage only relevant files, double-check paths, and mention side effects. Draft changelog-ready notes so follow-up agents inherit context without rereading diffs.
-
-## Minimize approval churn
-- Bundle related commands to reduce repetitive approval requests. Cite why elevated permissions are needed; suggest safe, sandboxed alternatives when possible. Reuse previously granted permissions if policy allows instead of re-requesting reflexively.
-
-## Stay within the correct workspace
-- Confirm target directories before writing—spell out the intended path in your plan. When unsure, list candidate locations and ask for confirmation instead of guessing. After edits, echo file paths so the user can audit quickly.
-
-## Leverage available tooling proactively
-- Highlight built-in tools before the user prompts you. Prefer existing scripts or automation hooks over ad-hoc commands; update or create helpers when they are missing. Cache learnings: when you discover an effective workflow, note it for future runs.
-
-## Communicate like a teammate
-- Narrate trade-offs and residual risks instead of silently choosing a path. When blocked, propose concrete next steps for the user instead of stalling. Close the loop by outlining follow-up tasks or open questions at the end of each session.
+## Agent model routing
+- **Planning and research agents** (`planner`, `explorer`, `technical-architect`) use `model: opus`.
+- **Implementation agents** use `model: sonnet`.
+- **git-commit-specialist** uses `model: haiku`.
+- When spawning via the Agent tool, always set `model` explicitly.
+- If an implementation agent hits ambiguity or needs architectural decisions, stop and return to the planning loop with an opus-tier agent rather than resolving inline.
 
 ## Large-file reading strategy
-- Detect file size and explicitly propose chunking, summaries, or streaming reads before attempting to ingest the entire file. Offer a clear plan: extract key sections first, provide progressive summarization, and give commands the user can run to fetch larger slices if needed.
+- For oversized files, propose chunking/summaries/streaming before ingesting the whole thing. Extract key sections first, offer commands for progressive reads.
 
-## Meta-tool-output parsing
-- Treat tool-generated headers and 'do not respond' caveats as meta-log entries and either ignore them for task intent or explicitly confirm with the user when unclear. When presenting findings, separate user-sent content from tool-run metadata to avoid acting on or echoing irrelevant artifacts.
-
-## Environment and secret leakage
-- Scan session logs for environment variables and token-like values, mask or flag them, and warn the user about potential secrets exposure. Recommend and offer commands to safely rotate or remove leaked secrets and to sanitize logs before sharing.
-
-## Preference persistence and status
-- Confirm and record session-level preferences when the user sets them and provide a short status command to re-show current preferences. Proactively mention which choices are temporary vs persisted and how to change or reset them.
-
-## Clarify vague designer-driven requests
-- Ask focused clarification questions (target breakpoints, accessibility needs, exact elements to mimic) and offer 2–3 constrained design variants with tradeoffs. Define measurable acceptance criteria (pixel tolerances, component sizes, overflow behavior) before making UI changes.
-
-## Agent model routing
-- **Planning and research agents** (`planner`, `explorer`, `technical-architect`) use `model: opus` for highest-quality reasoning and architecture decisions.
-- **Implementation agents** use `model: sonnet` for fast, token-efficient execution.
-- **git-commit-specialist** uses `model: haiku` for cheapest, fastest commit operations.
-- When spawning agents via the Agent tool, always set the `model` parameter explicitly: `opus` for planning/research, `sonnet` for implementation, `haiku` for simple tasks like commits.
-- If an implementation agent encounters ambiguity, unresolved design questions, or needs to make architectural decisions, stop implementation and return to the planning loop with an opus-tier agent instead of trying to resolve it inline.
-
-## Agent registry introspection
-- When a project lists custom agents/tools, summarize available agents and recommend one or two with a brief justification for the current task. Offer example invocations or handoffs to those agents and indicate expected outputs to streamline handover.
-
-## Unrecorded environment alterations
-- Log every system or environment change as a reproducible script or manifest before executing it. Prefer ephemeral, isolated environments for risky steps and ask for explicit permission before mutating the user's global system. Create and attach a rollback or uninstall plan for any non-trivial system alteration.
-
-## Assuming user-specific dotfile contexts
-- Detect platform, shell, and existing dotfile structure automatically and surface differences before editing any user-scoped config. Ask explicit clarifying questions and produce a preview/patch and a backup of existing dotfiles prior to applying changes. Make edits idempotent and scoped rather than overwriting whole files.
-
-## Aggressive file pruning and deletions
-- Present a concise candidate deletion list and require explicit user confirmation before removing files, offering a dry-run and size/age filters. Move deletions to a timestamped quarantine directory or create compressed backups so recovery is trivial if a mistake occurs.
-
-Regularly revisit this document as new patterns emerge. The automation in this repository will refresh guidance when new sessions highlight fresh themes.
+## Dotfile edits
+- Detect platform/shell and surface structural differences before editing user-scoped config. Produce a preview, keep edits idempotent and scoped, don't overwrite whole files.
 
 # Prose style
 
@@ -92,5 +45,12 @@ Regularly revisit this document as new patterns emerge. The automation in this r
 - When asked about tmux commands, keybindings, or configuration, use the /tmux-specialist skill for quick answers
 - When creating a new Claude Code skill, use the /add-skill skill to scaffold the directory structure and SKILL.md
 - When asked to review a PR, use the /review skill
+- Prefer DDD when building features
+- Build explicit code: explicit boundaries, explicit types. Avoid nested ternaries. Don't overengineer — keep changes minimal and focused, follow existing repo conventions
+- Never disable eslint rules (or the equivalent lint/typecheck mechanism in the language) to make errors go away — fix the underlying issue
+- Tests must cover critical product behavior. Skip tautological tests, tests asserting only static styles, and tests for static copy (placeholders, labels, helper text, empty state text, tooltip text)
+- Always read a file before editing it. Prefer the Edit tool for targeted changes over rewriting entire files
+- Prefer `fd` over `find` and `bat` over `cat` for previews when available. Prefer non-interactive command invocations
+- Commit messages: concise, focused on the why
 
 <!-- manual-claude-guidance:end -->
