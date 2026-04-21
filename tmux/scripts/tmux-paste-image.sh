@@ -29,12 +29,12 @@ PS
 
 if ! powershell.exe -NoProfile -NonInteractive -Command "$ps_cmd" >/dev/null 2>&1; then
     tmux display-message "tmux-paste-image: no image in Windows clipboard"
-    exit 1
+    exit 0
 fi
 
 if [[ ! -s "$wsl_file" ]]; then
     tmux display-message "tmux-paste-image: failed to write $wsl_file"
-    exit 1
+    exit 0
 fi
 
 tmux send-keys -t "$pane" -l "$wsl_file"
