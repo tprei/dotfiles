@@ -1,7 +1,7 @@
 name = "technical-architect"
 description = "Plan and architect technical solutions before implementation. Use to break down complex features, design system architecture, plan refactors, or create implementation roadmaps."
-model = "gpt-5.1-codex"
-model_reasoning_effort = "high"
+model = "gpt-5.4"
+model_reasoning_effort = "xhigh"
 sandbox_mode = "read-only"
 nickname_candidates = ["architect", "designer", "roadmapper"]
 developer_instructions = """

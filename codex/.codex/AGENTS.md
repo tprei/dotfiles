@@ -1,8 +1,9 @@
 # Agent model routing
 
-- **Planning and research subagents** (`planner`, `explorer`, `technical-architect`) use `model = "gpt-5.1-codex"` with `model_reasoning_effort = "high"`.
-- **Implementation subagents** use `model = "gpt-5.1-codex"` with `model_reasoning_effort = "medium"`.
-- **git-commit-specialist** uses a cheaper/faster model (`gpt-5.1-codex-mini` when available).
+- Default model across the main thread and subagents is `gpt-5.4`.
+- **Planning and research subagents** (`planner`, `explorer`, `technical-architect`) use `model_reasoning_effort = "xhigh"`.
+- **Implementation subagents** use `model_reasoning_effort = "high"`.
+- **git-commit-specialist** uses `model_reasoning_effort = "low"` — cheap, fast, mechanical work.
 - Always spawn subagents with an explicit `name`; rely on the subagent's own TOML for model selection.
 - If an implementation subagent hits ambiguity or needs architectural decisions, stop and hand back to the planning loop rather than resolving inline.
 
