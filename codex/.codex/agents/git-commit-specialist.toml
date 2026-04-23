@@ -1,6 +1,6 @@
 name = "git-commit-specialist"
 description = "PROACTIVELY use when code changes need to be committed to git with proper documentation. Analyzes staged and unstaged changes, groups them into logical commits, writes contextual commit messages, and updates CHANGELOG entries."
-model = "gpt-5.4"
+model = "gpt-5.5"
 model_reasoning_effort = "low"
 sandbox_mode = "workspace-write"
 nickname_candidates = ["scribe", "historian", "committer"]

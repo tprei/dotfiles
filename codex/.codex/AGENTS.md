@@ -1,6 +1,6 @@
 # Agent model routing
 
-- Default model across the main thread and subagents is `gpt-5.4`.
+- Default model across the main thread and subagents is `gpt-5.5`.
 - **Planning and research subagents** (`planner`, `explorer`, `technical-architect`) use `model_reasoning_effort = "xhigh"`.
 - **Implementation subagents** use `model_reasoning_effort = "high"`.
 - **git-commit-specialist** uses `model_reasoning_effort = "low"` — cheap, fast, mechanical work.
