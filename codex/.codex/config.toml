@@ -1,5 +1,6 @@
-model = "gpt-5.5"
+model = "gpt-5.4"
 model_reasoning_effort = "xhigh"
+personality = "pragmatic"
 
 [tui]
 notifications = true
@@ -70,10 +71,6 @@ args = ["chrome-devtools-mcp@latest"]
 command = "npx"
 args = ["-y", "repomix", "--mcp"]
 startup_timeout_sec = 20.0
-
-[mcp_servers.serena]
-command = "uvx"
-args = ["--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server", "--context", "codex"]
 
 [mcp_servers.supabase]
 command = "npx"
