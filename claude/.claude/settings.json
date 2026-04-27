@@ -99,7 +99,8 @@
     "command": "bash ~/.claude/statusline.sh"
   },
   "enabledPlugins": {
-    "repomix-mcp@repomix": false
+    "repomix-mcp@repomix": false,
+    "frontend-design@claude-plugins-official": true
   },
   "sandbox": {
     "enabled": true,
@@ -117,9 +118,10 @@
   "effortLevel": "high",
   "showClearContextOnPlanAccept": true,
   "skipDangerousModePermissionPrompt": true,
+  "theme": "dark-daltonized",
+  "autoCompactEnabled": false,
   "voiceEnabled": true,
   "feedbackSurveyState": {
     "lastShownTime": 1753994647675
-  },
-  "skipAutoPermissionPrompt": true
+  }
 }
