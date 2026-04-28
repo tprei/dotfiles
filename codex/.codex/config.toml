@@ -62,6 +62,9 @@ trust_level = "trusted"
 [projects."/home/prei/minions"]
 trust_level = "trusted"
 
+[projects."/home/prei/minions/claude-minions"]
+trust_level = "trusted"
+
 # ---------------------------------------------------------------------------
 # MCP servers
 # Secrets are forwarded from the shell environment — export
