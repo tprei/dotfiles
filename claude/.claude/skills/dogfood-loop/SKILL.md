@@ -42,6 +42,31 @@ Before any Edit/Write into `packages/**` inside claude-minions, ask: **"Did this
 - They bypass the regression-test requirement (every dispatched task adds a guard; ad-hoc edits add none).
 - The dogfood loop's whole point is the system improving itself. Bypassing it is a lie about what was built.
 
+### Engine-broken bootstrap exception
+
+There's exactly one situation where direct edits to `packages/engine/**` are permitted: **the engine cannot dispatch a session that reaches `running` status.**
+
+Symptoms that qualify:
+- `POST /api/sessions` returns OK but the session sits in `pending` for >60s and gets killed by the stuck-pending sweeper with `manual_intervention`.
+- The engine refuses to boot (`SyntaxError`, `EADDRINUSE` you can't kill, immediate OOM).
+- Spawn auth is fully broken (every minion fails with `Not logged in`).
+- Sandbox prevents *every* agent from completing (every diff comes back as a `/tmp/claude/*.patch` fallback with the same gitdir-readonly error).
+
+In any of those, fix the engine directly on main. The exception ends as soon as a probe-dispatch succeeds:
+
+```
+# Probe: dispatch a tiny task and confirm it reaches `running` and produces tool calls within 60s.
+curl -sX POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"title":"probe","repoId":"self","baseBranch":"main","mode":"task",
+       "prompt":"Run `pnpm -C packages/engine typecheck` and report the exit code. Do not edit any files."}' \
+  http://127.0.0.1:8787/api/sessions
+# Then poll /api/sessions/<slug> until status=completed AND turns>0.
+```
+
+If the probe succeeds, engine-broken mode is over and you must dispatch every subsequent change. If it fails the same way the original sessions did, the direct fix wasn't enough — keep iterating directly until the probe passes.
+
+This is a real exception, not a loophole. It applies only to the engine itself failing to spawn, not to "this specific feature is hard to dispatch" or "this fix is small". The test is mechanical: did the probe succeed?
+
 ### Bypass rationalizations to reject
 
 These all rationalize bypassing the dispatch. None justify it. If you catch yourself thinking any of them, dispatch instead:
@@ -65,6 +90,32 @@ test "$(git -C .dev-workspace/.repos/self.git rev-parse main)" = "$(git rev-pars
   || git -C .dev-workspace/.repos/self.git fetch origin main:main --force
 
 # 3. No overlapping scopes across the batch. Two sessions touching the same file ⇒ last-writer-wins regression. Dispatch them sequentially instead.
+
+# 4. No silently-shadowed routes. Multiple sibling files registering the same Fastify route key ⇒ second registration is dropped (route 404s despite source).
+rg -n "app\.(get|post|patch|delete)\(['\"]/api" packages/engine/src/ \
+  | grep -v test \
+  | awk -F'"' '{print $2}' \
+  | sort | uniq -d
+# Expect: empty. Anything output ⇒ silent shadow ⇒ dispatch a fix-task before adding new endpoints.
+
+# 5. No engine spawned from inside a Claude Code session.
+ENGINE_PID=$(pgrep -f 'tsx.*src/cli.ts' | head -1)
+[ -n "$ENGINE_PID" ] && ps -p $(awk '/^PPid:/ {print $2}' /proc/$ENGINE_PID/status) -o cmd= | grep -qE 'claude|claude-code' \
+  && echo "ENGINE INHERITED CLAUDE SANDBOX — minions can't write to gitdir; ask operator to relaunch from their terminal" \
+  && exit 1
+
+# 6. No stuck-pending sessions occupying admission slots.
+curl -sH "Authorization: Bearer $TOKEN" http://127.0.0.1:8787/api/sessions \
+  | python3 -c '
+import json,sys,datetime
+items = json.load(sys.stdin)["items"]
+stuck = [s for s in items
+         if s["status"] == "pending"
+         and (datetime.datetime.now(datetime.timezone.utc)
+              - datetime.datetime.fromisoformat(s["createdAt"].replace("Z","+00:00"))).total_seconds() > 120]
+for s in stuck: print("STUCK:", s["slug"])
+'
+# Stop each via POST /api/commands {kind:"stop", sessionSlug:...} before dispatching new work.
 ```
 
 ## When to use
@@ -94,11 +145,25 @@ ps -eo pid,etime,cmd | awk '/pnpm.*(test|run dev)/ && !/awk/ { print }' | head
 
 If engine is down, use `bin/engine.sh` (sources `.env.local`) — see `references/restart-engine.sh`. Boot the web dev with `pnpm --filter @minions/web run dev` if it's not running.
 
+**Always rebuild `packages/shared` before relaunching the engine after a `git pull`.** Stale `packages/shared/dist/` is the most common boot-fail symptom:
+
+```
+git pull origin main
+pnpm -C packages/shared build       # MANDATORY whenever shared/ changed
+./bin/engine.sh
+```
+
+Symptom on stale shared: `SyntaxError: The requested module '@minions/shared' does not provide an export named '<X>'`. Fix is always the rebuild, never reverting the change in main. Bake `pnpm -C packages/shared build` into `bin/engine.sh` so the trap doesn't recur. Same applies for `--max-old-space-size=8192` in `NODE_OPTIONS` (engine OOMs on large enumeration endpoints; see known-bugs).
+
+**The operator launches the engine, not the dogfood loop.** When you (the loop) start the engine via Bash, every spawned minion inherits Claude Code's sandbox and can't write to its worktree's gitdir. Run the sandbox-inheritance gate above; if it fires, ask the operator to relaunch in their own terminal.
+
 ## Loop, in order
 
 1. **Audit**. Use Playwright (or `curl`) to capture broken states — desktop + mobile viewports, dark + light, list/kanban/dag/ship views, chat open + closed. Save screenshots under `.playwright-mcp/`. Don't guess. For chat scroll/resize bugs, query computed styles directly via `browser_evaluate` — chrome headless screenshots can mislead (e.g. body bg may be light per `getComputedStyle` but render dark in the screenshot).
 
    **For operator-reported bugs, reproduce the failing flow in Playwright before any dispatch.** Take the operator's words ("can't close the chat", "no auto-update") and turn them into a sequence of `browser_click` / `browser_evaluate` calls that demonstrably fails right now. Save that sequence — it's both the dispatch prompt's Do-step and the regression test's setup. If you can't reproduce, ask for clarification before dispatching; you can't fix a flow you haven't seen fail.
+
+   **Operator pastes are primary signal.** When the operator pastes engine logs, screenshots, or transcript fragments mid-loop, treat them as ground truth — not the engine API responses, which can lag or contradict the paste. File the implied bug immediately, before continuing the queued work. The dogfood loop produces engine bugs at roughly a 1:2 ratio with feature ships; expect a "10-ship batch" to surface ~5 engine bugs along the way, and budget time accordingly.
 
 2. **Group fixes into focused sessions**. Each session owns one coherent area (e.g. "light mode tokens", "mobile drawer", "chat typography"). 4–6 parallel sessions is healthy. Two sessions touching the same file is a recipe for last-writer-wins regressions — the chat-redesign session in this repo's history reverted a Zustand selector fix from a parallel mobile-shell session for exactly this reason.
 
@@ -111,6 +176,12 @@ If engine is down, use `bin/engine.sh` (sources `.env.local`) — see `reference
 4. **Dispatch via REST**. `POST http://127.0.0.1:8787/api/sessions` with `{ title, repoId: "self", baseBranch: "main", mode: "task", prompt }`. Capture every slug; print them so the user sees what's running. Use `Authorization: Bearer $TOKEN` from `.env.local`.
 
 5. **Wait for terminal status — in the background, not in your foreground context**. Use Bash `run_in_background: true` with an `until` loop, or spawn an Agent. Foreground polling consumes context proportional to runtime; for any session > 5 min, that compounds across the batch and forces a mid-loop compact. Mark all but the largest sessions for ~30 min cap. Treat `failed turns=0` as "killed mid-bootstrap" and re-dispatch; treat `failed turns>50` as a real attempt that hit a wall (read the last few transcript events to learn why — most often quota or sandbox).
+
+   **Monitor hygiene** (mistakes that make Monitors lie):
+   - Cancel old monitors when their target session is stopped — otherwise they fire on dead state and report false bugs.
+   - Use Python with `json.load` for any transcript / session inspection inside `until`-loops. `jq` chokes on control characters embedded in transcript event text and exits non-zero; the until-loop dies; the monitor reports failure on a healthy session.
+   - For reply-injection checks, search the *entire transcript after the reply timestamp* for the unique tag — do not assume the reply lands at any particular turn number. Replies can drain at turn N or turn N+1 depending on whether the agent is mid-turn at injection time.
+   - Treat "You're out of extra usage · resets HH:MM (TZ)" in any tool output as a hard stop. Don't retry — schedule a wakeup near the reset and re-enter the loop then. Retrying burns budget on dead-on-arrival sessions.
 
 6. **Inspect each diff before applying**. See `references/apply-diffs.md`. Critical: agents capture injected assets (`.cursor/`, `AGENTS.md`, `CLAUDE.md`, `instructions.md`) when they `git add .`. The `.git/info/exclude` approach in the engine doesn't fully prevent this. Filter assets out at apply time.
 
@@ -201,6 +272,7 @@ If engine is down, use `bin/engine.sh` (sources `.env.local`) — see `reference
     - Agent commits in worktree (manually if auto-commit handler is inert).
     - `POST /api/commands {kind:"land", sessionSlug, strategy:"squash", force:true}` — engine pushes via GH App askpass, opens PR via gh CLI, then `gh pr merge`. `force: true` skips readiness when CI hasn't completed yet.
     - Verify on github: `gh pr view <n> --json state,mergeCommit`.
+    - **Stacked PRs auto-close on parent merge** when `--delete-branch` deletes the base. Every multi-node DAG produces this dance unless you flatten the stack to all-target-`main`. See `references/restack-after-merge.md` for the recovery pattern (clone → `git rebase --onto main <old-base>` → resolve → `git push --force-with-lease` → `gh pr create` with `(re-stack)` suffix). Prefer flat DAGs in dispatch prompts whenever node N's content doesn't *semantically* depend on node N-1's content; type-only deps belong in `packages/shared` and don't need stacking.
 
 11. **Save lessons as memory**. When a session pattern fails (agents refusing to commit, sandbox-readonly, parallel-session conflicts, JSON env getting eaten by shell sourcing) write a feedback memory under the project memory dir.
 
@@ -226,6 +298,18 @@ If engine is down, use `bin/engine.sh` (sources `.env.local`) — see `reference
 | Transcript event renders blank | `Transcript.tsx` dispatcher missing a `case` arm for that kind | diff the dispatcher's cases against the `EventKind` union (§9, "session/transcript views" check) |
 | Read-only stage (think/plan) produced a code diff | stage's prompt or tool allowlist isn't enforcing read-only | run §9 "mode/stage behavioral contracts" check; the dispatched-prompt for that stage must explicitly forbid Edit/Write/Bash-write tools, and the regression test must dispatch a stage-think session that's *asked* to modify code and assert the diff is empty |
 | Injected reply appears in transcript but agent never acknowledges it | reply event landed in store but never reached the spawned process's stdin / next turn input | run §9 "reply injection" check (unique-tag echo). If the tag never echoes, the bug is in the engine's reply-delivery path, not the UI |
+| Engine fails to boot after `git pull` with `does not provide an export named '<X>'` | stale `packages/shared/dist/` | `pnpm -C packages/shared build` before relaunch (bake into `bin/engine.sh`) |
+| Engine OOMs at 4GB heap during cleanup | `/api/cleanup/candidates` enumerated all sessions + ran `du -sb` synchronously | pin `NODE_OPTIONS=--max-old-space-size=8192`; paginate the endpoint and never run `du` inline |
+| Every minion fails with `Not logged in · Please run /login` | per-session HOME isolation hides operator's `~/.claude/credentials.json` | symlink `credentials.json` + `.credentials.json` from operator's `~/.claude` into each session's `<homeDir>/.claude/` in `writeSessionSettings.ts` |
+| Agent stalls on Bash prompts under acceptEdits permissionMode | tier auto-confirms file writes but still prompts for shell, `--print` denies | per-session settings.json must include `{"permissions":{"allow":["Bash(*)"]}}` |
+| Every minion's `git commit` returns "Read-only file system"; agents leave `/tmp/claude/*.patch` fallbacks | engine inherited Claude Code's sandbox from its launching shell | operator must launch `./bin/engine.sh` from their own terminal, outside Claude Code; pre-dispatch gate detects parent-process |
+| `gh pr edit --base` errors with `projectCards` GraphQL deprecation | gh CLI mutation requests a deprecated field | upgrade gh ≥ 2.55, or use `gh api -X PATCH /repos/:owner/:repo/pulls/:n -f base=<branch>` |
+| Endpoint 404s despite source being present | two sibling files register the same Fastify route key; second registration silently dropped | run pre-dispatch gate §4; pick canonical, delete duplicate, fix import in `http/routes/index.ts` |
+| Sessions stuck `pending` exhaust admission slots | `provider.spawn` hangs without timeout, slot never freed | run pre-dispatch gate §6 (sweep stuck-pending > 120s, stop each); engine-side fix is a 30-60s spawn timeout that flips to `failed` with `manual_intervention` |
+| Out-of-quota signal mid-batch | API quota exhausted | stop dispatching, schedule wakeup near the announced reset time, do not retry |
+| Stacked child PR auto-closes when parent merges with `--delete-branch` | GitHub closes children whose base was deleted; engine's `RestackManager` raced or hit projectCards error | follow `references/restack-after-merge.md` recovery; prefer flat DAGs (all nodes target `main`) for future dispatches |
+| DAG node `failedReason: "session terminated with status: running"` | dag-terminal handler reads pre-update session.status; race with registry's terminal commit | retry the node (second pass usually wins); engine fix is to consume the registry's terminal event, not poll status |
+| Retry / cancel button POST returns "Body cannot be empty when content-type is set to 'application/json'" | Fastify body parser rejects empty body with JSON content-type | web client must send `{}` for body-less posts |
 
 ## Useful endpoints to keep in your back pocket
 
@@ -251,7 +335,8 @@ POST /api/commands                                discriminated union (reply/sto
 | File | Contents |
 |------|----------|
 | `references/dispatch-prompt-template.md` | Prompt skeleton ready to paste into a `POST /api/sessions` body. |
-| `references/apply-diffs.md` | How to copy a worktree's diff to main, filtering injected assets. |
+| `references/apply-diffs.md` | How to copy a worktree's diff to main, filtering injected assets, plus `/tmp/claude/*.patch` recovery. |
 | `references/known-bugs.md` | Bug patterns this codebase has hit before — quick recognition. |
 | `references/landing-flow.md` | Push → PR → merge via the GitHub App + `gh pr merge`. |
+| `references/restack-after-merge.md` | Recovery dance for child PRs that auto-close when their stacked parent merges. |
 | `references/restart-engine.sh` | Idempotent kill + relaunch script (uses `bin/engine.sh` + `.env.local`). |

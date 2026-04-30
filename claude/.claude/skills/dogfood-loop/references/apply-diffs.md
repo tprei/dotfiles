@@ -101,8 +101,29 @@ git push origin main
 
 The `local@minions` author ID makes operator-applied commits distinguishable from agent self-commits (which use `engine@minions.local`).
 
+## Patch-fallback recovery
+
+When the per-session sandbox blocks the agent's `git commit` (HOME-isolation, codex sandbox layered on top of the engine's, gitdir outside the writable allowlist), the asset-injected `instructions.md` tells the agent to write the change as a unified patch under `/tmp/claude/<feature>.patch` and report the path in its final message.
+
+When you see "patch saved to /tmp/claude/..." in the agent's last assistant turn, the diff is in the worktree as untracked changes AND duplicated as a patch file. Apply the patch directly when the worktree is unrecoverable:
+
+```bash
+# When the worktree's tracked diff is intact, prefer the standard apply pattern above.
+# Use this only when the worktree is partial / corrupted / the agent abandoned mid-edit.
+ls -la /tmp/claude/*.patch
+git apply --check /tmp/claude/<feature>.patch     # dry-run; aborts if it won't apply cleanly
+git apply        /tmp/claude/<feature>.patch
+git add -A
+git -c user.email=local@minions -c user.name=local commit -m "<title> (recovered from session <slug> patch fallback)"
+git push origin main
+```
+
+Verify everything in §Verify after applying — patches don't carry build artifacts, so type-drift across files in the patch is the most common surprise.
+
+If `git apply --check` fails with "does not apply", the patch was generated against a stale base. Either (a) re-dispatch the work fresh on top of current main, or (b) `git apply --3way` and resolve conflicts manually. Don't `--reject` and pick fragments — that's how partial patches land and break invariants.
+
 ## Don't
 
-- Don't `git apply` a diff captured via `git format-patch` — it loses the index state and chokes on concurrent edits.
+- Don't `git apply` a diff captured via `git format-patch` — it loses the index state and chokes on concurrent edits. The `/tmp/claude/*.patch` files above are unified-diff format, not format-patch.
 - Don't `cherry-pick` from the worktree branch onto main directly — main has been advancing while the session ran, and the cherry-pick may include parts of the worktree's bootstrap state.
 - Don't skip the typecheck-and-test pass thinking "lint covers it". Lint doesn't catch type drift.
