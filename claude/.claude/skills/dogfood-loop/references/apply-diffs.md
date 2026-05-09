@@ -1,11 +1,11 @@
 # Applying a session's diff to main
 
-A finished session leaves its work in `.dev-workspace/<slug>/` either as a worktree commit (`git log main..HEAD` non-empty) or as uncommitted modifications (`git status -- M`). Sometimes both — the agent commits a partial change and leaves more uncommitted afterwards. Treat them uniformly.
+A finished session leaves its work in `<workspace>/<slug>/` either as a worktree commit (`git log main..HEAD` non-empty) or as uncommitted modifications (`git status -- M`). Sometimes both — the agent commits a partial change and leaves more uncommitted afterwards. Treat them uniformly.
 
 ## Inspect
 
 ```
-WT=.dev-workspace/<slug>
+WT=<workspace>/<slug>
 git -C $WT log --oneline main..HEAD | head
 git -C $WT diff main..HEAD --stat
 git -C $WT status --short | grep -v '^??'           # tracked changes
@@ -14,7 +14,7 @@ git -C $WT status --short | grep '^??' | head        # untracked (mostly assets,
 
 ## Files agents commit-by-accident
 
-The engine's asset injector copies these into every worktree:
+Most orchestrators inject context files into every worktree so the spawned agent has project conventions and instructions in scope. Common ones:
 
 ```
 AGENTS.md
@@ -23,14 +23,14 @@ instructions.md
 .cursor/
 ```
 
-It also writes them to `<gitdir>/info/exclude`, but `git add .` from the agent re-includes them under the codex sandbox in some cases. **Always filter these out at apply time** — they are not part of the change, they're agent context.
+The orchestrator typically also writes them to `<gitdir>/info/exclude`, but `git add .` from the agent re-includes them under some sandboxes. **Always filter these out at apply time** — they are not part of the change, they're agent context.
 
 ## Apply pattern
 
-For mostly file-by-file diffs (which is what almost every session produces here):
+For mostly file-by-file diffs (which is what almost every session produces):
 
 ```
-WT=.dev-workspace/<slug>
+WT=<workspace>/<slug>
 
 # Files the agent committed
 git -C $WT diff main..HEAD --name-only | while read f; do
@@ -52,7 +52,7 @@ done
 git -C $WT status --short | awk '$1 == "??" {print $2}' | while read f; do
   case "$f" in
     AGENTS.md|CLAUDE.md|instructions.md|.cursor/*) continue ;;
-    .bashrc|.zshrc|.profile|.gitconfig|.mcp.json|.idea*|.bash_profile|.zprofile|.ripgreprc|.gitmodules|.vscode*) continue ;;  # claude scratch dotfiles
+    .bashrc|.zshrc|.profile|.gitconfig|.mcp.json|.idea*|.bash_profile|.zprofile|.ripgreprc|.gitmodules|.vscode*) continue ;;  # agent scratch dotfiles
     *) cp "$WT/$f" "$f" 2>/dev/null || true ;;
   esac
 done
@@ -63,27 +63,28 @@ For sessions that produce a large multi-package change (new package, sweeping re
 ```
 rsync -a --exclude=node_modules --exclude=dist \
       --exclude=AGENTS.md --exclude=CLAUDE.md --exclude=instructions.md --exclude='.cursor/' \
-      $WT/packages/<new-pkg>/ packages/<new-pkg>/
+      $WT/<sub-tree>/ <sub-tree>/
 ```
 
 ## Verify
 
+Run the project's standard gate after apply, in dependency order. A typical sequence:
+
 ```
-pnpm install                             # only if package.json or pnpm-lock changed
-pnpm --filter @minions/shared run build  # if shared types changed
-pnpm --filter @minions/engine run typecheck
-pnpm --filter @minions/web run typecheck
-pnpm --filter @minions/engine run test
-pnpm lint
-pnpm --filter @minions/web run build     # for web changes
+<install>            # only if dependency manifest changed
+<build-shared>       # if shared types changed
+<typecheck>
+<test>
+<lint>
+<web-build>          # for UI changes
 ```
 
 Reject the diff and re-dispatch (or fix small drift inline) when:
 
-- Typecheck fails on a renamed shared type — usually means the agent didn't read `packages/shared/src` and invented a parallel type. Re-dispatch with the canonical type explicitly.
-- Lint shows new errors (warnings are fine — eslint config sets most rules to `warn`).
+- Typecheck fails on a renamed shared type — usually means the agent didn't read the canonical type module and invented a parallel type. Re-dispatch with the canonical type explicitly named.
+- Lint shows new errors (warnings are usually fine).
 - Tests regress.
-- Engine fails to start with the new code (read `/tmp/engine.log`).
+- Orchestrator fails to start with the new code (read its log).
 
 ## Commit
 
@@ -91,7 +92,7 @@ One commit per dogfood batch. Subject names what landed; body lists the source s
 
 ```
 git add -A
-git -c user.email=local@minions -c user.name=local commit -q -m "<subject>
+git -c user.email=local@dogfood -c user.name=local commit -q -m "<subject>
 
 - <fix area> (via session <slug>)
 - <fix area> (via session <slug>)
@@ -99,13 +100,13 @@ git -c user.email=local@minions -c user.name=local commit -q -m "<subject>
 git push origin main
 ```
 
-The `local@minions` author ID makes operator-applied commits distinguishable from agent self-commits (which use `engine@minions.local`).
+A distinct local author ID makes operator-applied commits distinguishable from agent self-commits.
 
 ## Patch-fallback recovery
 
-When the per-session sandbox blocks the agent's `git commit` (HOME-isolation, codex sandbox layered on top of the engine's, gitdir outside the writable allowlist), the asset-injected `instructions.md` tells the agent to write the change as a unified patch under `/tmp/claude/<feature>.patch` and report the path in its final message.
+When the per-session sandbox blocks the agent's `git commit` (HOME-isolation, host agentic-CLI sandbox layered on top of the orchestrator's, gitdir outside the writable allowlist), agents commonly fall back to writing the change as a unified patch under `/tmp/claude/<feature>.patch` (or whatever path the orchestrator's injected `instructions.md` mandates).
 
-When you see "patch saved to /tmp/claude/..." in the agent's last assistant turn, the diff is in the worktree as untracked changes AND duplicated as a patch file. Apply the patch directly when the worktree is unrecoverable:
+When you see "patch saved to /tmp/..." in the agent's last assistant turn, the diff is in the worktree as untracked changes AND duplicated as a patch file. Apply the patch directly when the worktree is unrecoverable:
 
 ```bash
 # When the worktree's tracked diff is intact, prefer the standard apply pattern above.
@@ -114,7 +115,7 @@ ls -la /tmp/claude/*.patch
 git apply --check /tmp/claude/<feature>.patch     # dry-run; aborts if it won't apply cleanly
 git apply        /tmp/claude/<feature>.patch
 git add -A
-git -c user.email=local@minions -c user.name=local commit -m "<title> (recovered from session <slug> patch fallback)"
+git -c user.email=local@dogfood -c user.name=local commit -m "<title> (recovered from session <slug> patch fallback)"
 git push origin main
 ```
 
@@ -124,6 +125,6 @@ If `git apply --check` fails with "does not apply", the patch was generated agai
 
 ## Don't
 
-- Don't `git apply` a diff captured via `git format-patch` — it loses the index state and chokes on concurrent edits. The `/tmp/claude/*.patch` files above are unified-diff format, not format-patch.
+- Don't `git apply` a diff captured via `git format-patch` — it loses the index state and chokes on concurrent edits. The `/tmp/<scratch>/*.patch` files above are unified-diff format, not format-patch.
 - Don't `cherry-pick` from the worktree branch onto main directly — main has been advancing while the session ran, and the cherry-pick may include parts of the worktree's bootstrap state.
 - Don't skip the typecheck-and-test pass thinking "lint covers it". Lint doesn't catch type drift.

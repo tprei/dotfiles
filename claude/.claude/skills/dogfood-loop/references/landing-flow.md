@@ -1,24 +1,23 @@
 # Landing a session: push → PR → merge
 
-For online repos (any remote whose URL begins with `https://`, `http://`, or `git@`), the engine's `landing/index.ts` runs:
+For online repos (any remote whose URL begins with `https://`, `http://`, or `git@`), a typical orchestrator's landing flow runs:
 
 1. `ensurePushedAndPRed(slug)`
-   - `pushBranch(worktree, branch)` — `git push -u origin <branch>` from the worktree, where `origin` is the bare clone, which itself has `origin → github.com/...`. Auth comes from the GitHub App via the askpass shim (`ci/askpass.ts`) when `MINIONS_GH_APP_*` is set, otherwise from `gh` CLI's stored credentials.
-   - `ensurePullRequest({ ctx, slug })` — `gh pr create --title <title> --body ... --base <base> --head <branch> --repo <owner/repo>`. Persists the resulting PR on the session row via `SessionRepo.setPr`.
+   - `pushBranch(worktree, branch)` — `git push -u origin <branch>` from the worktree, where `origin` is the local bare clone, which itself has `origin → github.com/...`. Auth comes from the orchestrator's chosen mechanism: a GitHub App via askpass shim, the `gh` CLI's stored credentials, or an SSH key — whichever your orchestrator configures.
+   - `ensurePullRequest({ ctx, slug })` — `gh pr create --title <title> --body ... --base <base> --head <branch> --repo <owner/repo>`. Persists the resulting PR on the session row.
 
-2. `gh pr merge <number> --squash` — github does the merge. CI gates and conflict detection happen on github's side, which is what we want; doing the merge locally was brittle (the worktree's `origin/<base>` ref may not match github's HEAD).
+2. `gh pr merge <number> --squash` — github does the merge. CI gates and conflict detection happen on github's side, which is what we want; doing the merge locally is brittle (the worktree's `origin/<base>` ref may not match github's HEAD).
 
 3. After merge succeeds:
-   - `RestackManager.restackChildren(slug)` walks all sessions whose `baseBranch === <landed branch>` and tries to rebase them. On conflict, spawns a `rebase-resolver` session and raises a `rebase-conflict` attention flag.
+   - The orchestrator's restack logic walks all sessions whose `baseBranch === <landed branch>` and tries to rebase them. On conflict, spawns a `rebase-resolver` session and raises a `rebase-conflict` attention flag.
    - DAG nodes referencing the same base get the same treatment.
 
 ## Triggering a land
 
 ```
-TOKEN=$(grep '^MINIONS_TOKEN=' .env.local | cut -d= -f2)
 curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"kind":"land","sessionSlug":"<slug>","strategy":"squash","force":true}' \
-  http://127.0.0.1:8787/api/commands
+  "$ORCH_URL/api/commands"
 ```
 
 `force: true` skips readiness when CI is still in progress; drop it when you want the merge to gate on green CI.
@@ -28,11 +27,11 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/
 After triggering land:
 
 ```
-# Engine log
-tail -25 /tmp/engine.log | grep landing
+# Orchestrator log
+tail -25 "$ORCHESTRATOR_LOG" | grep landing
 
 # Session state
-curl -s -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8787/api/sessions/<slug>" \
+curl -s -H "Authorization: Bearer $TOKEN" "$ORCH_URL/api/sessions/<slug>" \
   | python3 -c 'import sys,json; s=json.load(sys.stdin); print("status:", s["status"]); print("pr:", s.get("pr"))'
 
 # GitHub side
@@ -44,38 +43,34 @@ gh run list --branch=<branch> --limit 5
 
 | symptom | cause | fix |
 |---|---|---|
-| `failed to push <branch> to origin` | GH App token didn't reach git over askpass; or branch already exists with diverged history | `gh auth status` to confirm App is installed; for diverged branch `gh pr close <n> -d` and recreate |
-| `gh pr create` fails with "could not find any commits between..." | branch matches base | the agent didn't actually commit; check `.dev-workspace/<slug>` |
-| `gh pr merge` succeeds but local main lags | `git pull --ff-only origin main` |
+| `failed to push <branch> to origin` | auth credentials didn't reach git over askpass; or branch already exists with diverged history | `gh auth status` to confirm credentials are good; for diverged branch `gh pr close <n> -d` and recreate |
+| `gh pr create` fails with "could not find any commits between..." | branch matches base | the agent didn't actually commit; check `<workspace>/<slug>` |
+| `gh pr merge` succeeds but local main lags | normal — `git pull --ff-only origin main` |
 | CI red, `force: false` blocks land | readiness check failing on quality/ci | either fix the cause (re-dispatch a fix session), or `force: true` if you accept it |
-| Test-engine flakes on push event but passes on pull_request | concurrency cancelling the push run | not a real failure; check the pull_request run conclusion instead |
+| Test-orchestrator flakes on push event but passes on pull_request | concurrency cancelling the push run | not a real failure; check the pull_request run conclusion instead |
 
 ## DAG cascade (auto-restack on parent land)
 
-This is wired in `landing/restack.ts` but hasn't been exercised end-to-end yet in this repo's history. To demo:
+If the orchestrator supports stacked DAGs, landing a parent should trigger restacking of children:
 
-1. Spawn a 3-node DAG (A→B→C) via `POST /api/sessions { mode:'ship' }` or via `/api/dags` if exposed.
+1. Spawn a multi-node DAG (A→B→C) via the orchestrator's DAG/ship API.
 2. Land A (`POST /api/commands {kind:"land", sessionSlug:<A>, strategy:"squash", force:true}`).
-3. Watch engine logs: should emit `restacking child <B>` and trigger fetch + rebase in B's worktree.
+3. Watch orchestrator logs: should emit `restacking child <B>` and trigger fetch + rebase in B's worktree.
 4. If B has a clean rebase, B's branch is force-pushed and its PR base is updated.
 5. On conflict: B gets `attention.kind === 'rebase-conflict'` and a `rebase-resolver` subsession spawns to fix it.
 
-If this doesn't fire, check that `RestackManager.restackChildren` is actually being called (it is — at the end of `LandingManager.land`). Most likely cause for "no restack" is that the children's `baseBranch` field on the session row doesn't match the landed parent's branch — verify with:
-
-```
-sqlite3 .dev-workspace/engine.db "select slug, branch, base_branch from sessions where status not in ('cancelled','failed');"
-```
+If this doesn't fire, check that the restack manager is actually being called. Most likely cause for "no restack" is that the children's `baseBranch` field on the session row doesn't match the landed parent's branch — verify with whatever query interface your orchestrator exposes (sqlite cli, REST endpoint, etc.).
 
 ## CI babysitter + auto-fix-CI
 
-`ci/babysitter.ts` polls `gh pr checks <prNumber>` every 30s for sessions with open PRs. On any failed check it raises `attention.kind === 'ci_failed'` and, when `runtime.effective().ciAutoFix === true`, spawns a `fix-CI` subsession with the failure logs in the prompt.
+A typical orchestrator polls `gh pr checks <prNumber>` every 30s for sessions with open PRs. On any failed check it raises a `ci_failed` attention and, when an `ciAutoFix` runtime flag is enabled, spawns a `fix-CI` subsession with the failure logs in the prompt.
 
 Toggle it via:
 
 ```
 curl -s -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"ciAutoFix": true}' \
-  http://127.0.0.1:8787/api/config/runtime
+  "$ORCH_URL/api/config/runtime"
 ```
 
-The sidecar (`@minions/sidecar`) runs the same kind of policing in a separate process — its `failedCiNoFix.ts` rule is a parallel safety net when `ciAutoFix` is off, or for environments where the engine completion handlers are inert (like the codex sandbox case).
+A separate sidecar process commonly runs the same kind of policing as a parallel safety net for environments where the orchestrator's completion handlers are inert (host-sandbox case).

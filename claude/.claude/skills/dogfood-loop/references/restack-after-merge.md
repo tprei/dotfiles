@@ -5,7 +5,7 @@ When a DAG ships a stack of PRs (A ← B ← C, each PR's `base` set to the prev
 1. The parent's branch is deleted (the `--delete-branch` flag on `gh pr merge`).
 2. Every child whose `base` was the deleted branch is **auto-closed** by GitHub. Not "stays open with broken base" — closed, with state `CLOSED`.
 
-This was the single biggest source of friction in the dogfood-loop history. The engine's `RestackManager` is supposed to bump the bases first, but it racing with `gh pr merge --delete-branch` is unreliable, and its `gh pr edit --base` call sometimes 4xx's with a `projectCards` GraphQL deprecation error (see known-bugs.md).
+This is the single biggest source of friction in a stacked-DAG dogfood loop. The orchestrator's restack manager is supposed to bump the bases first, but racing with `gh pr merge --delete-branch` is unreliable, and `gh pr edit --base` sometimes 4xx's with a `projectCards` GraphQL deprecation error (see `known-bugs.md`).
 
 Net effect: every merged parent leaves you with N auto-closed children to recover by hand.
 
@@ -20,7 +20,7 @@ cd restack-$CHILD_BRANCH
 
 git fetch origin main
 # `--onto main` rebases the child's commits straight onto current main, dropping the parent's commits
-# (those landed via the squash-merge).  <old-parent-base> is the SHA the child branched from.
+# (those landed via the squash-merge). <old-parent-base> is the SHA the child branched from.
 OLD_PARENT_BASE=$(git merge-base HEAD origin/main)
 git rebase --onto origin/main "$OLD_PARENT_BASE"
 
@@ -56,34 +56,25 @@ Then walk each clone, resolve conflicts manually (the loop above leaves rebase i
 
 ## Common conflict shapes
 
-The conflicts here aren't random — they cluster around files that several children all touched:
+The conflicts here aren't random — they cluster around files that several children all touched. Two patterns recur regardless of the codebase:
 
-### `packages/engine/src/resource/monitor.ts`
+### Multiple parallel sessions added fields to the same data structure
 
-Multiple parallel sessions tend to add fields to `ResourceSnapshot` and `du`-like helpers. Pattern:
+Pattern:
 
 ```
 <<<<<<< HEAD
-        workspaceUsedBytes: workspaceBytes,
+        someField: actualValue,
 =======
-        workspaceUsedBytes: 0,
->>>>>>> 540ac99 (session:n6jjf5l3ec ...)
+        someField: 0,
+>>>>>>> <other-session> (session:n6jjf5l3ec ...)
 ```
 
 Always keep the populated value, drop the placeholder. Same with imports — keep both, dedupe.
 
-### `packages/engine/src/landing/index.ts`
+### Children added complementary helpers in the same module
 
-Children often add new modules (`baseResolver.ts`, `editPRBase.ts`) and import them at the top. Pattern: two `import {` blocks fight, both belong. Merge:
-
-```ts
-import { createEditPullRequestBase, defaultRunGh, type EditPullRequestBaseFn } from "./editPRBase.js";
-import { applyLiveBase, defaultBranchExists, defaultRebaseOnto } from "./baseResolver.js";
-```
-
-### `packages/engine/src/ci/index.ts`
-
-When two children both add to the CI babysitter, the `<<<<<<< HEAD ... =======` chunks usually wrap *complementary* helpers (`summarizeChecks` vs `bucketChecks` + `decideSelfHeal`). Keep both — they don't overlap functionally.
+When two children both add to a registrar/dispatcher/coordinator, the `<<<<<<< HEAD ... =======` chunks usually wrap *complementary* helpers. Keep both — they don't overlap functionally.
 
 If a conflict is non-trivial (>30 lines, behavioral overlap, types changed shape), close the child PR with a comment ("non-trivial conflict — re-open via fresh dispatch") and re-dispatch the work as a fresh task on top of new main. The closed PR's branch is fine to delete; the dispatch will produce a new branch.
 
@@ -91,7 +82,7 @@ If a conflict is non-trivial (>30 lines, behavioral overlap, types changed shape
 
 When writing the dispatch prompt for a multi-node ship, set every node's `baseBranch` to `main`. The DAG scheduler's stack-merge story exists, but it's strictly cheaper to land 4 PRs against `main` than to debug 4 cascading auto-closes.
 
-The exception: ships where node N's *content* genuinely depends on node N-1's content (not just type signatures, but actual semantic prerequisites). Type-only dependencies should be in `packages/shared` and don't require stacking.
+The exception: ships where node N's *content* genuinely depends on node N-1's content (not just type signatures, but actual semantic prerequisites). Type-only dependencies should be in a shared package and don't require stacking.
 
 ## Prevention: --admin for the parent merge
 
