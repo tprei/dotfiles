@@ -29,6 +29,7 @@
 - Always run `/prompts:prepare` when entering a planning phase to establish proper code context before exploring or planning.
 - If the user provides a repomix bundle in the prompt, skip `/prompts:prepare`.
 - Always write `.md` plan/todo files to a separate folder. If `docs/` already exists, write there; otherwise create one.
+- After non-trivial code changes — multi-file changes, new logic, risky areas (auth, migrations, concurrency, IO boundaries), or anything beyond mechanical refactors/renames/docs — engage the `enemy` subagent for an adversarial pass before declaring the work done. Skip for pure formatting, doc-only, or single-line trivial fixes.
 - After you make significant changes, always engage the git-commit-specialist subagent.
 - When working on a new issue, create a new worktree and branch so that other agents do not conflict with your work in the same environment.
 - NEVER add fallbacks. Before making any change, ask yourself: "Is this a definitive solution, or is this a fallback/workaround?" If it's the latter, keep searching for the root cause. Exhaust all investigation avenues. If you genuinely cannot find the right fix, tell the user directly instead of shipping a fallback.

@@ -19,14 +19,12 @@
 - avoid easy/simple/just, latin abbreviations, marketing language
 
 # Manual Reminders
-
-<!-- manual-claude-guidance:start -->
-
 - Always look at content as a whole, never ever take code out of context. Use repomix to package code neatly. If code is way too large, then use compress=true in repomix. Try to get exactly the files you need to package
 - Use context7 for context
 - Always run `/prepare` when entering plan mode to establish proper code context before exploring or planning
 - If the user provides a repomix bundle in the prompt, skip `/prepare`
 - Always write .MD plan/todo files to separate folder. If docs already exists, write it there, otherwise create one
+- After non-trivial code changes — multi-file changes, new logic, risky areas (auth, migrations, concurrency, IO boundaries), or anything beyond mechanical refactors/renames/docs — engage the `enemy` agent for an adversarial pass before declaring the work done. Skip for pure formatting, doc-only, or single-line trivial fixes
 - After you make significant changes, always engage the git commit specialist agent
 - When working on a new issue, create a new worktree and branch so that other agents do not conflict with your work in the same environment
 - NEVER add fallbacks. Before making any change, ask yourself: "Is this a definitive solution, or is this a fallback/workaround?" If it's the latter, keep searching for the root cause. Exhaust all investigation avenues. If you genuinely cannot find the right fix, tell the user directly instead of shipping a fallback
@@ -52,5 +50,5 @@
 - Always read a file before editing it. Prefer the Edit tool for targeted changes over rewriting entire files
 - Prefer `fd` over `find` and `bat` over `cat` for previews when available. Prefer non-interactive command invocations
 - Commit messages: concise, focused on the why
-
+- Use your Edit/Update tooling. Don't use `sed` for code changes.
 <!-- manual-claude-guidance:end -->
