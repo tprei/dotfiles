@@ -112,7 +112,6 @@ export PATH="$HOME/.local/bin:$PATH"
 export PATH=$HOME/chrome-linux64:$PATH
 
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-export PATH="$(npm bin -g):$PATH"
 
 
 # bun completions
@@ -175,3 +174,9 @@ export SDL_AUDIODRIVER=pulseaudio
 
 
 alias mini='ssh minions@mini'
+
+export PATH=$PATH:/usr/local/go/bin
+export PATH="$HOME/.luarocks/bin:$PATH"
+export PATH="$PATH:/mnt/c/Users/srtp-/AppData/Local/Android/Sdk/platform-tools"
+
+alias cb="xclip -sel clipboard"
