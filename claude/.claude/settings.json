@@ -123,5 +123,13 @@
   "voiceEnabled": true,
   "feedbackSurveyState": {
     "lastShownTime": 1753994647675
+  },
+  "extraKnownMarketplaces": {
+    "mwdat-android-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "facebook/meta-wearables-dat-android"
+      }
+    }
   }
 }
