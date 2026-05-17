@@ -65,6 +65,18 @@ trust_level = "trusted"
 [projects."/home/prei/minions/claude-minions"]
 trust_level = "trusted"
 
+[projects."/home/prei/study/interpreter"]
+trust_level = "trusted"
+
+[projects."/home/prei/minions/minions-workflow-core"]
+trust_level = "trusted"
+
+[projects."/home/prei/pinoquio-core/pinoquio-socials"]
+trust_level = "trusted"
+
+[projects."/home/prei/pinoquio-core"]
+trust_level = "trusted"
+
 # ---------------------------------------------------------------------------
 # MCP servers
 # Secrets are forwarded from the shell environment — export
@@ -93,3 +105,6 @@ startup_timeout_sec = 20.0
 command = "npx"
 args = ["-y", "@supabase/mcp-server-supabase@latest"]
 env_vars = ["SUPABASE_ACCESS_TOKEN"]
+
+[features]
+goals = true
