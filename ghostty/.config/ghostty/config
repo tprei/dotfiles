@@ -1,0 +1,23 @@
+theme = Gruvbox Light
+font-size = 14
+adjust-cell-height = 15%
+
+shell-integration = zsh
+macos-option-as-alt = true
+macos-titlebar-style = tabs
+
+clipboard-read = allow
+clipboard-write = allow
+copy-on-select = clipboard
+
+mouse-hide-while-typing = true
+window-save-state = always
+
+keybind = shift+enter=text:\n
+keybind = cmd+a=text:\x01
+keybind = cmd+d=text:\x04
+keybind = global:ctrl+cmd+backspace=toggle_quick_terminal
+
+
+quick-terminal-position = top
+quick-terminal-animation-duration = 0.1
