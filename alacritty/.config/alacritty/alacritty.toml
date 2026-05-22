@@ -1,0 +1,33 @@
+[general]
+import = ["themes/gruvbox_dark.toml"]
+live_config_reload = true
+
+[window]
+padding = { x = 10, y = 10 }
+dynamic_padding = true
+
+[scrolling]
+history = 20000
+multiplier = 3
+
+[font]
+size = 18.0
+
+[keyboard]
+bindings = [
+  { key = "Enter", mods = "Shift", chars = "\u001b[13;2u" },
+]
+
+[cursor]
+unfocused_hollow = true
+style = { shape = "Block", blinking = "Off" }
+
+[mouse]
+hide_when_typing = true
+
+[selection]
+save_to_clipboard = true
+
+[terminal]
+shell = { program = "/bin/zsh", args = ["-l"] }
+osc52 = "OnlyCopy"

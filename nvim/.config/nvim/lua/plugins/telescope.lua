@@ -30,11 +30,13 @@ return {
 				desc = '[S]earch fuzzi[/]y in current buffer'
 			},
 			{ "<leader>sf", function() require('telescope.builtin').find_files() end, desc = '[S]earch [f]iles' },
+			{ "<leader>sa", function() require('telescope.builtin').find_files({hidden=true}) end, desc = '[S]earch [a]ll (includes hidden)' },
 			{
 				"<leader>sn",
 				function()
 					require('telescope.builtin').find_files({
-						cwd = vim.fn.expand("$HOME") .. "/dotfiles"
+						cwd = vim.fn.expand("$HOME") .. "/dotfiles",
+						hidden = true
 					})
 				end,
 				desc = '[S]earch [n]eovim (dotfiles)'
@@ -46,7 +48,7 @@ return {
 			{
 				"<leader>ss",
 				function()
-					require("telescope.builtin").live_grep()
+					require("telescope.builtin").grep_string()
 				end,
 				mode = { "n", "v" },
 				desc = "[S]earch [s]tring (grep)",

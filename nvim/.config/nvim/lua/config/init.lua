@@ -6,8 +6,11 @@
 vim.o.number = true
 vim.o.relativenumber = true
 
+-- don't show the default status line
+vim.o.showmode = false
+
 -- theme
-vim.o.background = "light"
+vim.o.background = "dark"
 
 -- Allow undoing/redoing even after closing a file
 vim.o.undofile = true
