@@ -5,7 +5,9 @@
     "DISABLE_COST_WARNINGS": "1",
     "ENABLE_STREAMING": "true",
     "MAX_MCP_OUTPUT_TOKENS": "32000",
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "EDITOR": "nvim",
+    "VISUAL": "nvim"
   },
   "includeCoAuthoredBy": false,
   "permissions": {
