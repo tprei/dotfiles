@@ -180,3 +180,5 @@ export PATH="$HOME/.luarocks/bin:$PATH"
 export PATH="$PATH:/mnt/c/Users/srtp-/AppData/Local/Android/Sdk/platform-tools"
 
 alias cb="xclip -sel clipboard"
+eval "$(starship init zsh)"
+

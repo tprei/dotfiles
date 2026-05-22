@@ -59,6 +59,9 @@ vim.keymap.set('n', '<right>', '')
 vim.keymap.set('n', '<down>', '')
 vim.keymap.set('n', '<up>', '')
 
+-- map 'gm' as go to mark
+vim.keymap.set('n', 'gm', "`", {desc = '[G]o to [M]ark'})
+
 
 -- [[
 -- Formatting

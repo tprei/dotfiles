@@ -102,6 +102,14 @@
     "repomix-mcp@repomix": false,
     "frontend-design@claude-plugins-official": true
   },
+  "extraKnownMarketplaces": {
+    "mwdat-android-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "facebook/meta-wearables-dat-android"
+      }
+    }
+  },
   "sandbox": {
     "enabled": true,
     "allowUnsandboxedCommands": true,
@@ -118,18 +126,10 @@
   "effortLevel": "high",
   "showClearContextOnPlanAccept": true,
   "skipDangerousModePermissionPrompt": true,
-  "theme": "dark-daltonized",
+  "theme": "light-daltonized",
   "autoCompactEnabled": false,
   "voiceEnabled": true,
   "feedbackSurveyState": {
     "lastShownTime": 1753994647675
-  },
-  "extraKnownMarketplaces": {
-    "mwdat-android-marketplace": {
-      "source": {
-        "source": "github",
-        "repo": "facebook/meta-wearables-dat-android"
-      }
-    }
   }
 }
