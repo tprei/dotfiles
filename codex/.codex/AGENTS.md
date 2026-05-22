@@ -49,7 +49,11 @@
 - When asked to review a PR, invoke the `review` skill.
 - Prefer DDD when building features.
 - Build explicit code: explicit boundaries, explicit types. Avoid nested ternaries. Don't overengineer — keep changes minimal and focused, follow existing repo conventions.
-- Never disable lint/typecheck rules to make errors go away — fix the underlying issue.
+- **Zero suppressions.** Never silence a linter or typechecker to clear an error. Banned unless the user explicitly signs off: `# type: ignore`, `# pyright: ignore`, `# pylint: disable`, `# noqa`, `// @ts-ignore`, `// @ts-expect-error`, `// eslint-disable*`, `as any`, unjustified `cast()` / `Any`, and bare/broad `except Exception` / `catch {}` used to swallow errors. Fix the root cause.
+- **No advisory gates.** Lint and typecheck steps must be blocking. Never add or leave `continue-on-error: true`, `|| true`, advisory wrappers, silencing per-module `exclude`/override blocks, suppression baseline files, or `--max-warnings <n>` slack. Lint + typecheck must pass with **zero** warnings and errors.
+- **A suppression is a last resort, not a fix.** If you genuinely cannot resolve an error, STOP and tell the user (per the no-fallback rule) instead of suppressing. Any approved exception must be the narrowest possible scope, carry an inline reason, and link a tracking issue.
+- **Leave no debris.** No dead/commented-out code, no leftover `console.log` / `print` debugging, no unused imports/vars, no untracked `TODO`/`FIXME` without a linked issue.
+- When asked to deslop, remove suppressions/ignores, or harden lint/typecheck gates, invoke the `deslop` skill.
 - Tests must cover critical product behavior. Skip tautological tests, tests asserting only static styles, and tests for static copy (placeholders, labels, helper text, empty-state text, tooltip text).
 - Always read a file before editing it. Prefer targeted edits over rewriting entire files.
 - Prefer `fd` over `find` and `bat` over `cat` for previews when available. Prefer non-interactive command invocations.
