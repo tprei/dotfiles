@@ -81,6 +81,9 @@ trust_level = "trusted"
 [projects."/home/prei/study/lua"]
 trust_level = "trusted"
 
+[projects."/home/prei/pinoquio-core/pinoquio-na-web"]
+trust_level = "trusted"
+
 # ---------------------------------------------------------------------------
 # MCP servers
 # Secrets are forwarded from the shell environment — export

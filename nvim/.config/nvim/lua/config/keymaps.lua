@@ -15,6 +15,12 @@ vim.g.maplocalleader = ' '
 -- save on <leader>w
 vim.keymap.set('n', '<leader>w', '<cmd>write<CR>', { desc = '[W]rite file' })
 
+-- update and source configuration on <leader> R
+vim.keymap.set('n', '<leader>R', '<cmd>update<CR><cmd>so<CR>', { desc = 'Update and source configuration'})
+
+-- quit on <leader> Q
+vim.keymap.set('n', '<leader>Q', '<cmd>quit<CR>', { desc = '[Q]uit'})
+
 -- refresh search highlighting on ESC
 vim.keymap.set('n', '<Esc>', '<cmd>nohlsearch<CR>')
 

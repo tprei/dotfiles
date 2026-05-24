@@ -128,7 +128,7 @@
   "effortLevel": "high",
   "showClearContextOnPlanAccept": true,
   "skipDangerousModePermissionPrompt": true,
-  "theme": "light-daltonized",
+  "theme": "dark-ansi",
   "autoCompactEnabled": false,
   "voiceEnabled": true,
   "feedbackSurveyState": {
