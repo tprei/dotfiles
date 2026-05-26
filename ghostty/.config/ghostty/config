@@ -14,6 +14,7 @@ mouse-hide-while-typing = true
 window-save-state = always
 
 keybind = shift+enter=text:\n
+keybind = ctrl+shift+v=paste_from_clipboard
 keybind = cmd+a=text:\x01
 keybind = cmd+d=text:\x04
 keybind = global:ctrl+cmd+backspace=toggle_quick_terminal
