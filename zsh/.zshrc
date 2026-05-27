@@ -163,6 +163,23 @@ tmux-help() {
   claude --model haiku --effort low -p "$message" --dangerously-skip-permissions | cat
 }
 
+clearn() {
+  local prompt
+  if [ -t 0 ]; then
+    prompt="$*"
+  else
+    prompt=$(</dev/stdin)
+  fi
+
+  if [[ -z "$prompt" ]]; then
+    prompt="Use learn-mode. Ask me what I want to learn, then tutor me without giving direct answers or copyable solutions."
+  else
+    prompt="Use learn-mode. Tutor me through this without giving direct answers or copyable solutions: ${prompt}"
+  fi
+
+  codex --sandbox read-only --ask-for-approval never -- "$prompt"
+}
+
 claude-commit() {
   z-claude -p "commit changes"
 }
