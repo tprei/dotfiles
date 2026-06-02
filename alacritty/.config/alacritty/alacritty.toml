@@ -16,6 +16,7 @@ size = 18.0
 [keyboard]
 bindings = [
   { key = "Enter", mods = "Shift", chars = "\u001b[13;2u" },
+  { key = "Enter", mods = "Alt", chars = "\u001b[13;3u" },
 ]
 
 [cursor]
