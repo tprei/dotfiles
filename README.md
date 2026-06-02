@@ -40,7 +40,7 @@ Disable macOS **Input sources** shortcuts that use `Control-Space`. Re-record Ra
 
 ## Agents
 
-`claude/.claude` contains Claude agents, commands, skills, settings, and status line config. `codex/.codex` contains Codex config, prompts, agents, and mirrored skills.
+`claude/.claude` contains Claude agents, commands, skills, settings, and status line config. `codex/.codex` contains Codex config, prompts, agents, and mirrored skills. `pi/.pi/agent` contains Pi extensions and status line config.
 
 ## Helpers
 

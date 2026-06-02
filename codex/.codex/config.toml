@@ -1,5 +1,5 @@
-model = "gpt-5.4"
-model_reasoning_effort = "xhigh"
+model = "gpt-5.5"
+model_reasoning_effort = "medium"
 personality = "pragmatic"
 approvals_reviewer = "user"
 
@@ -16,6 +16,9 @@ web_search = true
 
 [notice]
 hide_gpt5_1_migration_prompt = true
+
+[notice.model_migrations]
+"gpt-5.4" = "gpt-5.5"
 
 # ---------------------------------------------------------------------------
 # Trusted projects
