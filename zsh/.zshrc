@@ -146,10 +146,10 @@ claude() {
 z-claude() {
     ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic" \
     ANTHROPIC_AUTH_TOKEN="$MY_ZAI_AUTH_TOKEN" \
-    ANTHROPIC_DEFAULT_OPUS_MODEL="glm-5" \
-    ANTHROPIC_DEFAULT_SONNET_MODEL="glm-5" \
-    ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-5" \
-    command claude --model GLM-5 "$@"
+    ANTHROPIC_DEFAULT_OPUS_MODEL="glm-5.1" \
+    ANTHROPIC_DEFAULT_SONNET_MODEL="glm-5.1" \
+    ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-5.1" \
+    command claude --model GLM-5.1 "$@"
 }
 
 claude-update() {
