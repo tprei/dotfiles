@@ -714,11 +714,19 @@ class VimModalEditor extends CustomEditor {
     const leftPadding = " ".repeat(paddingX);
     const rightPadding = leftPadding;
 
-    out.push(this.scrollOffset > 0 ? this.theme.borderColor(`─── ↑ ${this.scrollOffset} more ` + "─".repeat(Math.max(0, width - visibleWidth(`─── ↑ ${this.scrollOffset} more `)))) : border.repeat(width));
+    if (this.scrollOffset > 0) {
+      const indicator = `─── ↑ ${this.scrollOffset} more `;
+      const remaining = width - visibleWidth(indicator);
+      out.push(this.theme.borderColor(remaining >= 0 ? indicator + "─".repeat(remaining) : truncateToWidth(indicator, width, "")));
+    } else {
+      out.push(border.repeat(width));
+    }
 
     for (const row of visible) {
       let display = this.styleChunk(row.line, row.startCol, row.text);
       let lineWidth = visibleWidth(row.text);
+      let cursorInPadding = false;
+
       if (row.hasCursor && row.cursorPos !== undefined) {
         const p = Math.max(0, Math.min(row.cursorPos, row.text.length));
         const plain = row.text;
@@ -726,21 +734,34 @@ class VimModalEditor extends CustomEditor {
         const at = plain[p] ?? " ";
         const after = this.styleChunk(row.line, row.startCol + Math.min(p + 1, plain.length), plain.slice(p + 1));
         display = `${before}${this.focused ? CURSOR_MARKER : ""}\x1b[7m${at}\x1b[0m${after}`;
-        if (p >= plain.length) lineWidth += 1;
+        if (p >= plain.length) {
+          lineWidth += 1;
+          if (lineWidth > contentWidth && paddingX > 0) cursorInPadding = true;
+        }
       }
+
       const pad = " ".repeat(Math.max(0, contentWidth - lineWidth));
-      out.push(`${leftPadding}${display}${pad}${rightPadding}`);
+      const lineRightPadding = cursorInPadding ? rightPadding.slice(1) : rightPadding;
+      const renderedLine = `${leftPadding}${display}${pad}${lineRightPadding}`;
+      out.push(visibleWidth(renderedLine) > width ? truncateToWidth(renderedLine, width, "") : renderedLine);
     }
 
     const below = layout.length - (this.scrollOffset + visible.length);
-    out.push(below > 0 ? this.theme.borderColor(`─── ↓ ${below} more ` + "─".repeat(Math.max(0, width - visibleWidth(`─── ↓ ${below} more `)))) : border.repeat(width));
+    if (below > 0) {
+      const indicator = `─── ↓ ${below} more `;
+      const remaining = width - visibleWidth(indicator);
+      out.push(this.theme.borderColor(remaining >= 0 ? indicator + "─".repeat(remaining) : truncateToWidth(indicator, width, "")));
+    } else {
+      out.push(border.repeat(width));
+    }
 
     if (this.autocompleteState && this.autocompleteList) {
       const autocompleteResult = this.autocompleteList.render(contentWidth);
       for (const line of autocompleteResult) {
         const lineWidth = visibleWidth(line);
         const linePadding = " ".repeat(Math.max(0, contentWidth - lineWidth));
-        out.push(`${leftPadding}${line}${linePadding}${rightPadding}`);
+        const renderedLine = `${leftPadding}${line}${linePadding}${rightPadding}`;
+        out.push(visibleWidth(renderedLine) > width ? truncateToWidth(renderedLine, width, "") : renderedLine);
       }
     }
 
@@ -753,9 +774,10 @@ class VimModalEditor extends CustomEditor {
             ? " NORMAL "
             : " INSERT ";
       const pending = this.pendingOperator ? `${this.pendingOperator}${this.pendingTextObjectPrefix ?? ""}` : this.pendingG ? "g" : "";
-      const label = `${baseMode}${pending ? ` ${pending}` : ""} `;
+      const label = truncateToWidth(`${baseMode}${pending ? ` ${pending}` : ""} `, width, "");
       const last = out.length - 1;
-      out[last] = label + truncateToWidth(out[last] ?? "", Math.max(0, width - label.length), "");
+      const available = Math.max(0, width - visibleWidth(label));
+      out[last] = visibleWidth(label) >= width ? label : label + truncateToWidth(out[last] ?? "", available, "");
     }
 
     return out;
