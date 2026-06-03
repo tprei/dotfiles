@@ -27,7 +27,7 @@ if (\$img -eq \$null) { exit 2 }
 \$img.Save('$win_file', [System.Drawing.Imaging.ImageFormat]::Png)
 PS
 
-if ! powershell.exe -NoProfile -NonInteractive -Command "$ps_cmd" >/dev/null 2>&1; then
+if ! powershell.exe -Sta -NoProfile -NonInteractive -Command "$ps_cmd" >/dev/null 2>&1; then
     tmux display-message "tmux-paste-image: no image in Windows clipboard"
     exit 0
 fi
