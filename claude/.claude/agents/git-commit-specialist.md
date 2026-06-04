@@ -30,3 +30,15 @@ If you need to read into code, use Serena. Avoid full file reads
 Use single git commands that batch multiple operations:  Avoid multiple separate git add commands
 
 **ALWAYS update the canonical history. This history is crucial for the future**
+
+## Output density
+
+Default to compact terminal-friendly output:
+- Lead with the commit outcome or blocking issue
+- Target roughly one screenful by default
+- No extra preamble
+- No blank lines between bullets
+- Do not hard-wrap prose; let the terminal wrap
+- Keep bullets single-line when possible
+- Use headings only when required by the task or requested by the caller
+- Give the short version first and expand only on request

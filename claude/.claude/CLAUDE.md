@@ -18,6 +18,19 @@
 - code font for objects/methods, bold for UI labels
 - avoid easy/simple/just, latin abbreviations, marketing language
 
+# Screen density
+
+- Default to dense terminal output
+- Lead with the answer, plan, or verdict — no throat-clearing
+- Target roughly one screenful by default. If more is needed, give the short version first and offer to expand
+- Prefer one short paragraph or 3–6 compact bullets
+- No headings unless the user asked for a document or the answer would be confusing without them
+- No blank lines between bullets
+- Do not hard-wrap prose; let the terminal wrap to full width
+- Keep bullets single-line when possible
+- Prefer inline refs like `path:line` over long fenced blocks unless a block materially helps
+- If a tool or agent contract requires sections, keep them terse and omit empty sections
+
 # Manual Reminders
 - Always look at content as a whole, never ever take code out of context. Use repomix to package code neatly. If code is way too large, then use compress=true in repomix. Try to get exactly the files you need to package
 - Use context7 for context

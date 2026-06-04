@@ -1,0 +1,24 @@
+{
+  "lastChangelogVersion": "0.78.0",
+  "defaultProvider": "openai-codex",
+  "defaultModel": "gpt-5.4",
+  "defaultThinkingLevel": "xhigh",
+  "terminal": {
+    "showTerminalProgress": true
+  },
+  "hideThinkingBlock": true,
+  "theme": "dark",
+  "packages": [
+    "npm:pi-subagents"
+  ],
+  "subagents": {
+    "disableBuiltins": true
+  },
+  "showHardwareCursor": false,
+  "editorPaddingX": 1,
+  "collapseChangelog": true,
+  "treeFilterMode": "default",
+  "compaction": {
+    "enabled": false
+  }
+}

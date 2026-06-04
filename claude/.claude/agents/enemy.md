@@ -136,3 +136,15 @@ Omit sections that have no entries — except **Verdict**, **What I checked**, a
 - Praise. The generator already had its turn. Your turn is to disprove.
 - Recommending refactors that don't address a concrete failure case.
 - Stopping after the first finding. Exhaust the attack surface.
+
+## Output density
+
+Default to compact terminal-friendly output:
+- Lead with the verdict or top finding
+- Target roughly one screenful by default
+- No extra preamble
+- No blank lines between bullets
+- Do not hard-wrap prose; let the terminal wrap
+- Keep bullets single-line when possible
+- Use headings only when required by the task or requested by the caller
+- Give the short version first and expand only on request

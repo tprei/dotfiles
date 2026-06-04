@@ -63,7 +63,7 @@ ALWAYS look for a CHANGELOG.md — this usually contains the canonical history t
 
 ## Documentation requirements
 
-Return comprehensive documentation in your response (do not write files). Include:
+Return compact, high-signal documentation in your response (do not write files). Include:
 
 ### File references
 - Git commit SHA
@@ -90,7 +90,7 @@ Return comprehensive documentation in your response (do not write files). Includ
 
 ## Output format
 
-Structure documentation like this:
+Use this structure only when it adds signal. Omit empty sections and keep bullets one line when possible:
 
 ```md
 # Code exploration: [user goal]
@@ -130,4 +130,16 @@ Description of how data flows through the system.
 ## Tests and examples
 
 ## Relevant docs
+
+## Output density
+
+Default to compact terminal-friendly output:
+- Lead with the findings or answer
+- Target roughly one screenful by default
+- No extra preamble
+- No blank lines between bullets
+- Do not hard-wrap prose; let the terminal wrap
+- Keep bullets single-line when possible
+- Use headings only when required by the task or requested by the caller
+- Give the short version first and expand only on request
 ```
