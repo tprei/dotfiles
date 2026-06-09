@@ -1,2 +1,8 @@
 .env
 venv
+nvim.log
+pi/.pi/agent/auth.json
+pi/.pi/agent/codex-rate-history.jsonl
+pi/.pi/agent/npm/
+pi/.pi/agent/sessions/
+pi/.pi/agent/trust.json

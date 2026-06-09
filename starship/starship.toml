@@ -1,0 +1,73 @@
+add_newline = false
+command_timeout = 750
+scan_timeout = 30
+
+format = """
+$directory\
+$git_branch\
+$git_status\
+$nodejs\
+$golang\
+$python\
+$bun\
+$line_break\
+$status\
+$cmd_duration\
+$character"""
+
+[character]
+success_symbol = "[>](bold green)"
+error_symbol = "[>](bold red)"
+vimcmd_symbol = "[<](bold cyan)"
+
+[directory]
+style = "bold blue"
+truncation_length = 4
+truncate_to_repo = false
+truncation_symbol = "../"
+read_only = " ro"
+repo_root_style = "bold cyan"
+
+[git_branch]
+format = "[$branch]($style) "
+style = "bold yellow"
+
+[git_status]
+format = "[$all_status$ahead_behind]($style) "
+style = "bold red"
+ahead = ">$count"
+behind = "<$count"
+diverged = "<>$count"
+conflicted = "=$count"
+deleted = "x$count"
+modified = "!$count"
+renamed = "r$count"
+staged = "+$count"
+stashed = "*$count"
+untracked = "?$count"
+
+[nodejs]
+format = "[node:$version]($style) "
+style = "bold green"
+
+[golang]
+format = "[go:$version]($style) "
+style = "bold cyan"
+
+[python]
+format = "[py:$version(\\($virtualenv\\))]($style) "
+style = "bold yellow"
+
+[bun]
+format = "[bun:$version]($style) "
+style = "bold red"
+
+[status]
+disabled = false
+format = "[exit:$status]($style) "
+style = "bold red"
+
+[cmd_duration]
+min_time = 1000
+format = "[took $duration]($style) "
+style = "dimmed white"

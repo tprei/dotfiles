@@ -1,4 +1,5 @@
-theme = Gruvbox Light
+theme = Gruvbox Dark
+font-family = "JetBrainsMono Nerd Font Mono"
 font-size = 14
 adjust-cell-height = 15%
 

@@ -6,9 +6,10 @@ return {
 			formatters_by_ft = {
 				lua = { "stylua" },
 				go = { "goimports", "gofmt" },
-				javascript = { "prettierd" },
-				typescript = { "prettierd" },
-				typescriptreact = { "prettierd" },
+				javascript = { "prettier" },
+				javascriptreact = { "prettier" },
+				typescript = { "prettier" },
+				typescriptreact = { "prettier" },
 				ruby = { "rubocop" },
 			},
 			default_format_opts = {
