@@ -1,3 +1,6 @@
 {
-  "prompts": ["../claude/.claude/commands"]
+  "prompts": [
+    "prompts",
+    "../claude/.claude/commands"
+  ]
 }
