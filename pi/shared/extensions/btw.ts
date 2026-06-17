@@ -25,6 +25,9 @@ Rules:
 
 const TRANSCRIPT_MARKER = "--- draft below this line ---";
 const MAX_RENDERED_MESSAGE_LINES = 18;
+const MAX_ORIGINAL_CONTEXT_MESSAGES = 4;
+const MAX_RECENT_CONTEXT_MESSAGES = 6;
+const MAX_CONTEXT_MESSAGE_CHARS = 500;
 
 interface SideThread {
 	systemPrompt: string;
@@ -85,15 +88,21 @@ function getThreadKey(ctx: ExtensionCommandContext): string {
 }
 
 function buildSystemPrompt(ctx: ExtensionCommandContext): string {
-	const recent = getRecentConversation(ctx);
-	return [
-		SIDE_SYSTEM_PROMPT,
-		`Working directory: ${ctx.cwd}`,
-		recent
-			? `Main conversation snapshot at /btw thread start:\n${recent}`
-			: "No recent main conversation context was available when this /btw thread started.",
-		"If the answer depends on repo state or tool output not shown here, say so plainly.",
-	].join("\n\n");
+	const { original, recent } = getConversationContext(ctx);
+	const parts = [SIDE_SYSTEM_PROMPT, `Working directory: ${ctx.cwd}`];
+
+	if (original) {
+		parts.push(`Main conversation context from the start of this session/branch:\n${original}`);
+	}
+	if (recent) {
+		parts.push(`Recent main conversation context when this /btw thread was opened:\n${recent}`);
+	}
+	if (!original && !recent) {
+		parts.push("No main conversation context was available when this /btw thread started.");
+	}
+
+	parts.push("If the answer depends on repo state or tool output not shown here, say so plainly.");
+	return parts.join("\n\n");
 }
 
 async function runTurn(
@@ -116,12 +125,25 @@ async function runTurn(
 	);
 }
 
-function getRecentConversation(ctx: ExtensionCommandContext): string {
-	const branch = ctx.sessionManager.getBranch();
-	const items: string[] = [];
+function getConversationContext(ctx: ExtensionCommandContext): { original: string; recent: string } {
+	const snippets = getConversationSnippets(ctx);
+	const original = snippets.slice(0, MAX_ORIGINAL_CONTEXT_MESSAGES);
+	const originalIndexes = new Set(original.map((snippet) => snippet.index));
+	const recent = snippets
+		.filter((snippet) => !originalIndexes.has(snippet.index))
+		.slice(-MAX_RECENT_CONTEXT_MESSAGES);
 
-	for (let i = branch.length - 1; i >= 0 && items.length < 6; i--) {
-		const entry = branch[i];
+	return {
+		original: formatConversationSnippets(original),
+		recent: formatConversationSnippets(recent),
+	};
+}
+
+function getConversationSnippets(ctx: ExtensionCommandContext): Array<{ index: number; role: "user" | "assistant"; text: string }> {
+	const branch = ctx.sessionManager.getBranch();
+	const snippets: Array<{ index: number; role: "user" | "assistant"; text: string }> = [];
+
+	for (const [index, entry] of branch.entries()) {
 		if (entry.type !== "message") continue;
 		const message = entry.message;
 		if (!("role" in message)) continue;
@@ -129,10 +151,14 @@ function getRecentConversation(ctx: ExtensionCommandContext): string {
 
 		const text = extractText(message as Message).trim();
 		if (!text) continue;
-		items.push(`[${message.role}] ${shorten(text, 500)}`);
+		snippets.push({ index, role: message.role, text: shorten(text, MAX_CONTEXT_MESSAGE_CHARS) });
 	}
 
-	return items.reverse().join("\n\n");
+	return snippets;
+}
+
+function formatConversationSnippets(snippets: Array<{ role: "user" | "assistant"; text: string }>): string {
+	return snippets.map((snippet) => `[${snippet.role}] ${snippet.text}`).join("\n\n");
 }
 
 class BtwPane implements Focusable {
