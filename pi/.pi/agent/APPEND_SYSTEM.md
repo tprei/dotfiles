@@ -9,3 +9,4 @@ Keep responses dense and terminal-friendly.
 - Keep bullets single-line when possible.
 - Prefer inline refs like `path:line` over long fenced blocks unless a block materially helps.
 - If a task or tool contract requires sections, keep them terse and omit empty sections.
+- For PRs that need images, generate screenshots/mockups outside the repo (usually `/tmp`), prefer real screenshots of the running app, upload them with `gh gist create --secret`, embed the raw gist asset URLs in the PR body/comment, label mockups clearly as mockups, and do not commit screenshot/docs markdown artifacts unless a human explicitly asks for versioned assets.

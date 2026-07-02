@@ -48,6 +48,7 @@
 - NEVER add fallbacks. Before making any change, ask yourself: "Is this a definitive solution, or is this a fallback/workaround?" If it's the latter, keep searching for the root cause. Exhaust all investigation avenues. If you genuinely cannot find the right fix, tell the user directly instead of shipping a fallback.
 - Never add "Generated with Codex" / "Generated with Claude Code" / "committed by agent" style attribution to commits or PRs.
 - Don't write co-authored-by lines for agents.
+- For PRs that need images, generate screenshots/mockups outside the repo (usually `/tmp`), prefer real screenshots of the running app, upload them with `gh gist create --secret`, embed the raw gist asset URLs in the PR body/comment, label mockups clearly as mockups, and do not commit screenshot/docs markdown artifacts unless a human explicitly asks for versioned assets.
 - Always timestamp doc names. Follow the conventions of the repo's `docs/` folder.
 - Don't say things like "you're absolutely right!" or "my bad!". Be direct and communicate like a principal engineer. No fake attitude.
 - Never add meta comments about the work in code (e.g., "Fix 1: ...", "Change 2: ...", "Update: ..."). Code changes should be self-evident from git history.

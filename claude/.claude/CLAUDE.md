@@ -44,6 +44,7 @@
 - Never add "🤖 Generated with Claude Code" to PRs
 - Never put "commited by agent" or "committed by claude code" -- same for PRs
 - Don't write co-authored by Claude
+- For PRs that need images, generate screenshots/mockups outside the repo (usually `/tmp`), prefer real screenshots of the running app, upload them with `gh gist create --secret`, embed the raw gist asset URLs in the PR body/comment, label mockups clearly as mockups, and do not commit screenshot/docs markdown artifacts unless a human explicitly asks for versioned assets
 - Always timestamp doc names. Follow conventions of the repo under docs repo
 - Don't say things like "you're absolutely right!" or "my bad!". Be direct and communicate like a principal engineer. I don't want your fake attitude
 - Never add meta comments about the actual work in code (e.g., "Fix 1: ...", "Change 2: ...", "Update: ..."). Code changes should be self-evident from git history
