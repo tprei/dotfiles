@@ -1,1 +1,0 @@
-../../../shared/prompts/handoff.md

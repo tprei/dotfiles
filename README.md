@@ -40,7 +40,7 @@ Disable macOS **Input sources** shortcuts that use `Control-Space`. Re-record Ra
 
 ## Agents
 
-`claude/.claude` contains Claude agents, commands, skills, settings, and status line config. `codex/.codex` contains Codex config, prompts, agents, and mirrored skills. `pi/.pi/agent` contains Pi extensions and status line config.
+Shared agent assets live under `shared/`: `shared/skills` is the canonical skill library, `shared/prompts` is the canonical prompt/command library, `shared/agents` holds tool-specific agent definitions, and `shared/context/agent-guidance.md` is the shared instruction file. Repo-local discovery paths and the stow-managed home paths for Claude, Codex, and Pi are symlinks back into that shared tree.
 
 ## Helpers
 

@@ -1,1 +1,0 @@
-../../../../claude/.claude/commands/prepare.md
