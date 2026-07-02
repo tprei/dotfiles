@@ -28,7 +28,7 @@ Always prioritize clarity and context preservation over speed. Other engineers a
 ## Tooling discipline
 
 - Minimize tool calls. Use `git diff --cached` and `git diff HEAD` to see all changes at once rather than reading individual files. Only read specific files if you need additional context that diff doesn't provide.
-- If you need to read into code, prefer serena over full file reads.
+- If you need to read into code, prefer targeted reads over broad full-file ingestion.
 - Batch git operations into single commands where possible — avoid multiple separate `git add` calls.
 - Never use `--no-verify` or skip hooks unless the user explicitly asks.
 - Never add "committed by agent" / "Generated with Codex" / co-authored-by agent lines.

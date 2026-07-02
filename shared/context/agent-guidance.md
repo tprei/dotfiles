@@ -38,10 +38,11 @@
 
 ## Manual reminders
 
-- Always look at content as a whole, never ever take code out of context. Use repomix to package code neatly. If code is way too large, then use `compress=true` in repomix. Try to get exactly the files you need to package.
-- Use context7 for documentation lookup.
-- Always run the shared `prepare` prompt/command when entering a planning phase to establish proper code context before exploring or planning.
-- If the user provides a repomix bundle in the prompt, skip `prepare`.
+- Always look at content as a whole, never take code out of context. Build focused context with `git diff`, `git ls-files`, `rg`, and targeted file reads. Try to gather exactly the files you need before planning or editing.
+- Use official documentation and primary sources for documentation lookup.
+- Prefer shared skills over legacy prompt/command files for reusable workflows.
+- Always run the shared `prepare-context` skill when entering a planning phase to establish proper code context before exploring or planning.
+- If the user already provides focused file context in the prompt, skip `prepare-context`.
 - Always write `.md` plan/todo files to a separate folder. If `docs/` already exists, write there; otherwise create one.
 - After non-trivial code changes — multi-file changes, new logic, risky areas (auth, migrations, concurrency, IO boundaries), or anything beyond mechanical refactors/renames/docs — engage the `enemy` agent for an adversarial pass before declaring the work done. Skip for pure formatting, doc-only, or single-line trivial fixes.
 - After you make significant changes, always engage the `git-commit-specialist` agent.

@@ -40,7 +40,7 @@ Disable macOS **Input sources** shortcuts that use `Control-Space`. Re-record Ra
 
 ## Agents
 
-Shared agent assets live under `shared/`: `shared/skills` is the canonical skill library, `shared/prompts` is the canonical prompt/command library, `shared/agents` holds tool-specific agent definitions, and `shared/context/agent-guidance.md` is the shared instruction file. Repo-local discovery paths and the stow-managed home paths for Claude, Codex, and Pi are symlinks back into that shared tree.
+Shared agent assets live under `shared/`: `shared/skills` is the canonical workflow library, `shared/prompts` is only a compatibility directory for any remaining prompt/command files, `shared/agents` holds tool-specific agent definitions, and `shared/context/agent-guidance.md` is the shared instruction file. Repo-local discovery paths and the stow-managed home paths for Claude, Codex, and Pi are symlinks back into that shared tree.
 
 ## Helpers
 

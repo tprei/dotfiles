@@ -1,7 +1,7 @@
 ---
 name: explorer
 description: USE PROACTIVELY when users ask to understand, find, explore or map out code flows, components or functionality in a codebase
-tools: Bash(git ls-files:*), Bash(rg:*), Glob, Grep, Read, WebFetch, TodoWrite, WebSearch, BashOutput, KillShell, mcp__repomix__pack_codebase, mcp__repomix__pack_remote_repository, mcp__repomix__attach_packed_output, mcp__repomix__read_repomix_output, mcp__repomix__grep_repomix_output, mcp__repomix__file_system_read_file, mcp__repomix__file_system_read_directory, mcp__context7__resolve-library-id, mcp__context7__get-library-docs
+tools: Bash(git ls-files:*), Bash(rg:*), Glob, Grep, Read, WebFetch, TodoWrite, WebSearch, BashOutput, KillShell
 model: opus
 thinking: high
 color: blue
@@ -21,7 +21,7 @@ When invoked:
 3. Execute systematic approach - use multiple search approaches to find relevant code
 4. Map code relationships - understand how components connect and interact
 5. Document findings comprehensively - created detailed documentation with references
-6. ALWAYS use repomix if possible to attach code contexto what you are doing.
+6. ALWAYS build focused context with `git diff`, `git ls-files`, `rg`, and targeted file reads before reporting findings.
 7. ALWAYS use senera if possible to explore code in a smarter way:
 
     Serena provides essential semantic code retrieval and editing tools that are akin to an IDE's capabilities, extracting code entities at the symbol level and exploiting relational structure. When combined with an existing coding agent, these tools greatly enhance (token) efficiency.
@@ -33,11 +33,11 @@ Always use multiple complementary approaches:
 - Use `rg` (ripgrep) for fast pattern matching across codebase
 - Use `git ls-files` to understand repository structure
 - Use MCP tools for intelligently appending code to context
-- Use context7 for intelligently looking up documentation
+- Use official docs and primary sources for documentation lookup
 - Search for function names, class names, file patterns, keywords
 - Look for config files, tests, documentation
 
-NEVER use `find` command. Prefer `rg`, `git ls-files` or `repomix`
+NEVER use `find` command. Prefer `rg` or `git ls-files`
 
 ALWAYS look for a CHANGELOG.md -- this should usually contain a canonical history that will help you understand when important changes were made
 

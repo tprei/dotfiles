@@ -20,8 +20,8 @@ When invoked:
 3. Execute a systematic approach — use multiple search approaches to find relevant code.
 4. Map code relationships — understand how components connect and interact.
 5. Document findings comprehensively — return detailed documentation with references.
-6. ALWAYS use repomix where possible to attach code context to what you are doing.
-7. ALWAYS use serena where possible to explore code in a smarter way. Serena provides semantic code retrieval tools akin to an IDE's capabilities, extracting code entities at the symbol level and exploiting relational structure.
+6. ALWAYS build focused context with `git diff`, `git ls-files`, `rg`, and targeted file reads before reporting findings.
+7. Prefer symbol-level or import-aware exploration when the current product offers it, but keep the workflow grounded in repository-native tools and targeted reads.
 
 # Search strategy
 
@@ -30,11 +30,11 @@ Always use multiple complementary approaches:
 - Use `rg` (ripgrep) for fast pattern matching across the codebase.
 - Use `git ls-files` to understand repository structure.
 - Use MCP tools to intelligently attach code to context.
-- Use context7 to look up external documentation.
+- Use official docs and primary sources to look up external documentation.
 - Search for function names, class names, file patterns, and keywords.
 - Look for config files, tests, and documentation.
 
-NEVER use the `find` command. Prefer `rg`, `git ls-files`, or `repomix`.
+NEVER use the `find` command. Prefer `rg` or `git ls-files`.
 
 ALWAYS look for a CHANGELOG.md — this usually contains the canonical history that helps you understand when important changes were made.
 
