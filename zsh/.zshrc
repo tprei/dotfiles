@@ -122,3 +122,25 @@ fi
 if command -v starship >/dev/null 2>&1; then
   eval "$(starship init zsh)"
 fi
+link_agent_definitions() {
+  local dotfiles_dir="${DOTFILES_DIR:-${${(%):-%N}:A:h:h}}"
+  local source_dir="$dotfiles_dir/shared/agents/pi-codex"
+  local agent_name
+  local agent_dir
+  local -a agent_names=(enemy explorer git-commit-specialist planner technical-architect)
+  local -a agent_dirs=(
+    "$HOME/.omp/agent/agents"
+    "$HOME/.pi/agent/agents"
+  )
+
+  for agent_dir in "${agent_dirs[@]}"; do
+    [[ -d "$source_dir" ]] || return 0
+    mkdir -p "$agent_dir"
+    for agent_name in "${agent_names[@]}"; do
+      [[ -e "$agent_dir/$agent_name.md" || -L "$agent_dir/$agent_name.md" ]] && continue
+      ln -s "$source_dir/$agent_name.md" "$agent_dir/$agent_name.md"
+    done
+  done
+}
+
+link_agent_definitions
