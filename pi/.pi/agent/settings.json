@@ -1,15 +1,16 @@
 {
   "lastChangelogVersion": "0.79.0",
   "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-5.4",
-  "defaultThinkingLevel": "xhigh",
+  "defaultModel": "gpt-5.5",
+  "defaultThinkingLevel": "medium",
   "terminal": {
     "showTerminalProgress": true
   },
   "hideThinkingBlock": true,
   "theme": "dark",
   "packages": [
-    "npm:pi-subagents"
+    "npm:pi-subagents",
+    "npm:pi-web-providers"
   ],
   "subagents": {
     "disableBuiltins": true

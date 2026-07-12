@@ -1,5 +1,7 @@
 # Agent guidance
 
+Speak english.
+
 ## Model routing
 
 - Use the strongest practical reasoning tier for the main agent and for planning/research agents such as `planner`, `explorer`, and `technical-architect`.
