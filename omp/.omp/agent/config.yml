@@ -1,0 +1,33 @@
+providers:
+  webSearch: auto
+symbolPreset: nerd
+theme:
+  dark: titanium
+  light: light
+setupVersion: 1
+modelRoles:
+  advisor: openai-codex/gpt-5.6-sol:high
+  default: openai-codex/gpt-5.6-luna:max
+  commit: zai/glm-5-turbo:high
+  smol: zai/glm-5-turbo:high
+  tiny: zai/glm-5-turbo:high
+  task: openai-codex/gpt-5.6-luna:max
+defaultThinkingLevel: auto
+task:
+  disabledAgents:
+    - designer
+    - librarian
+    - plan
+    - reviewer
+    - scout
+    - sonic
+  agentModelOverrides:
+    enemy: gpt-5.6-sol:high
+    explorer: gpt-5.6-sol:high
+    git-commit-specialist: zai/glm-5-turbo:high
+    planner: gpt-5.6-sol:high
+    technical-architect: gpt-5.6-sol:high
+    task: openai-codex/gpt-5.6-luna:max
+dev:
+  autoqa:
+    consent: granted
