@@ -111,18 +111,39 @@ async function runTurn(
 	messages: Message[],
 	signal: AbortSignal,
 ): Promise<AssistantMessage> {
-	if (!ctx.model) throw new Error("No model selected");
-
-	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
+	const model = resolveSideModel(ctx);
+	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
 	if (!auth.ok || !auth.apiKey) {
-		throw new Error(auth.ok ? `No API key for ${ctx.model.provider}` : auth.error);
+		throw new Error(auth.ok ? `No API key for ${model.provider}` : auth.error);
 	}
 
 	return complete(
-		ctx.model,
+		model,
 		{ systemPrompt, messages },
 		{ apiKey: auth.apiKey, headers: auth.headers, signal },
 	);
+}
+
+function resolveSideModel(ctx: ExtensionCommandContext): NonNullable<ExtensionCommandContext["model"]> {
+	if (!ctx.model) throw new Error("No model selected");
+
+	const selectedModel = ctx.model;
+	const models = ctx.modelRegistry.getAll();
+	const exact = models.find(
+		(candidate) => candidate.provider === selectedModel.provider && candidate.id === selectedModel.id,
+	);
+	if (exact) return exact;
+
+	const baseId = selectedModel.id.replace(/:(?:minimal|low|medium|high|xhigh|max)$/, "");
+	if (baseId === selectedModel.id) return selectedModel;
+
+	const baseModel = models.find(
+		(candidate) => candidate.provider === selectedModel.provider && candidate.id === baseId,
+	);
+	if (!baseModel) {
+		throw new Error(`Model ${selectedModel.provider}/${selectedModel.id} is not available in the current model registry`);
+	}
+	return baseModel;
 }
 
 function getConversationContext(ctx: ExtensionCommandContext): { original: string; recent: string } {
