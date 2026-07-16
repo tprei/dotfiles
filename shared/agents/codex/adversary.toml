@@ -1,6 +1,6 @@
 name = "adversary"
 description = "USE PROACTIVELY for adversarial review of non-trivial code changes using GLM-5.2. The adversary assumes the implementation is wrong, incomplete, or unsafe and tries to disprove it. Invoke after generating or modifying code in non-trivial logic, multi-file changes, or risky areas. Read-only."
-model = "zai/glm-5.2"
+model = "gpt-5.6-sol"
 model_reasoning_effort = "xhigh"
 sandbox_mode = "read-only"
 nickname_candidates = ["challenger", "critic", "prosecutor"]
