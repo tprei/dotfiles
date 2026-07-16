@@ -2,8 +2,8 @@
 name: technical-architect
 package: codex
 description: Plan and architect technical solutions before implementation. Use to break down complex features, design system architecture, plan refactors, or create implementation roadmaps.
-model: gpt-5.5
-thinking: xhigh
+model: gpt-5.6-sol
+thinking: medium
 tools: read, grep, find, ls, bash
 systemPromptMode: replace
 inheritProjectContext: true

@@ -1,7 +1,7 @@
 name = "explorer"
 description = "USE PROACTIVELY when users ask to understand, find, explore, or map out code flows, components, or functionality in a codebase. Read-only."
 model = "gpt-5.6-sol"
-model_reasoning_effort = "high"
+model_reasoning_effort = "medium"
 sandbox_mode = "read-only"
 nickname_candidates = ["scout", "cartographer", "surveyor"]
 developer_instructions = """

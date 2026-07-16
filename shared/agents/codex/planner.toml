@@ -1,7 +1,7 @@
 name = "planner"
 description = "USE PROACTIVELY to understand goals and develop a plan. Clarifying an unclear request, refining a loose plan, or preparing to solve complex problems or new refactors."
 model = "gpt-5.6-sol"
-model_reasoning_effort = "high"
+model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
 nickname_candidates = ["strategist", "blueprint", "orchestrator"]
 developer_instructions = """

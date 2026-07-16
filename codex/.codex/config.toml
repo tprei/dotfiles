@@ -11,7 +11,7 @@ status_line = ["model-with-reasoning", "current-dir"]
 theme = "gruvbox-dark"
 
 [tui.model_availability_nux]
-"gpt-5.5" = 4
+"gpt-5.6-sol" = 4
 
 [tools]
 web_search = true
@@ -20,7 +20,7 @@ web_search = true
 hide_gpt5_1_migration_prompt = true
 
 [notice.model_migrations]
-"gpt-5.4" = "gpt-5.5"
+"gpt-5.4" = "gpt-5.6-sol"
 
 # ---------------------------------------------------------------------------
 # Trusted projects

@@ -2,7 +2,7 @@
 name: git-commit-specialist
 package: codex
 description: PROACTIVELY use as a single async/background delegate when code changes need review/commit work. Inspects staged and unstaged changes, isolates safe commit scope, stages or unstages intentionally, writes concise contextual commit messages, and keeps the parent loop unblocked.
-model: gpt-5.4-mini
+model: zai/glm-5-turbo
 thinking: low
 tools: read, grep, find, ls, bash, edit, write
 systemPromptMode: replace

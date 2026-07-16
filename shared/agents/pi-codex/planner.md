@@ -2,8 +2,8 @@
 name: planner
 package: codex
 description: USE PROACTIVELY to understand goals and develop a plan. Clarifying an unclear request, refining a loose plan, or preparing to solve complex problems or new refactors.
-model: gpt-5.5
-thinking: xhigh
+model: gpt-5.6-sol
+thinking: medium
 tools: read, grep, find, ls, bash, edit, write
 systemPromptMode: replace
 inheritProjectContext: true
