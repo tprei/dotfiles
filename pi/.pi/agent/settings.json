@@ -1,7 +1,7 @@
 {
   "lastChangelogVersion": "0.79.0",
   "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-5.5",
+  "defaultModel": "gpt-5.6-sol",
   "defaultThinkingLevel": "medium",
   "terminal": {
     "showTerminalProgress": true
@@ -13,7 +13,13 @@
     "npm:pi-web-providers"
   ],
   "subagents": {
-    "disableBuiltins": true
+    "disableBuiltins": true,
+    "agentOverrides": {
+      "worker": {
+        "model": "gpt-5.6-luna",
+        "thinking": "xhigh"
+      }
+    }
   },
   "showHardwareCursor": false,
   "editorPaddingX": 1,
