@@ -44,4 +44,4 @@ Shared agent assets live under `shared/`: `shared/skills` is the canonical workf
 
 ## Helpers
 
-`tmux/scripts/tmux-paste-image.sh` sends a WSL clipboard image path into tmux. `run_claude_update.sh` and `claude_pattern_updater.py` support Claude guidance updates.
+`tmux/scripts/tmux-paste-image.sh` sends a WSL clipboard image path into tmux.
