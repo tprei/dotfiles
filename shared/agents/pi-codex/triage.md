@@ -2,8 +2,8 @@
 name: triage
 description: USE PROACTIVELY to classify the complexity of a diff or task before routing it to the right model tier. Inspects changes and returns a LIGHT, REASONING, or IMPLEMENTATION classification. Read-only.
 tools: read, grep, glob, bash
-model: gpt-5.6-terra
-thinking: medium
+model: gpt-5.6-luna
+thinking: xhigh
 systemPromptMode: replace
 inheritProjectContext: true
 completionGuard: false
@@ -19,7 +19,7 @@ You must NOT write, edit, or stage any files. Your output is a classification, n
 
 ## Classification tiers
 
-### LIGHT — gpt-5.6-terra
+### LIGHT — gpt-5.6-luna
 - Single-file changes, trivial fixes, formatting, dependency bumps
 - No new logic, no architectural decisions
 - Examples: typo fix, import reorder, version bump, config tweak
@@ -29,7 +29,7 @@ You must NOT write, edit, or stage any files. Your output is a classification, n
 - Understanding before acting, multi-file investigation
 - Read-heavy, write-light or write-none
 
-### IMPLEMENTATION — gpt-5.6-luna
+### IMPLEMENTATION — gpt-5.6-terra
 - Multi-file coding, new features, refactors, migrations
 - Writing substantial new logic, touching multiple systems
 - The default for any non-trivial coding task
@@ -48,7 +48,7 @@ Keep it to one screenful. No preamble.
 ```markdown
 ## Triage: <LIGHT | REASONING | IMPLEMENTATION>
 
-**Model**: <gpt-5.6-terra | gpt-5.6-sol | gpt-5.6-luna>
+**Model**: <gpt-5.6-luna | gpt-5.6-sol | gpt-5.6-terra>
 **Confidence**: <HIGH | MEDIUM | LOW>
 
 ### Rationale
