@@ -127,19 +127,23 @@ link_agent_definitions() {
   local source_dir="$dotfiles_dir/shared/agents/pi-codex"
   local agent_name
   local agent_dir
-  local -a agent_names=(enemy explorer git-commit-specialist planner technical-architect)
-  local -a agent_dirs=(
-    "$HOME/.omp/agent/agents"
-    "$HOME/.pi/agent/agents"
-  )
+  local -a omp_agent_names=(adversary enemy explorer git-commit-specialist planner strategist surveyor technical-architect triage)
+  local -a pi_agent_names=(enemy explorer git-commit-specialist planner technical-architect)
 
-  for agent_dir in "${agent_dirs[@]}"; do
-    [[ -d "$source_dir" ]] || return 0
-    mkdir -p "$agent_dir"
-    for agent_name in "${agent_names[@]}"; do
-      [[ -e "$agent_dir/$agent_name.md" || -L "$agent_dir/$agent_name.md" ]] && continue
-      ln -s "$source_dir/$agent_name.md" "$agent_dir/$agent_name.md"
-    done
+  [[ -d "$source_dir" ]] || return 0
+
+  agent_dir="$HOME/.omp/agent/agents"
+  mkdir -p "$agent_dir"
+  for agent_name in "${omp_agent_names[@]}"; do
+    [[ -e "$agent_dir/$agent_name.md" || -L "$agent_dir/$agent_name.md" ]] && continue
+    ln -s "$source_dir/$agent_name.md" "$agent_dir/$agent_name.md"
+  done
+
+  agent_dir="$HOME/.pi/agent/agents"
+  mkdir -p "$agent_dir"
+  for agent_name in "${pi_agent_names[@]}"; do
+    [[ -e "$agent_dir/$agent_name.md" || -L "$agent_dir/$agent_name.md" ]] && continue
+    ln -s "$source_dir/$agent_name.md" "$agent_dir/$agent_name.md"
   done
 }
 
