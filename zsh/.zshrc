@@ -122,37 +122,43 @@ fi
 if command -v starship >/dev/null 2>&1; then
   eval "$(starship init zsh)"
 fi
-link_agent_definitions() {
+link_shared_definitions() {
   local dotfiles_dir="${DOTFILES_DIR:-${${(%):-%N}:A:h:h}}"
-  local source_dir="$dotfiles_dir/shared/agents/pi-codex"
-  local agent_name agent_dir
+  local agents_source="$dotfiles_dir/shared/agents/pi-codex"
+  local skills_source="$dotfiles_dir/shared/skills"
+  local agent_name base agent_dir
   local -a omp_agent_names=(adversary enemy explorer git-commit-specialist planner strategist surveyor technical-architect triage)
   local -a pi_agent_names=(enemy explorer git-commit-specialist planner technical-architect)
-  local -a omp_targets=("$HOME/.omp/agent/agents")
+  local -a omp_bases=("$HOME/.omp/agent")
 
-  [[ -d "$source_dir" ]] || return 0
+  [[ -d "$agents_source" ]] || return 0
 
-  for agent_dir in "$HOME"/.omp/profiles/*/agent/agents(N/); do
-    omp_targets+=("$agent_dir")
+  for base in "$HOME"/.omp/profiles/*/agent(N/); do
+    omp_bases+=("$base")
   done
 
-  for agent_dir in "${omp_targets[@]}"; do
+  for base in "${omp_bases[@]}"; do
+    agent_dir="$base/agents"
     mkdir -p "$agent_dir"
     for agent_name in "${omp_agent_names[@]}"; do
       [[ -e "$agent_dir/$agent_name.md" || -L "$agent_dir/$agent_name.md" ]] && continue
-      ln -s "$source_dir/$agent_name.md" "$agent_dir/$agent_name.md"
+      ln -s "$agents_source/$agent_name.md" "$agent_dir/$agent_name.md"
     done
+
+    if [[ -d "$skills_source" && ! -e "$base/skills" ]]; then
+      ln -s "$skills_source" "$base/skills"
+    fi
   done
 
   agent_dir="$HOME/.pi/agent/agents"
   mkdir -p "$agent_dir"
   for agent_name in "${pi_agent_names[@]}"; do
     [[ -e "$agent_dir/$agent_name.md" || -L "$agent_dir/$agent_name.md" ]] && continue
-    ln -s "$source_dir/$agent_name.md" "$agent_dir/$agent_name.md"
+    ln -s "$agents_source/$agent_name.md" "$agent_dir/$agent_name.md"
   done
 }
 
-link_agent_definitions
+link_shared_definitions
 
 alias mini="ssh mbn@mini-1"
 alias nihao="omp --profile china"
