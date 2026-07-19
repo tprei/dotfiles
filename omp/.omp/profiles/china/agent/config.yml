@@ -1,0 +1,38 @@
+providers:
+  webSearch: auto
+symbolPreset: nerd
+theme:
+  dark: titanium
+  light: light
+setupVersion: 1
+modelRoles:
+  advisor: zai/glm-5.2:xhigh
+  default: zai/glm-5.2:max
+  commit: zai/glm-5-turbo
+  smol: zai/glm-5-turbo
+  tiny: zai/glm-5-turbo
+  task: zai/glm-5.2
+  slow: zai/glm-5.2:max
+defaultThinkingLevel: auto
+task:
+  disabledAgents:
+    - designer
+    - librarian
+    - plan
+    - reviewer
+    - scout
+    - sonic
+  agentModelOverrides:
+    adversary: zai/glm-5.2:xhigh
+    enemy: zai/glm-5.2:xhigh
+    explorer: zai/glm-5.2
+    git-commit-specialist: zai/glm-5-turbo
+    planner: zai/glm-5.2:xhigh
+    strategist: zai/glm-5.2:xhigh
+    surveyor: zai/glm-5.2:xhigh
+    technical-architect: zai/glm-5.2:xhigh
+    triage: zai/glm-5.2
+    task: zai/glm-5.2
+dev:
+  autoqa:
+    consent: granted
