@@ -150,3 +150,4 @@ link_agent_definitions() {
 link_agent_definitions
 
 alias mini="ssh mbn@mini-1"
+alias nihao="omp --profile china"
