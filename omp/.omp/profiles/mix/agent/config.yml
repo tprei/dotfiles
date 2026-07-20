@@ -10,11 +10,11 @@ setupVersion: 1
 # off to GLM-5.2 at the first edit/write. Sol never mutates files; GLM-5.2 does
 # the fast implementation. A luna advisor reviews every turn cross-model; terra
 # gatekeepers (enemy/adversary/reviewer) do deep on-demand audits.
-# prewalk arms via prewalk.enabled. The session target is resolved from the
-# --prewalk-into CLI flag (not a settings key), so the GLM-5.2 target is pinned
-# by the `mix` shell alias; launching bare falls back to the smol role.
-prewalk:
-  enabled: true
+# Prewalk is armed by the `mix` alias (--prewalk-into=zai/glm-5.2:high), not a
+# settings key: omp resolves the session target from the flag. Keeping prewalk
+# out of config means a bare `omp --profile mix` does not eagerly resolve a
+# model at startup, so you can reach /login to authenticate before the prewalk
+# workflow kicks in.
 
 modelRoles:
   default: openai-codex/gpt-5.6-sol:high
