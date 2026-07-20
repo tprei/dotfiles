@@ -1,0 +1,59 @@
+providers:
+  webSearch: auto
+symbolPreset: nerd
+theme:
+  dark: titanium
+  light: light
+setupVersion: 1
+
+# Strong planner (Sol) starts the session, commits the plan/todos, then hands
+# off to GLM-5.2 at the first edit/write. Sol never mutates files; GLM-5.2 does
+# the fast implementation. A luna advisor reviews every turn cross-model; terra
+# gatekeepers (enemy/adversary/reviewer) do deep on-demand audits.
+# prewalk arms via prewalk.enabled. The session target is resolved from the
+# --prewalk-into CLI flag (not a settings key), so the GLM-5.2 target is pinned
+# by the `mix` shell alias; launching bare falls back to the smol role.
+prewalk:
+  enabled: true
+
+modelRoles:
+  default: openai-codex/gpt-5.6-sol:high
+  slow: openai-codex/gpt-5.6-sol:high
+  plan: openai-codex/gpt-5.6-sol:high
+  advisor: openai-codex/gpt-5.6-luna:max
+  task: zai/glm-5.2:high
+  commit: openai-codex/gpt-5.6-luna:max
+  smol: openai-codex/gpt-5.6-luna:max
+  tiny: openai-codex/gpt-5.6-luna:max
+
+defaultThinkingLevel: auto
+
+# Cheap continuous cross-model watchdog: luna reviews each GLM-5.2 turn without
+# stalling the fast implementer (advisor catches up async, interrupts on concern).
+advisor:
+  enabled: true
+  syncBacklog: off
+
+task:
+  disabledAgents:
+    - designer
+    - plan
+    - sonic
+  agentModelOverrides:
+    adversary: openai-codex/gpt-5.6-terra:max
+    enemy: openai-codex/gpt-5.6-terra:max
+    reviewer: openai-codex/gpt-5.6-terra:max
+    planner: openai-codex/gpt-5.6-sol:high
+    technical-architect: openai-codex/gpt-5.6-sol:high
+    strategist: openai-codex/gpt-5.6-sol:high
+    surveyor: openai-codex/gpt-5.6-sol:high
+    scout: openai-codex/gpt-5.6-sol:high
+    explorer: openai-codex/gpt-5.6-sol:high
+    librarian: openai-codex/gpt-5.6-sol:high
+    task: zai/glm-5.2:high
+    triage: openai-codex/gpt-5.6-luna:max
+    git-commit-specialist: openai-codex/gpt-5.6-luna:max
+
+dev:
+  autoqa:
+    consent: granted
