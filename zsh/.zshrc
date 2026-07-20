@@ -34,9 +34,8 @@ fi
 [[ -d "/usr/local/go/bin" ]] && export PATH="$PATH:/usr/local/go/bin"
 [[ -d "$HOME/.luarocks/bin" ]] && export PATH="$HOME/.luarocks/bin:$PATH"
 
-export NVM_DIR="$HOME/.nvm"
-[[ -s "$NVM_DIR/nvm.sh" ]] && source "$NVM_DIR/nvm.sh"
-[[ -s "$NVM_DIR/bash_completion" ]] && source "$NVM_DIR/bash_completion"
+# fnm (fast Node version manager) — Graphite CLI depends on Node
+[[ -s "$HOME/.local/bin/fnm" ]] && eval "$(fnm env --use-on-cd --shell zsh)"
 
 export BUN_INSTALL="$HOME/.bun"
 [[ -s "$BUN_INSTALL/_bun" ]] && source "$BUN_INSTALL/_bun"
