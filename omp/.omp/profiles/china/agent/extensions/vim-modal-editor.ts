@@ -670,7 +670,7 @@ class VimModalEditor extends CustomEditor {
     const layoutWidth = Math.max(1, contentWidth - (paddingX ? 0 : 1));
     this.lastWidth = layoutWidth;
 
-    const border = this.theme.borderColor("─");
+    const border = this.borderColor("─");
     const lines = this.getLines();
     const layout: Array<{ text: string; line: number; startCol: number; endCol: number; hasCursor: boolean; cursorPos?: number }> = [];
 
@@ -717,7 +717,7 @@ class VimModalEditor extends CustomEditor {
     if (this.scrollOffset > 0) {
       const indicator = `─── ↑ ${this.scrollOffset} more `;
       const remaining = width - visibleWidth(indicator);
-      out.push(this.theme.borderColor(remaining >= 0 ? indicator + "─".repeat(remaining) : truncateToWidth(indicator, width, "")));
+      out.push(this.borderColor(remaining >= 0 ? indicator + "─".repeat(remaining) : truncateToWidth(indicator, width, "")));
     } else {
       out.push(border.repeat(width));
     }
@@ -750,7 +750,7 @@ class VimModalEditor extends CustomEditor {
     if (below > 0) {
       const indicator = `─── ↓ ${below} more `;
       const remaining = width - visibleWidth(indicator);
-      out.push(this.theme.borderColor(remaining >= 0 ? indicator + "─".repeat(remaining) : truncateToWidth(indicator, width, "")));
+      out.push(this.borderColor(remaining >= 0 ? indicator + "─".repeat(remaining) : truncateToWidth(indicator, width, "")));
     } else {
       out.push(border.repeat(width));
     }
