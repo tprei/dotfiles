@@ -6,13 +6,14 @@ theme:
   light: light
 setupVersion: 1
 
-# Strong planner (Sol) starts the session, commits the plan/todos, then hands
-# off to GLM-5.2 at the first edit/write. Sol never mutates files; GLM-5.2 does
-# the fast implementation. A luna advisor reviews every turn cross-model; terra
-# gatekeepers (enemy/adversary/reviewer) do deep on-demand audits.
-# Prewalk is armed by the `mix` alias (`--prewalk --prewalk-into=zai/glm-5.2:high`), not a settings key.
-# Keeping prewalk out of config means a bare `omp --profile mix` does not eagerly resolve a model at startup, so
-# you can reach /login to authenticate before the prewalk workflow kicks in.
+# Strong planner (Sol) starts in read-only plan mode, resolves the plan, then
+# hands off once to GLM-5.2 for implementation. A luna advisor reviews every
+# turn cross-model; terra gatekeepers (enemy/adversary/reviewer) do deep
+# on-demand audits.
+# Plan-yolo is armed by the `mix` alias
+# (`--plan-yolo --plan-yolo-into=zai/glm-5.2:high`), not a settings key.
+# Keeping plan-yolo out of config means a bare `omp --profile mix` remains a
+# normal session, including before you authenticate with `/login`.
 
 modelRoles:
   default: openai-codex/gpt-5.6-sol:high

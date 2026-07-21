@@ -161,4 +161,4 @@ link_shared_definitions
 
 alias mini="ssh mbn@mini-1"
 alias nihao="omp --profile china"
-alias mix="omp --profile mix --prewalk --prewalk-into=zai/glm-5.2:high"
+alias mix="omp --profile mix --plan-yolo --plan-yolo-into=zai/glm-5.2:high"
