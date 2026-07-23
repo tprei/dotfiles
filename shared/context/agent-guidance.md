@@ -60,7 +60,7 @@ Speak english.
 - Do not write comments on code unless I tell you to.
 - Do not add speculative methods — only implement what is required.
 - Do not write backwards-compatibility shims — change all call sites directly.
-- Avoid `set`, `cat`, and pipes for writing/reading files; use the editor tooling.
+- Never mutate files via shell text-substitution: no `python3`/`perl`/`ruby` heredocs doing `str.replace`, `sed -i`, in-place `awk`, `cat > file`, or `tee`. These bypass anchor verification, diff previews, and diagnostics. Use the native `edit` tool (read first to mint the snapshot anchor), `ast_edit` for structural codemods across call sites, and `lsp` `rename`/`code_actions` for symbol-aware refactors. Reserve `bash` for real binaries and short read-only fact pipelines.
 - Prefer `rg` over `grep` for all content searches.
 - When asked about tmux commands, keybindings, or configuration, invoke the `tmux-specialist` skill.
 - When creating a new skill, invoke the `add-skill` skill. Shared skills live under `shared/skills/`, and the tool-specific skill directories are symlinks into that canonical library.
