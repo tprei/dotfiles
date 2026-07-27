@@ -6,15 +6,16 @@ theme:
   light: light
 setupVersion: 1
 modelRoles: 
-  advisor: openai-codex/gpt-5.6-sol:medium
-  default: openai-codex/gpt-5.6-terra:max
+  advisor: anthropic/claude-opus-5:medium
+  default: anthropic/claude-sonnet-5:max
   commit: zai/glm-5-turbo
-  smol: openai-codex/gpt-5.6-luna:max
-  tiny: openai-codex/gpt-5.6-luna:max
-  task: openai-codex/gpt-5.6-terra:max
-  slow: openai-codex/gpt-5.6-sol:medium
+  smol: anthropic/claude-haiku-4-5:minimal
+  tiny: anthropic/claude-haiku-4-5:minimal
+  task: anthropic/claude-sonnet-5:max
+  slow: anthropic/claude-opus-5:medium
 defaultThinkingLevel: auto
 task: 
+  eager: always
   disabledAgents: 
     - designer
     - librarian
@@ -24,15 +25,15 @@ task:
     - sonic
   agentModelOverrides: 
     adversary: zai/glm-5.2:xhigh
-    enemy: gpt-5.6-sol:medium
-    explorer: gpt-5.6-sol:medium
+    enemy: anthropic/claude-opus-5:medium
+    explorer: anthropic/claude-opus-5:medium
     git-commit-specialist: zai/glm-5-turbo
-    planner: gpt-5.6-sol:medium
-    technical-architect: gpt-5.6-sol:medium
+    planner: anthropic/claude-opus-5:medium
+    technical-architect: anthropic/claude-opus-5:medium
     surveyor: zai/glm-5.2:xhigh
     strategist: zai/glm-5.2:xhigh
-    triage: gpt-5.6-luna:max
-    task: openai-codex/gpt-5.6-terra:max
+    triage: anthropic/claude-haiku-4-5:minimal
+    task: anthropic/claude-sonnet-5:max
 dev: 
   autoqa: 
     consent: granted
