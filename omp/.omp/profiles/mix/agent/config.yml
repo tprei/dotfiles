@@ -1,9 +1,9 @@
 # mix = literal cross-family mix, four tiers:
 #  - orchestrator/deep-reasoning (default/slow/plan, planner/technical-architect): opus-5, capped at :medium
 #  - fast implementer (task role + task subagent): glm-5.2:high
-#  - deep audit gatekeepers (adversary/enemy/reviewer) + advisor watchdog: sonnet-5
-#    (advisor is NOT haiku: it reviews every GLM-5.2 turn and needs real
-#    judgment to catch subtle mistakes, not just a cheap classifier)
+#  - deep audit gatekeepers (adversary/enemy/reviewer): sonnet-5
+#    advisor watchdog: openrouter deepseek-v4-flash-0731 (fast/cheap
+#    reviewer of every GLM-5.2 turn)
 #  - cheap/fast subagents: glm-5-turbo for read-only research (explorer/
 #    scout/librarian), haiku-4-5 for trivial mechanical work (triage/
 #    git-commit-specialist)
@@ -26,7 +26,7 @@ modelRoles:
   default: anthropic/claude-opus-5:medium
   slow: anthropic/claude-opus-5:medium
   plan: anthropic/claude-opus-5:medium
-  advisor: anthropic/claude-sonnet-5:medium
+  advisor: openrouter/deepseek/deepseek-v4-flash-0731
   task: zai/glm-5.2:high
   commit: anthropic/claude-haiku-4-5:minimal
   smol: anthropic/claude-haiku-4-5:minimal
