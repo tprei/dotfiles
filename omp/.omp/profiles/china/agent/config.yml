@@ -6,7 +6,7 @@ theme:
   light: light
 setupVersion: 1
 modelRoles:
-  advisor: zai/glm-5.2:xhigh
+  advisor: openrouter/deepseek/deepseek-v4-flash-0731
   default: zai/glm-5.2:max
   commit: zai/glm-5-turbo
   smol: zai/glm-5-turbo
