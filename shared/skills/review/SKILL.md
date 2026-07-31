@@ -28,8 +28,19 @@ Fetch PR metadata and diff:
 gh pr view <PR> --json title,body,author,baseRefName,headRefName,files,additions,deletions,commits,reviews,labels,milestone
 gh pr diff <PR>
 ```
+### 2. Delegate the review to the `reviewer` task agent
 
-### 2. Understand the repository
+Every PR review MUST run through the `reviewer` task agent (`task` tool, `agent: "reviewer"`), never inline in the calling session. This repo's omp config pins `reviewer` to `openrouter/openai/gpt-5.6-luna:max` (see `omp/.omp/agent/config.yml` and the `mix`/`china` profiles) — dispatching through the agent is what guarantees that model runs the review, not whichever model is driving the current session.
+
+Pass the subagent a single self-contained prompt containing:
+- the PR metadata and diff fetched above (or the raw `gh pr view`/`gh pr diff` commands to run if the subagent should fetch them itself)
+- the repository context instructions (step 3 below)
+- the full review-dimensions checklist (step 4 below)
+- the required output format (step 6 below)
+
+Do not re-review the diff yourself after the subagent returns — its output is the review. Relay it to the user, adding only light framing if asked.
+
+### 3. Understand the repository
 
 Before reviewing the diff in isolation, build context:
 
@@ -37,7 +48,7 @@ Before reviewing the diff in isolation, build context:
 - Identify the tech stack, test framework, and CI configuration.
 - Understand the directory structure and architectural patterns.
 
-### 3. Review dimensions
+### 4. Review dimensions
 
 Evaluate the PR across every dimension below. For each, note findings as **praise**, **concern**, or **question**. Skip dimensions that don't apply.
 
@@ -94,11 +105,11 @@ Evaluate the PR across every dimension below. For each, note findings as **prais
 - Are public APIs or user-facing changes documented?
 - Do inline comments add value where logic is non-obvious?
 
-### 4. Read changed files in full
+### 5. Read changed files in full
 
 Do not review the diff in isolation. For every changed file, read the full file to understand context around the modifications. This prevents false positives and reveals impact on surrounding code.
 
-### 5. Produce the review
+### 6. Produce the review
 
 Structure your output as:
 
