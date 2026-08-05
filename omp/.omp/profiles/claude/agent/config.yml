@@ -1,0 +1,40 @@
+providers:
+  webSearch: auto
+symbolPreset: nerd
+theme:
+  dark: titanium
+  light: light
+setupVersion: 1
+modelRoles:
+  default: anthropic/claude-sonnet-5:max
+  task: anthropic/claude-sonnet-5:max
+  slow: anthropic/claude-opus-5:high
+  plan: anthropic/claude-opus-5:high
+  advisor: openrouter/deepseek/deepseek-v4-flash-0731
+  commit: anthropic/claude-haiku-4-5:minimal
+  smol: openrouter/deepseek/deepseek-v4-flash
+  tiny: anthropic/claude-haiku-4-5:minimal
+defaultThinkingLevel: auto
+task:
+  eager: always
+  disabledAgents:
+    - designer
+    - librarian
+    - plan
+    - scout
+    - sonic
+  agentModelOverrides:
+    task: anthropic/claude-sonnet-5:max
+    explorer: anthropic/claude-opus-5:high
+    planner: anthropic/claude-opus-5:high
+    technical-architect: anthropic/claude-opus-5:high
+    reviewer: openrouter/openai/gpt-5.6-luna:max
+    enemy: openrouter/openai/gpt-5.6-luna:max
+    adversary: zai/glm-5.2:high
+    surveyor: zai/glm-5.2:high
+    strategist: zai/glm-5.2:high
+    triage: anthropic/claude-haiku-4-5:minimal
+    git-commit-specialist: anthropic/claude-haiku-4-5:minimal
+dev:
+  autoqa:
+    consent: granted
