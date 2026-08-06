@@ -38,3 +38,5 @@ task:
     task: zai/glm-5.2:high
 dev: 
   autoqaConsent: granted
+edit: 
+  mode: hashline
