@@ -163,3 +163,7 @@ alias mini="ssh mbn@mini-1"
 alias nihao="omp --profile china"
 alias mix="omp --profile mix --plan-yolo --plan-yolo-into=zai/glm-5.2:high"
 alias omp-claude="omp --profile claude"
+
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
