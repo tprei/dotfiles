@@ -7,10 +7,10 @@ modelRoles:
   default: anthropic/claude-opus-5:medium
   slow: anthropic/claude-opus-5:medium
   plan: anthropic/claude-opus-5:medium
-  advisor: openrouter/deepseek/deepseek-v4-flash-0731
-  task: zai/glm-5.2:high
+  advisor: opencode-go/deepseek-v4-flash
+  task: opencode-go/gpt-5.6-luna
   commit: anthropic/claude-haiku-4-5:minimal
-  smol: anthropic/claude-haiku-4-5:minimal
+  smol: opencode-go/deepseek-v4-flash
   tiny: anthropic/claude-haiku-4-5:minimal
 defaultThinkingLevel: auto
 advisor: 
@@ -23,9 +23,9 @@ task:
     - plan
     - sonic
   agentModelOverrides: 
-    adversary: anthropic/claude-sonnet-5:max
-    enemy: anthropic/claude-sonnet-5:max
-    explorer: zai/glm-5-turbo
+    adversary: zai/glm-5.2:xhigh
+    enemy: anthropic/claude-opus-5:medium
+    explorer: anthropic/claude-opus-5:medium
     git-commit-specialist: anthropic/claude-haiku-4-5:minimal
     planner: anthropic/claude-opus-5:medium
     strategist: zai/glm-5.2:xhigh
@@ -33,10 +33,18 @@ task:
     technical-architect: anthropic/claude-opus-5:medium
     triage: anthropic/claude-haiku-4-5:minimal
     librarian: zai/glm-5-turbo
-    reviewer: openrouter/openai/gpt-5.6-luna:max
+    reviewer: opencode-go/gpt-5.6-luna:max
     scout: zai/glm-5-turbo
-    task: zai/glm-5.2:high
+    task: opencode-go/gpt-5.6-luna
 dev: 
   autoqaConsent: granted
 edit: 
   mode: hashline
+retry:
+  modelFallback: true
+  fallbackChains:
+    opencode-go/gpt-5.6-luna:
+      - opencode-go/deepseek-v4-pro
+      - zai/glm-5.2:high
+    opencode-go/deepseek-v4-flash:
+      - anthropic/claude-haiku-4-5:minimal
