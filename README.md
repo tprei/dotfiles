@@ -40,7 +40,35 @@ Disable macOS **Input sources** shortcuts that use `Control-Space`. Re-record Ra
 
 ## Agents
 
-Shared agent assets live under `shared/`: `shared/skills` is the canonical workflow library, `shared/prompts` is only a compatibility directory for any remaining prompt/command files, `shared/agents` holds tool-specific agent definitions, and `shared/context/agent-guidance.md` is the shared instruction file. OMP's global configuration is versioned at `omp/.omp/agent/config.yml`; repo-local discovery paths and the stow-managed home paths for Claude, Codex, OMP, and Pi point back into this repository.
+Shared agent assets live under `shared/`: `shared/skills` is the canonical workflow library, `shared/prompts` is only a compatibility directory for any remaining prompt/command files, `shared/agents` holds tool-specific agent definitions, and `shared/context/agent-guidance.md` is the shared instruction file. The tool-specific skill directories are symlinks into that canonical library.
+
+Each agent tool has its own stow package — `claude`, `codex`, `omp`, `pi` — that links its home path back into this repository. Confirm a package is actually linked before trusting it; a real file at the target means the package was never stowed and the tool is running on its own defaults.
+
+### OMP setup
+
+OMP config is stow-managed. The `omp` package must be symlinked into `$HOME`, otherwise OMP writes its own defaults into `~/.omp/agent/config.yml` and silently ignores everything in this repo — the visible symptom is the default model role falling back to OMP's built-in model instead of `modelRoles.default`.
+
+```sh
+cd ~/dotfiles
+stow -n -v -t ~ omp   # dry run, must report no conflicts
+stow -v -t ~ omp
+```
+
+`stow` refuses to link over real files. If the dry run reports `existing target is neither a link nor a directory`, move those files aside (back them up, don't delete) and re-run. OMP recreates `config.yml` as a plain file on first launch, so this conflict is expected on a fresh machine.
+
+Layout:
+
+- `omp/.omp/agent/config.yml` — root profile: model roles, thinking level, subagent model overrides, retry fallback chains.
+- `omp/.omp/agent/rules/`, `omp/.omp/agent/extensions/` — global rules and TypeScript extensions.
+- `omp/.omp/profiles/{mix,claude,china}/agent/` — per-profile overrides, each with its own `config.yml`, `agents/`, and optional `rules/`, `APPEND_SYSTEM.md`, `WATCHDOG.md`.
+
+Verification, in order:
+
+1. `stow -n -v -t ~ omp` prints nothing but the simulation warning.
+2. `readlink -f ~/.omp/agent/config.yml` resolves into `~/dotfiles/omp/`.
+3. `find ~/.omp -maxdepth 4 -type l` lists every managed path, including `agent/rules`, `agent/extensions`, and the profile directories.
+
+Edit configs in this repository, never in `~/.omp`. Anything under `~/.omp` that is a real file is drift; reconcile it into the repo and re-stow. The rest of `~/.omp` (`agent.db`, `history.db`, `models.db`, `sessions/`, `logs/`, `cache/`) is runtime state and stays untracked.
 
 ## Helpers
 
