@@ -33,6 +33,7 @@ fi
 [[ -d "$HOME/.local/bin" ]] && export PATH="$HOME/.local/bin:$PATH"
 [[ -d "/usr/local/go/bin" ]] && export PATH="$PATH:/usr/local/go/bin"
 [[ -d "$HOME/.luarocks/bin" ]] && export PATH="$HOME/.luarocks/bin:$PATH"
+[[ -d "$HOME/.cargo/bin" ]] && export PATH="$HOME/.cargo/bin:$PATH"
 
 # fnm (fast Node version manager) — Graphite CLI depends on Node
 [[ -s "$HOME/.local/bin/fnm" ]] && eval "$(fnm env --use-on-cd --shell zsh)"
