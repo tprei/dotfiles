@@ -70,6 +70,20 @@ Verification, in order:
 
 Edit configs in this repository, never in `~/.omp`. Anything under `~/.omp` that is a real file is drift; reconcile it into the repo and re-stow. The rest of `~/.omp` (`agent.db`, `history.db`, `models.db`, `sessions/`, `logs/`, `cache/`) is runtime state and stays untracked.
 
+## Tools
+
+`tools/.local/bin/claude-usage-check` reports Claude Code OAuth usage (5-hour and 7-day window utilization) and can send a formatted report to Telegram. It refreshes the OAuth access token through the same `~/.claude/.credentials.json` the `claude` CLI uses, so it stays authenticated as long as the refresh token stays valid; a dead refresh token triggers a Telegram warning to run `claude auth login` instead of failing silently.
+
+`tools/.config/systemd/user/claude-usage-report.{service,timer}` is a systemd user timer that runs the script with `--telegram` every 5 hours (`OnUnitActiveSec=5h`, first run 5 min after boot). `Persistent=true` catches up after downtime; it needs `loginctl enable-linger $USER` to run without an active login session.
+
+Telegram wiring is a one-time step, and the bot token and chat id are deliberately kept out of the repo:
+
+```sh
+TELEGRAM_BOT_TOKEN=<token from @BotFather> claude-usage-check --setup-telegram
+```
+
+This writes `~/.config/claude-usage/config` (0600, untracked).
+
 ## Helpers
 
 `tmux/scripts/tmux-paste-image.sh` sends a WSL clipboard image path into tmux.

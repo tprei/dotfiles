@@ -1,0 +1,11 @@
+[Unit]
+Description=Claude Code usage report to Telegram, every 5 hours
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5h
+Persistent=true
+RandomizedDelaySec=2min
+
+[Install]
+WantedBy=timers.target

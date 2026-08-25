@@ -1,0 +1,9 @@
+[Unit]
+Description=Claude Code usage report to Telegram, every 5 hours
+
+[Service]
+Type=oneshot
+ExecStart=/home/prei/.local/bin/claude-usage-check --telegram
+Restart=on-failure
+RestartPreventExitStatus=1
+RestartSec=5min

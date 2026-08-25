@@ -1,0 +1,329 @@
+#!/usr/bin/env python3
+"""Claude Code usage reporter.
+
+Modes:
+  claude-usage-check                    print usage JSON to stdout
+  claude-usage-check --telegram        send a formatted report to Telegram
+  claude-usage-check --setup-telegram  discover chat_id and write config
+                                        (reads TELEGRAM_BOT_TOKEN from env)
+
+Credentials: reuses ~/.claude/.credentials.json (the claude CLI's own store),
+silently refreshing the OAuth token via platform.claude.com when needed.
+Telegram config: ~/.config/claude-usage/config (0600, KEY=VALUE).
+
+Exit codes: 0 ok, 1 auth/config failure, 2 transient (retry later).
+"""
+
+import json
+import os
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import datetime, timezone
+
+CRED_PATH = os.path.expanduser("~/.claude/.credentials.json")
+LOCK_PATH = os.path.expanduser("~/.claude/.oauth_refresh.lock")
+CONFIG_PATH = os.path.expanduser("~/.config/claude-usage/config")
+CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+USER_AGENT = "claude-cli/2.1.161 (external, cli)"
+TOKEN_URL = "https://platform.claude.com/v1/oauth/token"
+USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
+BETA_HEADER = "oauth-2025-04-20"
+REFRESH_MARGIN_MS = 30 * 60 * 1000  # refresh if less than 30 min left
+
+
+class AuthDead(Exception):
+    """Refresh token rejected; interactive `claude auth login` required."""
+
+
+class RefreshError(Exception):
+    """Transient failure from the token endpoint (e.g. 429/5xx); safe to retry."""
+
+
+def redact_secret(text, secret):
+    return text.replace(secret, "[REDACTED]") if secret else text
+
+
+def load_creds():
+    with open(CRED_PATH) as f:
+        return json.load(f)
+
+
+def save_creds(creds):
+    tmp = CRED_PATH + ".tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.fchmod(fd, 0o600)  # os.open's mode is a no-op if tmp already existed
+    with os.fdopen(fd, "w") as f:
+        json.dump(creds, f, indent=2)
+    os.replace(tmp, CRED_PATH)
+
+
+def cli_refresh_in_progress():
+    try:
+        return time.time() - os.path.getmtime(LOCK_PATH) < 60
+    except OSError:
+        return False
+
+
+def http_json(url, body=None, headers=None):
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data=data, headers=headers or {})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return json.load(resp)
+
+
+def refresh(creds):
+    oauth = creds["claudeAiOauth"]
+    refresh_token = oauth["refreshToken"]
+    try:
+        data = http_json(
+            TOKEN_URL,
+            body={
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+                "client_id": CLIENT_ID,
+            },
+            headers={
+                "Content-Type": "application/json",
+                "anthropic-beta": BETA_HEADER,
+                "User-Agent": USER_AGENT,
+            },
+        )
+    except urllib.error.HTTPError as e:
+        detail = redact_secret(e.read().decode(errors="replace")[:300], refresh_token)
+        if e.code in (400, 401, 403) and "1010" not in detail:
+            raise AuthDead(f"HTTP {e.code}: {detail}") from e
+        raise RefreshError(f"HTTP {e.code}: {detail}") from e
+    oauth["accessToken"] = data["access_token"]
+    if data.get("refresh_token"):
+        oauth["refreshToken"] = data["refresh_token"]
+    if data.get("expires_in"):
+        oauth["expiresAt"] = int(time.time() * 1000) + data["expires_in"] * 1000
+    save_creds(creds)
+    return creds
+
+
+def fetch_usage(token):
+    return http_json(
+        USAGE_URL,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "anthropic-beta": BETA_HEADER,
+            "User-Agent": USER_AGENT,
+        },
+    )
+
+
+def get_usage():
+    """Refresh when needed, fetch usage. Raises AuthDead when re-login is required."""
+    creds = load_creds()
+    oauth = creds["claudeAiOauth"]
+    now_ms = int(time.time() * 1000)
+
+    if oauth["expiresAt"] - now_ms < REFRESH_MARGIN_MS:
+        if cli_refresh_in_progress():
+            time.sleep(20)
+            creds = load_creds()
+            oauth = creds["claudeAiOauth"]
+        if oauth["expiresAt"] - int(time.time() * 1000) < REFRESH_MARGIN_MS:
+            creds = refresh(creds)
+            oauth = creds["claudeAiOauth"]
+
+    try:
+        return fetch_usage(oauth["accessToken"])
+    except urllib.error.HTTPError as e:
+        if e.code != 401:
+            raise
+        # Token invalidated early (e.g. refreshed elsewhere); re-read then refresh.
+        creds = load_creds()
+        if creds["claudeAiOauth"]["accessToken"] == oauth["accessToken"]:
+            creds = refresh(creds)
+        return fetch_usage(creds["claudeAiOauth"]["accessToken"])
+
+
+# --- Telegram ---
+
+
+def load_config():
+    if not os.path.exists(CONFIG_PATH):
+        return None
+    cfg = {}
+    with open(CONFIG_PATH) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                cfg[k.strip()] = v.strip()
+    if "TELEGRAM_BOT_TOKEN" in cfg and "TELEGRAM_CHAT_ID" in cfg:
+        return cfg
+    return None
+
+
+def save_config(cfg):
+    dirpath = os.path.dirname(CONFIG_PATH)
+    os.makedirs(dirpath, mode=0o700, exist_ok=True)
+    os.chmod(dirpath, 0o700)  # makedirs' mode is a no-op if dirpath already existed
+    tmp = CONFIG_PATH + ".tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.fchmod(fd, 0o600)  # os.open's mode is a no-op if tmp already existed
+    with os.fdopen(fd, "w") as f:
+        for k, v in cfg.items():
+            f.write(f"{k}={v}\n")
+    os.replace(tmp, CONFIG_PATH)
+
+
+def tg_call(bot_token, method, params):
+    return http_json(
+        f"https://api.telegram.org/bot{bot_token}/{method}",
+        body=params,
+        headers={"Content-Type": "application/json", "User-Agent": USER_AGENT},
+    )
+
+
+def tg_send(cfg, text):
+    tg_call(cfg["TELEGRAM_BOT_TOKEN"], "sendMessage", {
+        "chat_id": cfg["TELEGRAM_CHAT_ID"],
+        "text": text,
+        "parse_mode": "HTML",
+    })
+
+
+def safe_tg_send(cfg, text):
+    """Best-effort Telegram send; logs and returns False instead of raising."""
+    try:
+        tg_send(cfg, text)
+        return True
+    except (urllib.error.HTTPError, urllib.error.URLError) as e:
+        print(f"Telegram send failed: {e}", file=sys.stderr)
+        return False
+
+
+def fmt_reset(iso):
+    if not iso:
+        return ""
+    try:
+        dt = datetime.fromisoformat(iso).astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return ""
+    now = datetime.now(timezone.utc)
+    label = dt.strftime("%H:%M") if dt.date() == now.date() else dt.strftime("%b %d %H:%M")
+    return f" (resets {label} UTC)"
+
+
+def bar(pct):
+    filled = round((pct or 0) / 10)
+    return "\u25b0" * filled + "\u25b1" * (10 - filled)
+
+
+def format_message(usage):
+    now = datetime.now(timezone.utc)
+    lines = [f"<b>Claude usage</b> \u2014 {now.strftime('%a %b %d')}"]
+    names = {"session": "5h", "weekly": "7d"}
+    limits = usage.get("limits") or []
+    for lim in limits:
+        name = names.get(lim.get("group"), lim.get("kind") or "?")
+        scope = lim.get("scope") or {}
+        model = (scope.get("model") or {}).get("display_name")
+        if model:
+            name = f"{name} {model}"
+        pct = lim.get("percent") or 0
+        warn = " \u26a0" if lim.get("severity") not in (None, "normal") else ""
+        lines.append(f"<code>{bar(pct)}</code> {name}: <b>{pct}%</b>{fmt_reset(lim.get('resets_at'))}{warn}")
+    if not limits:
+        fh = usage.get("five_hour") or {}
+        sd = usage.get("seven_day") or {}
+        lines.append(f"5h: <b>{fh.get('utilization', '?')}%</b>{fmt_reset(fh.get('resets_at'))}")
+        lines.append(f"7d: <b>{sd.get('utilization', '?')}%</b>{fmt_reset(sd.get('resets_at'))}")
+    return "\n".join(lines)
+
+
+def setup_telegram():
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    if not bot_token:
+        print("Set TELEGRAM_BOT_TOKEN in the environment, e.g.:", file=sys.stderr)
+        print("  TELEGRAM_BOT_TOKEN=123:ABC claude-usage-check --setup-telegram", file=sys.stderr)
+        return 1
+    try:
+        me = tg_call(bot_token, "getMe", {})
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            print("Bot token rejected: HTTP 401", file=sys.stderr)
+            return 1
+        print(f"Telegram getMe failed: HTTP {e.code}", file=sys.stderr)
+        return 2
+    except urllib.error.URLError as e:
+        print(f"Could not reach Telegram: {e}", file=sys.stderr)
+        return 2
+    if not me.get("ok"):
+        print(f"Bot token rejected: {me}", file=sys.stderr)
+        return 1
+    username = me["result"]["username"]
+    try:
+        updates = tg_call(bot_token, "getUpdates", {"timeout": 0})["result"]
+    except (urllib.error.HTTPError, urllib.error.URLError) as e:
+        print(f"Could not fetch updates: {e}", file=sys.stderr)
+        return 2
+    chats = {}
+    for u in updates:
+        msg = u.get("message") or u.get("edited_message")
+        if msg:
+            chats[msg["chat"]["id"]] = msg["chat"]
+    if not chats:
+        print(f"No messages found. Send any message to @{username}, then rerun.", file=sys.stderr)
+        return 2
+    chat_id, chat = list(chats.items())[-1]
+    save_config({"TELEGRAM_BOT_TOKEN": bot_token, "TELEGRAM_CHAT_ID": str(chat_id)})
+    who = chat.get("username") or chat.get("first_name") or chat_id
+    print(f"Config written to {CONFIG_PATH} (chat: {who}, bot: @{username})")
+    if not safe_tg_send(load_config(), "\u2705 Claude usage bot connected. Report every 5 hours (first run 5 min after boot)."):
+        print("(confirmation message failed to send, but config was saved)", file=sys.stderr)
+    return 0
+
+
+def main(argv):
+    if "--setup-telegram" in argv:
+        return setup_telegram()
+
+    telegram = "--telegram" in argv
+    cfg = load_config() if telegram else None
+    if telegram and cfg is None:
+        print(f"Telegram not configured. Run --setup-telegram first ({CONFIG_PATH}).", file=sys.stderr)
+        return 1
+
+    try:
+        usage = get_usage()
+    except AuthDead as e:
+        if telegram:
+            safe_tg_send(cfg, "\u26a0 Claude usage bot: OAuth refresh token rejected. "
+                              "Run <code>claude auth login</code> on the WSL box to fix me.")
+        print(f"auth dead: {e}", file=sys.stderr)
+        return 1
+    except RefreshError as e:
+        print(f"token refresh failed: {e}", file=sys.stderr)
+        return 2
+    except urllib.error.HTTPError as e:
+        print(f"HTTP {e.code}: {e.read().decode(errors='replace')[:300]}", file=sys.stderr)
+        return 2
+    except urllib.error.URLError as e:
+        print(f"network error: {e}", file=sys.stderr)
+        return 2
+
+    if telegram:
+        try:
+            text = format_message(usage)
+        except (TypeError, ValueError, KeyError, AttributeError) as e:
+            print(f"failed to format usage report: {e}", file=sys.stderr)
+            return 2
+        if not safe_tg_send(cfg, text):
+            return 2
+        return 0
+
+    json.dump(usage, sys.stdout, indent=2)
+    print()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
