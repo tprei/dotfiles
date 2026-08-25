@@ -23,13 +23,13 @@ task:
     - plan
     - sonic
   agentModelOverrides: 
-    adversary: zai/glm-5.2:xhigh
+    adversary: zai/glm-5.3:xhigh
     enemy: anthropic/claude-opus-5:medium
     explorer: anthropic/claude-opus-5:medium
     git-commit-specialist: anthropic/claude-haiku-4-5:minimal
     planner: anthropic/claude-opus-5:medium
-    strategist: zai/glm-5.2:xhigh
-    surveyor: zai/glm-5.2:xhigh
+    strategist: zai/glm-5.3:xhigh
+    surveyor: zai/glm-5.3:xhigh
     technical-architect: anthropic/claude-opus-5:medium
     triage: anthropic/claude-haiku-4-5:minimal
     librarian: zai/glm-5-turbo
@@ -45,6 +45,6 @@ retry:
   fallbackChains:
     opencode-go/gpt-5.6-luna:
       - opencode-go/deepseek-v4-pro
-      - zai/glm-5.2:high
+      - zai/glm-5.3:high
     opencode-go/deepseek-v4-flash:
       - anthropic/claude-haiku-4-5:minimal

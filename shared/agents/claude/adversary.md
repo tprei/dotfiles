@@ -1,8 +1,8 @@
 ---
 name: adversary
-description: USE PROACTIVELY for adversarial review of non-trivial code changes using GLM-5.2. The adversary assumes the implementation is wrong, incomplete, or unsafe and tries to disprove it. Invoke after generating or modifying code in non-trivial logic, multi-file changes, or risky areas. Read-only.
+description: USE PROACTIVELY for adversarial review of non-trivial code changes using GLM-5.3. The adversary assumes the implementation is wrong, incomplete, or unsafe and tries to disprove it. Invoke after generating or modifying code in non-trivial logic, multi-file changes, or risky areas. Read-only.
 tools: Bash(git:*), Bash(rg:*), Bash(git ls-files:*), Glob, Grep, Read, WebFetch, WebSearch
-model: zai/glm-5.2
+model: zai/glm-5.3
 thinking: high
 color: red
 ---

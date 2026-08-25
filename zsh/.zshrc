@@ -162,7 +162,7 @@ link_shared_definitions
 
 alias mini="ssh mbn@mini-1"
 alias nihao="omp --profile china"
-alias mix="omp --profile mix --plan-yolo --plan-yolo-into=zai/glm-5.2:high"
+alias mix="omp --profile mix --plan-yolo --plan-yolo-into=zai/glm-5.3:high"
 alias omp-claude="omp --profile claude"
 
 export NVM_DIR="$HOME/.nvm"
