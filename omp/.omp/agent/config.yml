@@ -4,14 +4,14 @@ symbolPreset: nerd
 theme: 
   dark: titanium
   light: light
-setupVersion: 1
+setupVersion: 2
 modelRoles: 
-  advisor: opencode-go/deepseek-v4-flash
+  advisor: google-antigravity/gemini-3.7-flash
   default: anthropic/claude-sonnet-5:max
   commit: zai/glm-5-turbo
-  smol: opencode-go/deepseek-v4-flash
+  smol: google-antigravity/gemini-3.7-flash
   tiny: anthropic/claude-haiku-4-5:minimal
-  task: opencode-go/gpt-5.6-luna
+  task: zai/glm-5.3
   slow: anthropic/claude-opus-5:medium
 defaultThinkingLevel: auto
 task: 
@@ -23,7 +23,7 @@ task:
     - scout
     - sonic
   agentModelOverrides: 
-    reviewer: opencode-go/gpt-5.6-luna:max
+    reviewer: zai/glm-5.3:max
     adversary: zai/glm-5.3:xhigh
     enemy: anthropic/claude-opus-5:medium
     explorer: anthropic/claude-opus-5:medium
@@ -33,15 +33,23 @@ task:
     surveyor: zai/glm-5.3:xhigh
     strategist: zai/glm-5.3:xhigh
     triage: anthropic/claude-haiku-4-5:minimal
-    task: opencode-go/gpt-5.6-luna
+    task: zai/glm-5.3
 dev: 
   autoqaConsent: granted
 retry: 
   modelFallback: true
   fallbackChains: 
+    google-antigravity/gemini-3.7-flash: 
+      - opencode-go/deepseek-v4-flash
+      - anthropic/claude-haiku-4-5:minimal
+    zai/glm-5.3: 
+      - google-antigravity/gemini-3.7-flash
+      - opencode-go/gpt-5.6-luna
     opencode-go/gpt-5.6-luna: 
       - opencode-go/deepseek-v4-pro
       - anthropic/claude-sonnet-5:max
     opencode-go/deepseek-v4-flash: 
       - anthropic/claude-haiku-4-5:minimal
 hideThinkingBlock: true
+composer: 
+  shape: box

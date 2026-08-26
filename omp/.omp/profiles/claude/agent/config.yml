@@ -7,12 +7,12 @@ theme:
 setupVersion: 1
 modelRoles:
   default: anthropic/claude-sonnet-5:max
-  task: opencode-go/gpt-5.6-luna
+  task: zai/glm-5.3
   slow: anthropic/claude-opus-5:high
   plan: anthropic/claude-opus-5:high
-  advisor: opencode-go/deepseek-v4-flash
+  advisor: google-antigravity/gemini-3.7-flash
   commit: anthropic/claude-haiku-4-5:minimal
-  smol: opencode-go/deepseek-v4-flash
+  smol: google-antigravity/gemini-3.7-flash
   tiny: anthropic/claude-haiku-4-5:minimal
 defaultThinkingLevel: auto
 task:
@@ -24,11 +24,11 @@ task:
     - scout
     - sonic
   agentModelOverrides:
-    task: opencode-go/gpt-5.6-luna
+    task: zai/glm-5.3
     explorer: anthropic/claude-opus-5:high
     planner: anthropic/claude-opus-5:high
     technical-architect: anthropic/claude-opus-5:high
-    reviewer: opencode-go/gpt-5.6-luna:max
+    reviewer: zai/glm-5.3:max
     enemy: anthropic/claude-opus-5:medium
     adversary: zai/glm-5.3:high
     surveyor: zai/glm-5.3:high
@@ -41,6 +41,12 @@ dev:
 retry:
   modelFallback: true
   fallbackChains:
+    google-antigravity/gemini-3.7-flash:
+      - opencode-go/deepseek-v4-flash
+      - anthropic/claude-haiku-4-5:minimal
+    zai/glm-5.3:
+      - google-antigravity/gemini-3.7-flash
+      - opencode-go/gpt-5.6-luna
     opencode-go/gpt-5.6-luna:
       - opencode-go/deepseek-v4-pro
       - anthropic/claude-sonnet-5:max

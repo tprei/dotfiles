@@ -6,12 +6,12 @@ theme:
   light: light
 setupVersion: 1
 modelRoles:
-  advisor: opencode-go/deepseek-v4-flash
+  advisor: google-antigravity/gemini-3.7-flash
   default: zai/glm-5.3:max
   commit: zai/glm-5-turbo
-  smol: opencode-go/deepseek-v4-flash
+  smol: google-antigravity/gemini-3.7-flash
   tiny: zai/glm-5-turbo
-  task: opencode-go/gpt-5.6-luna
+  task: zai/glm-5.3
   slow: zai/glm-5.3:max
 defaultThinkingLevel: auto
 task:
@@ -22,7 +22,7 @@ task:
     - scout
     - sonic
   agentModelOverrides:
-    reviewer: opencode-go/gpt-5.6-luna:max
+    reviewer: zai/glm-5.3:max
     adversary: zai/glm-5.3:xhigh
     enemy: zai/glm-5.3:xhigh
     explorer: zai/glm-5.3
@@ -32,13 +32,19 @@ task:
     surveyor: zai/glm-5.3:xhigh
     technical-architect: zai/glm-5.3:xhigh
     triage: zai/glm-5.3
-    task: opencode-go/gpt-5.6-luna
+    task: zai/glm-5.3
 dev:
   autoqa:
     consent: granted
 retry:
   modelFallback: true
   fallbackChains:
+    google-antigravity/gemini-3.7-flash:
+      - opencode-go/deepseek-v4-flash
+      - zai/glm-5-turbo
+    zai/glm-5.3:
+      - google-antigravity/gemini-3.7-flash
+      - opencode-go/gpt-5.6-luna
     opencode-go/gpt-5.6-luna:
       - opencode-go/deepseek-v4-pro
       - zai/glm-5.3

@@ -2,15 +2,15 @@ symbolPreset: unicode
 theme: 
   dark: titanium
   light: light
-setupVersion: 1
+setupVersion: 2
 modelRoles: 
   default: anthropic/claude-opus-5:medium
   slow: anthropic/claude-opus-5:medium
   plan: anthropic/claude-opus-5:medium
-  advisor: opencode-go/deepseek-v4-flash
-  task: opencode-go/gpt-5.6-luna
+  advisor: google-antigravity/gemini-3.7-flash
+  task: zai/glm-5.3
   commit: anthropic/claude-haiku-4-5:minimal
-  smol: opencode-go/deepseek-v4-flash
+  smol: google-antigravity/gemini-3.7-flash
   tiny: anthropic/claude-haiku-4-5:minimal
 defaultThinkingLevel: auto
 advisor: 
@@ -33,18 +33,26 @@ task:
     technical-architect: anthropic/claude-opus-5:medium
     triage: anthropic/claude-haiku-4-5:minimal
     librarian: zai/glm-5-turbo
-    reviewer: opencode-go/gpt-5.6-luna:max
+    reviewer: zai/glm-5.3:max
     scout: zai/glm-5-turbo
-    task: opencode-go/gpt-5.6-luna
+    task: zai/glm-5.3
 dev: 
   autoqaConsent: granted
 edit: 
   mode: hashline
-retry:
+retry: 
   modelFallback: true
-  fallbackChains:
-    opencode-go/gpt-5.6-luna:
+  fallbackChains: 
+    google-antigravity/gemini-3.7-flash: 
+      - opencode-go/deepseek-v4-flash
+      - anthropic/claude-haiku-4-5:minimal
+    zai/glm-5.3: 
+      - google-antigravity/gemini-3.7-flash
+      - opencode-go/gpt-5.6-luna
+    opencode-go/gpt-5.6-luna: 
       - opencode-go/deepseek-v4-pro
       - zai/glm-5.3:high
-    opencode-go/deepseek-v4-flash:
+    opencode-go/deepseek-v4-flash: 
       - anthropic/claude-haiku-4-5:minimal
+composer: 
+  shape: box
