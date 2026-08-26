@@ -57,10 +57,11 @@ async function apply(pi: ExtensionAPI, ctx: ExtensionContext, key: string): Prom
 	}
 
 	const s = pi.pi.settings;
-	s.setModelRole("plan", p.plan);
+	const roles: Record<string, string> = { plan: p.plan };
 	for (const role of REST_ROLES) {
-		s.setModelRole(role, p.rest);
+		roles[role] = p.rest;
 	}
+	s.overrideModelRoles(roles);
 
 	const ok = await pi.setModel(restModel);
 	if (!ok) {
