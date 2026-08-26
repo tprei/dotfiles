@@ -7,7 +7,7 @@ theme:
 setupVersion: 2
 modelRoles:
   advisor: google-antigravity/gemini-3.7-flash
-  default: anthropic/claude-sonnet-5:max
+  default: google-antigravity/gemini-3.7-flash
   commit: zai/glm-5-turbo
   smol: google-antigravity/gemini-3.7-flash
   tiny: anthropic/claude-haiku-4-5:minimal
