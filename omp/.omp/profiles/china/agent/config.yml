@@ -1,10 +1,10 @@
 providers:
-  webSearch: auto
+  {}
 symbolPreset: nerd
 theme:
   dark: titanium
   light: light
-setupVersion: 1
+setupVersion: 2
 modelRoles:
   advisor: google-antigravity/gemini-3.7-flash
   default: zai/glm-5.3:max
@@ -34,8 +34,7 @@ task:
     triage: zai/glm-5.3
     task: zai/glm-5.3
 dev:
-  autoqa:
-    consent: granted
+  autoqaConsent: granted
 retry:
   modelFallback: true
   fallbackChains:
@@ -50,3 +49,6 @@ retry:
       - zai/glm-5.3
     opencode-go/deepseek-v4-flash:
       - zai/glm-5-turbo
+  maxDelayMs: 0
+composer:
+  shape: box

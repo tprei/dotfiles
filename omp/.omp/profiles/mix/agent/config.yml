@@ -1,9 +1,9 @@
 symbolPreset: unicode
-theme: 
+theme:
   dark: titanium
   light: light
 setupVersion: 2
-modelRoles: 
+modelRoles:
   default: anthropic/claude-opus-5:medium
   slow: anthropic/claude-opus-5:medium
   plan: anthropic/claude-opus-5:medium
@@ -13,16 +13,16 @@ modelRoles:
   smol: google-antigravity/gemini-3.7-flash
   tiny: anthropic/claude-haiku-4-5:minimal
 defaultThinkingLevel: auto
-advisor: 
+advisor:
   enabled: true
   syncBacklog: "off"
-task: 
+task:
   eager: always
-  disabledAgents: 
+  disabledAgents:
     - designer
     - plan
     - sonic
-  agentModelOverrides: 
+  agentModelOverrides:
     adversary: zai/glm-5.3:xhigh
     enemy: anthropic/claude-opus-5:medium
     explorer: anthropic/claude-opus-5:medium
@@ -36,23 +36,24 @@ task:
     reviewer: zai/glm-5.3:max
     scout: zai/glm-5-turbo
     task: zai/glm-5.3
-dev: 
+dev:
   autoqaConsent: granted
-edit: 
+edit:
   mode: hashline
-retry: 
+retry:
   modelFallback: true
-  fallbackChains: 
-    google-antigravity/gemini-3.7-flash: 
+  fallbackChains:
+    google-antigravity/gemini-3.7-flash:
       - opencode-go/deepseek-v4-flash
       - anthropic/claude-haiku-4-5:minimal
-    zai/glm-5.3: 
+    zai/glm-5.3:
       - google-antigravity/gemini-3.7-flash
       - opencode-go/gpt-5.6-luna
-    opencode-go/gpt-5.6-luna: 
+    opencode-go/gpt-5.6-luna:
       - opencode-go/deepseek-v4-pro
       - zai/glm-5.3:high
-    opencode-go/deepseek-v4-flash: 
+    opencode-go/deepseek-v4-flash:
       - anthropic/claude-haiku-4-5:minimal
-composer: 
+  maxDelayMs: 0
+composer:
   shape: box
