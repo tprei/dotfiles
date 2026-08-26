@@ -7,11 +7,11 @@ modelRoles:
   default: anthropic/claude-opus-5:medium
   slow: anthropic/claude-opus-5:medium
   plan: anthropic/claude-opus-5:medium
-  advisor: google-antigravity/gemini-3.7-flash
-  task: zai/glm-5.3
-  commit: anthropic/claude-haiku-4-5:minimal
+  advisor: zai/glm-5.3-flash
+  task: zai/glm-5.3-flash
+  commit: google-antigravity/gemini-3.7-flash
   smol: google-antigravity/gemini-3.7-flash
-  tiny: anthropic/claude-haiku-4-5:minimal
+  tiny: google-antigravity/gemini-3.7-flash
 defaultThinkingLevel: auto
 advisor:
   enabled: true
@@ -25,17 +25,17 @@ task:
   agentModelOverrides:
     adversary: zai/glm-5.3:xhigh
     enemy: anthropic/claude-opus-5:medium
-    explorer: anthropic/claude-opus-5:medium
-    git-commit-specialist: anthropic/claude-haiku-4-5:minimal
+    explorer: zai/glm-5.3-flash
+    git-commit-specialist: google-antigravity/gemini-3.7-flash
     planner: anthropic/claude-opus-5:medium
     strategist: zai/glm-5.3:xhigh
     surveyor: zai/glm-5.3:xhigh
     technical-architect: anthropic/claude-opus-5:medium
-    triage: anthropic/claude-haiku-4-5:minimal
-    librarian: zai/glm-5-turbo
+    triage: google-antigravity/gemini-3.7-flash
+    librarian: zai/glm-5.3-flash
     reviewer: zai/glm-5.3:max
-    scout: zai/glm-5-turbo
-    task: zai/glm-5.3
+    scout: zai/glm-5.3-flash
+    task: zai/glm-5.3-flash
 dev:
   autoqaConsent: granted
 edit:
@@ -44,8 +44,11 @@ retry:
   modelFallback: true
   fallbackChains:
     google-antigravity/gemini-3.7-flash:
+      - zai/glm-5.3-flash
       - opencode-go/deepseek-v4-flash
-      - anthropic/claude-haiku-4-5:minimal
+    zai/glm-5.3-flash:
+      - google-antigravity/gemini-3.7-flash
+      - zai/glm-5.3
     zai/glm-5.3:
       - google-antigravity/gemini-3.7-flash
       - opencode-go/gpt-5.6-luna
@@ -53,7 +56,7 @@ retry:
       - opencode-go/deepseek-v4-pro
       - zai/glm-5.3:high
     opencode-go/deepseek-v4-flash:
-      - anthropic/claude-haiku-4-5:minimal
+      - zai/glm-5.3-flash
   maxDelayMs: 0
 composer:
   shape: box
