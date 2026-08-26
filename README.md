@@ -74,7 +74,7 @@ Edit configs in this repository, never in `~/.omp`. Anything under `~/.omp` that
 
 `tools/.local/bin/claude-usage-check` reports Claude Code OAuth usage (5-hour and 7-day window utilization) and can send a formatted report to Telegram. It refreshes the OAuth access token through the same `~/.claude/.credentials.json` the `claude` CLI uses, so it stays authenticated as long as the refresh token stays valid; a dead refresh token triggers a Telegram warning to run `claude auth login` instead of failing silently.
 
-`tools/.config/systemd/user/claude-usage-report.{service,timer}` is a systemd user timer that runs the script with `--telegram` every 5 hours (`OnUnitActiveSec=5h`, first run 5 min after boot). `Persistent=true` catches up after downtime; it needs `loginctl enable-linger $USER` to run without an active login session.
+`tools/.config/systemd/user/claude-usage-report.{service,timer}` is a systemd user timer that runs the script with `--telegram` every 5 minutes (`OnUnitActiveSec=5min`, first run 1 min after boot). Each run edits a single pinned Telegram message in place instead of sending new ones — the pinned `message_id` is kept in `~/.config/claude-usage/state.json` (0600, untracked), and a missing or deleted message is re-sent and re-pinned automatically. It needs `loginctl enable-linger $USER` to run without an active login session.
 
 Telegram wiring is a one-time step, and the bot token and chat id are deliberately kept out of the repo:
 

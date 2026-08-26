@@ -3,7 +3,7 @@
 
 Modes:
   claude-usage-check                    print usage JSON to stdout
-  claude-usage-check --telegram        send a formatted report to Telegram
+  claude-usage-check --telegram        refresh a pinned Telegram report
   claude-usage-check --setup-telegram  discover chat_id and write config
                                         (reads TELEGRAM_BOT_TOKEN from env)
 
@@ -26,6 +26,7 @@ from datetime import datetime, timezone
 CRED_PATH = os.path.expanduser("~/.claude/.credentials.json")
 LOCK_PATH = os.path.expanduser("~/.claude/.oauth_refresh.lock")
 CONFIG_PATH = os.path.expanduser("~/.config/claude-usage/config")
+STATE_PATH = os.path.expanduser("~/.config/claude-usage/state.json")
 CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 USER_AGENT = "claude-cli/2.1.161 (external, cli)"
 TOKEN_URL = "https://platform.claude.com/v1/oauth/token"
@@ -173,6 +174,26 @@ def save_config(cfg):
             f.write(f"{k}={v}\n")
     os.replace(tmp, CONFIG_PATH)
 
+def load_state():
+    try:
+        with open(STATE_PATH) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_state(state):
+    dirpath = os.path.dirname(STATE_PATH)
+    os.makedirs(dirpath, mode=0o700, exist_ok=True)
+    os.chmod(dirpath, 0o700)  # makedirs' mode is a no-op if dirpath already existed
+    tmp = STATE_PATH + ".tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.fchmod(fd, 0o600)  # os.open's mode is a no-op if tmp already existed
+    with os.fdopen(fd, "w") as f:
+        json.dump(state, f, indent=2)
+    os.replace(tmp, STATE_PATH)
+
 
 def tg_call(bot_token, method, params):
     return http_json(
@@ -183,21 +204,72 @@ def tg_call(bot_token, method, params):
 
 
 def tg_send(cfg, text):
-    tg_call(cfg["TELEGRAM_BOT_TOKEN"], "sendMessage", {
+    return tg_call(cfg["TELEGRAM_BOT_TOKEN"], "sendMessage", {
         "chat_id": cfg["TELEGRAM_CHAT_ID"],
+        "text": text,
+        "parse_mode": "HTML",
+    })["result"]["message_id"]
+
+
+def tg_edit(cfg, message_id, text):
+    tg_call(cfg["TELEGRAM_BOT_TOKEN"], "editMessageText", {
+        "chat_id": cfg["TELEGRAM_CHAT_ID"],
+        "message_id": message_id,
         "text": text,
         "parse_mode": "HTML",
     })
 
 
-def safe_tg_send(cfg, text):
-    """Best-effort Telegram send; logs and returns False instead of raising."""
+def tg_pin(cfg, message_id):
+    tg_call(cfg["TELEGRAM_BOT_TOKEN"], "pinChatMessage", {
+        "chat_id": cfg["TELEGRAM_CHAT_ID"],
+        "message_id": message_id,
+        "disable_notification": True,
+    })
+
+
+def http_error_detail(e):
+    return e.read().decode(errors="replace")[:300]
+
+
+def update_pinned(cfg, text):
+    """Edit the pinned report in place; re-send and re-pin when it's gone."""
+    mid = load_state().get("message_id")
+    if mid:
+        try:
+            tg_edit(cfg, mid, text)
+            return True
+        except urllib.error.HTTPError as e:
+            detail = http_error_detail(e)
+            if e.code == 400 and "not modified" in detail:
+                return True
+            if e.code != 400:
+                print(f"Telegram edit failed: HTTP {e.code}: {detail}", file=sys.stderr)
+                return False
+            # 400 = message deleted / too old / unknown id -> re-send below
+        except urllib.error.URLError as e:
+            print(f"Telegram edit failed: {e}", file=sys.stderr)
+            return False
     try:
-        tg_send(cfg, text)
-        return True
-    except (urllib.error.HTTPError, urllib.error.URLError) as e:
+        mid = tg_send(cfg, text)
+    except urllib.error.HTTPError as e:
+        print(f"Telegram send failed: HTTP {e.code}: {http_error_detail(e)}", file=sys.stderr)
+        return False
+    except urllib.error.URLError as e:
         print(f"Telegram send failed: {e}", file=sys.stderr)
         return False
+    try:
+        save_state({"message_id": mid})
+    except OSError as e:
+        print(f"could not persist pinned message_id: {e}", file=sys.stderr)
+        return False
+    try:
+        tg_pin(cfg, mid)
+    except urllib.error.HTTPError as e:
+        print(f"Telegram pin failed (message sent): HTTP {e.code}: {http_error_detail(e)}", file=sys.stderr)
+    except urllib.error.URLError as e:
+        print(f"Telegram pin failed (message sent): {e}", file=sys.stderr)
+    return True
 
 
 def fmt_reset(iso):
@@ -236,6 +308,7 @@ def format_message(usage):
         sd = usage.get("seven_day") or {}
         lines.append(f"5h: <b>{fh.get('utilization', '?')}%</b>{fmt_reset(fh.get('resets_at'))}")
         lines.append(f"7d: <b>{sd.get('utilization', '?')}%</b>{fmt_reset(sd.get('resets_at'))}")
+    lines.append(f"<i>updated {now.strftime('%H:%M')} UTC</i>")
     return "\n".join(lines)
 
 
@@ -277,7 +350,8 @@ def setup_telegram():
     save_config({"TELEGRAM_BOT_TOKEN": bot_token, "TELEGRAM_CHAT_ID": str(chat_id)})
     who = chat.get("username") or chat.get("first_name") or chat_id
     print(f"Config written to {CONFIG_PATH} (chat: {who}, bot: @{username})")
-    if not safe_tg_send(load_config(), "\u2705 Claude usage bot connected. Report every 5 hours (first run 5 min after boot)."):
+    if not update_pinned(load_config(), "\u2705 Claude usage bot connected. "
+                          "This message is pinned and edited in place every 5 minutes."):
         print("(confirmation message failed to send, but config was saved)", file=sys.stderr)
     return 0
 
@@ -296,15 +370,15 @@ def main(argv):
         usage = get_usage()
     except AuthDead as e:
         if telegram:
-            safe_tg_send(cfg, "\u26a0 Claude usage bot: OAuth refresh token rejected. "
-                              "Run <code>claude auth login</code> on the WSL box to fix me.")
+            update_pinned(cfg, "\u26a0 <b>Claude usage</b>: OAuth refresh token rejected. "
+                          "Run <code>claude auth login</code> on the WSL box to fix me.")
         print(f"auth dead: {e}", file=sys.stderr)
         return 1
     except RefreshError as e:
         print(f"token refresh failed: {e}", file=sys.stderr)
         return 2
     except urllib.error.HTTPError as e:
-        print(f"HTTP {e.code}: {e.read().decode(errors='replace')[:300]}", file=sys.stderr)
+        print(f"HTTP {e.code}: {http_error_detail(e)}", file=sys.stderr)
         return 2
     except urllib.error.URLError as e:
         print(f"network error: {e}", file=sys.stderr)
@@ -316,7 +390,7 @@ def main(argv):
         except (TypeError, ValueError, KeyError, AttributeError) as e:
             print(f"failed to format usage report: {e}", file=sys.stderr)
             return 2
-        if not safe_tg_send(cfg, text):
+        if not update_pinned(cfg, text):
             return 2
         return 0
 

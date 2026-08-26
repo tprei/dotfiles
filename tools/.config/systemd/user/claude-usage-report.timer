@@ -1,11 +1,10 @@
 [Unit]
-Description=Claude Code usage report to Telegram, every 5 hours
+Description=Claude Code usage pinned-message refresh, every 5 minutes
 
 [Timer]
-OnBootSec=5min
-OnUnitActiveSec=5h
-Persistent=true
-RandomizedDelaySec=2min
+OnBootSec=1min
+OnUnitActiveSec=5min
+RandomizedDelaySec=20s
 
 [Install]
 WantedBy=timers.target

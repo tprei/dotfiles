@@ -1,9 +1,9 @@
 [Unit]
-Description=Claude Code usage report to Telegram, every 5 hours
+Description=Claude Code usage pinned-message refresh, every 5 minutes
 
 [Service]
 Type=oneshot
 ExecStart=/home/prei/.local/bin/claude-usage-check --telegram
 Restart=on-failure
 RestartPreventExitStatus=1
-RestartSec=5min
+RestartSec=60
