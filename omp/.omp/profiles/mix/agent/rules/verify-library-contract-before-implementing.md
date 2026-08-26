@@ -1,0 +1,1 @@
+../../../../agent/rules/verify-library-contract-before-implementing.md

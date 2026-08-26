@@ -1,0 +1,5 @@
+# Remap model selectors off Alt+P/Alt+M (eaten by tmux: M-p paste-buffer, M-m move-window).
+app.model.selectTemporary: alt+k
+app.model.select: alt+l
+# Free Alt+l from its default (app.display.reset) so model-select owns it unambiguously.
+app.display.reset: []

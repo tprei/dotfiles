@@ -1,0 +1,1 @@
+../../../../agent/rules/no-slop-comments.md

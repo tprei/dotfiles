@@ -1,0 +1,1 @@
+../../../../agent/rules/forgejo-access-is-configured.md

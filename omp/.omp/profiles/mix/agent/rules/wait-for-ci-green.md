@@ -1,0 +1,1 @@
+../../../../agent/rules/wait-for-ci-green.md
