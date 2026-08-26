@@ -21,7 +21,6 @@ interface Profile {
 const PROFILES: Record<string, Profile> = {
 	cld: { name: "Claude (Anthropic)", plan: "anthropic/claude-opus-5:high", rest: "anthropic/claude-sonnet-5:high" },
 	glm: { name: "GLM (Z.AI)",        plan: "zai/glm-5.3:max",          rest: "zai/glm-5.3:high"            },
-	or:  { name: "OpenRouter",        plan: "openrouter/qwen/qwen3.8-max", rest: "openrouter/deepseek/deepseek-v4-pro:high" },
 	oc:  { name: "OpenCode",          plan: "opencode-go/glm-5.3:high", rest: "opencode-go/deepseek-v4-pro:high" },
 	gpt: { name: "Codex (OpenAI)",    plan: "openai-codex/gpt-5.6-sol:high", rest: "openai-codex/gpt-5.6-luna:medium" },
 };
@@ -96,7 +95,7 @@ export default function profilePicker(pi: ExtensionAPI) {
 	pi.registerShortcut("alt+u", { description: "Pick model-role profile", handler: ctx => pick(pi, ctx) });
 
 	pi.registerCommand("use", {
-		description: "Switch model-role profile (cld, glm, or, oc, gpt)",
+		description: "Switch model-role profile (cld, glm, oc, gpt)",
 		getArgumentCompletions: prefix => {
 			const q = prefix.trim().toLowerCase();
 			const keys = Object.keys(PROFILES).filter(k => k.startsWith(q));

@@ -30,7 +30,7 @@ gh pr diff <PR>
 ```
 ### 2. Delegate the review to the `reviewer` task agent
 
-Every PR review MUST run through the `reviewer` task agent (`task` tool, `agent: "reviewer"`), never inline in the calling session. This repo's omp config pins `reviewer` to `openrouter/openai/gpt-5.6-luna:max` (see `omp/.omp/agent/config.yml` and the `mix`/`china` profiles) — dispatching through the agent is what guarantees that model runs the review, not whichever model is driving the current session.
+Every PR review MUST run through the `reviewer` task agent (`task` tool, `agent: "reviewer"`), never inline in the calling session. This repo's omp config pins `reviewer` to `zai/glm-5.3:max` (see `omp/.omp/agent/config.yml` and the `mix`/`china` profiles) — dispatching through the agent is what guarantees that model runs the review, not whichever model is driving the current session.
 
 Pass the subagent a single self-contained prompt containing:
 - the PR metadata and diff fetched above (or the raw `gh pr view`/`gh pr diff` commands to run if the subagent should fetch them itself)
