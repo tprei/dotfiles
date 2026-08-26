@@ -70,6 +70,7 @@
     "defaultMode": "bypassPermissions"
   },
   "model": "opus",
+  "outputStyle": "Unslop",
   "hooks": {
     "Stop": [
       {
