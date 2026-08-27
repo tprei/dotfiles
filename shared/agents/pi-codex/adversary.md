@@ -3,7 +3,7 @@ name: adversary
 description: USE PROACTIVELY for adversarial review of non-trivial code changes using GLM-5.3. The adversary assumes the implementation is wrong, incomplete, or unsafe and tries to disprove it. Invoke after generating or modifying code in non-trivial logic, multi-file changes, or risky areas. Read-only.
 tools: read, grep, glob, bash, web_search
 model: zai/glm-5.3
-thinking: xhigh
+thinking: max
 systemPromptMode: replace
 inheritProjectContext: true
 completionGuard: false

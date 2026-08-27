@@ -23,14 +23,14 @@ task:
     - sonic
   agentModelOverrides:
     reviewer: zai/glm-5.3:max
-    adversary: zai/glm-5.3:xhigh
-    enemy: zai/glm-5.3:xhigh
+    adversary: zai/glm-5.3:max
+    enemy: zai/glm-5.3:max
     explorer: zai/glm-5.3-flash
     git-commit-specialist: google-antigravity/gemini-3.7-flash
-    planner: zai/glm-5.3:xhigh
-    strategist: zai/glm-5.3:xhigh
-    surveyor: zai/glm-5.3:xhigh
-    technical-architect: zai/glm-5.3:xhigh
+    planner: zai/glm-5.3:max
+    strategist: zai/glm-5.3:max
+    surveyor: zai/glm-5.3:max
+    technical-architect: zai/glm-5.3:max
     triage: google-antigravity/gemini-3.7-flash
     task: zai/glm-5.3-flash
 dev:

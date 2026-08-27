@@ -3,7 +3,7 @@ name: strategist
 description: USE PROACTIVELY for GLM-5.3-powered planning. Same role as planner but runs on GLM-5.3 to provide a second perspective alongside the GPT-powered planner. Read-only planning and analysis.
 tools: read, grep, glob, bash
 model: zai/glm-5.3
-thinking: xhigh
+thinking: max
 systemPromptMode: replace
 inheritProjectContext: true
 completionGuard: false

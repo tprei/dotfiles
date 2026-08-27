@@ -60,6 +60,7 @@ Layout:
 
 - `omp/.omp/agent/config.yml` — root profile: model roles, thinking level, subagent model overrides, retry fallback chains.
 - `omp/.omp/agent/rules/`, `omp/.omp/agent/extensions/` — global rules and TypeScript extensions.
+- `omp/.omp/agent/models.yml` — custom model definitions merged over the bundled catalog. Each profile symlinks it.
 - `omp/.omp/profiles/{mix,claude,china}/agent/` — per-profile overrides, each with its own `config.yml`, `agents/`, and optional `rules/`, `APPEND_SYSTEM.md`, `WATCHDOG.md`.
 
 Verification, in order:
@@ -69,6 +70,10 @@ Verification, in order:
 3. `find ~/.omp -maxdepth 4 -type l` lists every managed path, including `agent/rules`, `agent/extensions`, and the profile directories.
 
 Edit configs in this repository, never in `~/.omp`. Anything under `~/.omp` that is a real file is drift; reconcile it into the repo and re-stow. The rest of `~/.omp` (`agent.db`, `history.db`, `models.db`, `sessions/`, `logs/`, `cache/`) is runtime state and stays untracked.
+
+`models.yml` exists because the bundled catalog trails Z.ai's releases. OMP already routes the `zai` provider through `https://api.z.ai/api/anthropic`, so the file only declares the missing GLM ids and their effort ladders. `auth: oauth` keeps the stored coding-plan credential in play instead of pinning a key in the repo.
+
+A model id absent from both the catalog and this file resolves to nothing, and any role pointing at it fails at startup. The `advisor` role reports `no model is assigned` without naming the bad id, so check the id against `omp models <provider>` first. Both GLM entries expose only `high` and `max` effort, which makes `zai/glm-5.3:xhigh` invalid.
 
 ## Tools
 
