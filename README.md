@@ -71,9 +71,9 @@ Verification, in order:
 
 Edit configs in this repository, never in `~/.omp`. Anything under `~/.omp` that is a real file is drift; reconcile it into the repo and re-stow. The rest of `~/.omp` (`agent.db`, `history.db`, `models.db`, `sessions/`, `logs/`, `cache/`) is runtime state and stays untracked.
 
-`models.yml` exists because the bundled catalog trails Z.ai's releases. OMP already routes the `zai` provider through `https://api.z.ai/api/anthropic`, so the file only declares the missing GLM ids and their effort ladders. `auth: oauth` keeps the stored coding-plan credential in play instead of pinning a key in the repo.
+`models.yml` exists because the bundled catalog trails Z.ai's releases. OMP already routes the `zai` provider through `https://api.z.ai/api/anthropic`, so the file only declares the missing GLM id `glm-5.3-flash`. A provider that declares `models` must also carry `apiKey`; `auth: oauth` alone makes OMP reject the entire file silently, and `auth: none` sends no credential at all. `apiKey: "!printenv MY_ZAI_AUTH_TOKEN"` runs the command and uses its stdout, falling through to the stored key when the variable is absent, so no secret is pinned in the repo.
 
-A model id absent from both the catalog and this file resolves to nothing, and any role pointing at it fails at startup. The `advisor` role reports `no model is assigned` without naming the bad id, so check the id against `omp models <provider>` first. Both GLM entries expose only `high` and `max` effort, which makes `zai/glm-5.3:xhigh` invalid.
+A model id absent from both the catalog and this file resolves to nothing, and any role pointing at it fails at startup. The `advisor` role reports `no model is assigned` without naming the bad id, so check the id against `omp models <provider>` first. The file declares only `glm-5.3-flash`, whose efforts are `high` and `max`; `glm-5.3` comes from the bundled catalog with `low`, `high`, and `max`, which makes `zai/glm-5.3:xhigh` invalid on both.
 
 ## Tools
 
