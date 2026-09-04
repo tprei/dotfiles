@@ -7,10 +7,10 @@ theme:
 setupVersion: 2
 modelRoles:
   advisor: zai/glm-5.3-flash
-  default: google-antigravity/gemini-3.7-flash
-  commit: google-antigravity/gemini-3.7-flash
-  smol: google-antigravity/gemini-3.7-flash
-  tiny: google-antigravity/gemini-3.7-flash
+  default: google-antigravity/gemini-3.8-flash
+  commit: google-antigravity/gemini-3.8-flash
+  smol: google-antigravity/gemini-3.8-flash
+  tiny: google-antigravity/gemini-3.8-flash
   task: zai/glm-5.3-flash
   slow: anthropic/claude-opus-5:medium
 defaultThinkingLevel: auto
@@ -27,26 +27,26 @@ task:
     adversary: zai/glm-5.3:max
     enemy: anthropic/claude-opus-5:medium
     explorer: zai/glm-5.3-flash
-    git-commit-specialist: google-antigravity/gemini-3.7-flash
+    git-commit-specialist: google-antigravity/gemini-3.8-flash
     planner: anthropic/claude-opus-5:medium
     technical-architect: anthropic/claude-opus-5:medium
     surveyor: zai/glm-5.3:max
     strategist: zai/glm-5.3:max
-    triage: google-antigravity/gemini-3.7-flash
+    triage: google-antigravity/gemini-3.8-flash
     task: zai/glm-5.3-flash
 dev:
   autoqaConsent: granted
 retry:
   modelFallback: true
   fallbackChains:
-    google-antigravity/gemini-3.7-flash:
+    google-antigravity/gemini-3.8-flash:
       - zai/glm-5.3-flash
       - opencode-go/deepseek-v4-flash
     zai/glm-5.3-flash:
-      - google-antigravity/gemini-3.7-flash
+      - google-antigravity/gemini-3.8-flash
       - zai/glm-5.3
     zai/glm-5.3:
-      - google-antigravity/gemini-3.7-flash
+      - google-antigravity/gemini-3.8-flash
       - opencode-go/gpt-5.6-luna
     opencode-go/gpt-5.6-luna:
       - opencode-go/deepseek-v4-pro
