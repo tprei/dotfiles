@@ -8,8 +8,8 @@ modelRoles:
   slow: anthropic/claude-opus-5:medium
   plan: anthropic/claude-opus-5:medium
   advisor: zai/glm-5.3-flash
-  task: zai/glm-5.3-flash
-  commit: google-antigravity/gemini-3.8-flash
+  task: google-antigravity/gemini-3.8-flash:high
+  commit: google-antigravity/gemini-3.8-flash:off
   smol: google-antigravity/gemini-3.8-flash
   tiny: google-antigravity/gemini-3.8-flash
 defaultThinkingLevel: auto
@@ -25,8 +25,8 @@ task:
   agentModelOverrides:
     adversary: zai/glm-5.3:max
     enemy: anthropic/claude-opus-5:medium
-    explorer: zai/glm-5.3-flash
-    git-commit-specialist: google-antigravity/gemini-3.8-flash
+    explorer: anthropic/claude-opus-5:high
+    git-commit-specialist: google-antigravity/gemini-3.8-flash:off
     planner: anthropic/claude-opus-5:medium
     strategist: zai/glm-5.3:max
     surveyor: zai/glm-5.3:max
@@ -35,7 +35,7 @@ task:
     librarian: zai/glm-5.3-flash
     reviewer: zai/glm-5.3:max
     scout: zai/glm-5.3-flash
-    task: zai/glm-5.3-flash
+    task: google-antigravity/gemini-3.8-flash:high
 dev:
   autoqaConsent: granted
 edit:
