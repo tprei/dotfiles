@@ -26,13 +26,16 @@ If recent conversation already includes the key files, excerpts, or confirmed en
    - Include tests only when they define behavior, cover the change directly, or the user asked for them.
 5. Read focused context.
    - Prefer targeted sections for very large files.
-   - Capture why each file matters, what symbols or flows matter, and any open questions.
+   - Capture why each file matters, what symbols, types, or flows matter, and any open questions.
+   - Collect existing type definitions, function signatures, and call sites so planners have exact code references for detailed specifications.
 
 ## Output
 
 Return a compact context brief with:
 - scope
 - selected files
+- key types, signatures, and relevant symbols
+- affected callers and references
 - why each file matters
 - missing neighbors or open questions
 
