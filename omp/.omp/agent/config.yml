@@ -65,3 +65,5 @@ retry:
 hideThinkingBlock: true
 composer:
   shape: box
+codexResets:
+  autoRedeem: "no"

@@ -4,20 +4,20 @@ providers:
       gpt-6-astra:
         thinking:
           mode: effort
-          efforts: [low, medium]
-          defaultLevel: medium
+          efforts: [low]
+          defaultLevel: low
   openrouter:
     modelOverrides:
       openai/gpt-6-astra:
         thinking:
           mode: effort
-          efforts: [low, medium]
-          defaultLevel: medium
+          efforts: [low]
+          defaultLevel: low
       openai/gpt-6-astra:batch:
         thinking:
           mode: effort
-          efforts: [low, medium]
-          defaultLevel: medium
+          efforts: [low]
+          defaultLevel: low
   zai:
     baseUrl: https://api.z.ai/api/anthropic
     api: anthropic-messages
