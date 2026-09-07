@@ -48,8 +48,20 @@ retry:
       - zai/glm-5.3
     zai/glm-5.3:
       - google-antigravity/gemini-3.8-flash
+      - openai-codex/gpt-5.6-luna:max
+      - opencode-go/gpt-5.6-luna
+    anthropic/claude-opus-5:
+      - anthropic/claude-sonnet-5:max
+      - openai-codex/gpt-5.6-luna:max
+      - zai/glm-5.3:max
+    anthropic/claude-sonnet-5:
+      - openai-codex/gpt-5.6-luna:max
+      - zai/glm-5.3:max
+    openai-codex/gpt-5.6-luna:
+      - anthropic/claude-sonnet-5:max
       - opencode-go/gpt-5.6-luna
     opencode-go/gpt-5.6-luna:
+      - openai-codex/gpt-5.6-luna:max
       - opencode-go/deepseek-v4-pro
       - anthropic/claude-sonnet-5:max
     opencode-go/deepseek-v4-flash:
