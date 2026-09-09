@@ -1,6 +1,7 @@
 .env
 venv
 nvim.log
+omp/.omp/agent/config.yml.lock
 pi/.pi/agent/auth.json
 pi/.pi/agent/codex-rate-history.jsonl
 pi/.pi/agent/npm/
