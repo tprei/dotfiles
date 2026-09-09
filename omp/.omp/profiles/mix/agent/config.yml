@@ -5,13 +5,13 @@ theme:
 setupVersion: 2
 modelRoles:
   default: anthropic/claude-opus-5:medium
-  slow: anthropic/claude-opus-5:medium
-  plan: anthropic/claude-opus-5:medium
-  advisor: zai/glm-5.3-flash
+  slow: anthropic/claude-opus-5:high
+  plan: openai-codex/gpt-6-astra:medium
+  advisor: zai/glm-5.3:max
   task: google-antigravity/gemini-3.8-flash:high
   commit: google-antigravity/gemini-3.8-flash:off
-  smol: google-antigravity/gemini-3.8-flash
-  tiny: google-antigravity/gemini-3.8-flash
+  smol: google-antigravity/gemini-3.8-flash:off
+  tiny: google-antigravity/gemini-3.8-flash:off
 defaultThinkingLevel: auto
 advisor:
   enabled: true
@@ -24,14 +24,14 @@ task:
     - sonic
   agentModelOverrides:
     adversary: zai/glm-5.3:max
-    enemy: anthropic/claude-opus-5:medium
-    explorer: anthropic/claude-opus-5:high
+    enemy: anthropic/claude-opus-5:high
+    explorer: zai/glm-5.3-flash
     git-commit-specialist: google-antigravity/gemini-3.8-flash:off
-    planner: anthropic/claude-opus-5:medium
+    planner: openai-codex/gpt-6-astra:medium
     strategist: zai/glm-5.3:max
     surveyor: zai/glm-5.3:max
-    technical-architect: anthropic/claude-opus-5:medium
-    triage: google-antigravity/gemini-3.8-flash
+    technical-architect: openai-codex/gpt-6-astra:medium
+    triage: google-antigravity/gemini-3.8-flash:off
     librarian: zai/glm-5.3-flash
     reviewer: zai/glm-5.3:max
     scout: zai/glm-5.3-flash
@@ -46,6 +46,9 @@ retry:
     google-antigravity/gemini-3.8-flash:
       - zai/glm-5.3-flash
       - opencode-go/deepseek-v4-flash
+    openai-codex/gpt-6-astra:
+      - zai/glm-5.3-flash
+      - google-antigravity/gemini-3.8-flash
     zai/glm-5.3-flash:
       - google-antigravity/gemini-3.8-flash
       - zai/glm-5.3
