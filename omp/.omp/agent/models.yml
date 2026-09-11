@@ -18,18 +18,4 @@ providers:
           mode: effort
           efforts: [low, medium]
           defaultLevel: medium
-  zai:
-    baseUrl: https://api.z.ai/api/anthropic
-    api: anthropic-messages
-    apiKey: "!printenv MY_ZAI_AUTH_TOKEN"
-    models:
-      - id: glm-5.3-flash
-        name: GLM-5.3-Flash
-        reasoning: true
-        input: [text, image]
-        contextWindow: 1000000
-        maxTokens: 131072
-        cost: { input: 0.15, output: 0.5, cacheRead: 0.03, cacheWrite: 0 }
-        thinking:
-          mode: anthropic-budget-effort
-          efforts: [high, max]
+
