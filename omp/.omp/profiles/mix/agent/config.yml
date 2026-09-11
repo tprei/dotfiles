@@ -8,10 +8,11 @@ modelRoles:
   slow: anthropic/claude-opus-5:high
   plan: openai-codex/gpt-6-astra:medium
   advisor: zai/glm-5.3:max
-  task: google-antigravity/gemini-3.8-flash:high
-  commit: google-antigravity/gemini-3.8-flash:off
-  smol: google-antigravity/gemini-3.8-flash:off
-  tiny: google-antigravity/gemini-3.8-flash:off
+  task: zai/glm-5.3-flash:high
+  vision: google-antigravity/gemini-3.8-flash:medium
+  commit: google-antigravity/gemini-3.8-flash:minimal
+  smol: google-antigravity/gemini-3.8-flash:minimal
+  tiny: google-antigravity/gemini-3.8-flash:minimal
 defaultThinkingLevel: auto
 advisor:
   enabled: true
@@ -23,48 +24,63 @@ task:
     - plan
     - sonic
   agentModelOverrides:
-    adversary: zai/glm-5.3:max
-    enemy: anthropic/claude-opus-5:high
-    explorer: zai/glm-5.3-flash
-    git-commit-specialist: google-antigravity/gemini-3.8-flash:off
     planner: openai-codex/gpt-6-astra:medium
+    technical-architect: openai-codex/gpt-6-astra:medium
     strategist: zai/glm-5.3:max
     surveyor: zai/glm-5.3:max
-    technical-architect: openai-codex/gpt-6-astra:medium
-    triage: google-antigravity/gemini-3.8-flash:off
-    librarian: zai/glm-5.3-flash
-    reviewer: zai/glm-5.3:max
-    scout: zai/glm-5.3-flash
-    task: google-antigravity/gemini-3.8-flash:high
+    explorer: zai/glm-5.3-flash:high
+    librarian: zai/glm-5.3-flash:high
+    scout: zai/glm-5.3-flash:high
+    reviewer: openai-codex/gpt-5.6-sol:high
+    adversary: zai/glm-5.3:max
+    enemy: anthropic/claude-opus-5:high
+    security-reviewer: zai/glm-5.3:max
+    triage: google-antigravity/gemini-3.8-flash:minimal
+    git-commit-specialist: google-antigravity/gemini-3.8-flash:minimal
+    task: zai/glm-5.3-flash:high
 dev:
   autoqaConsent: granted
 edit:
   mode: hashline
 retry:
   modelFallback: true
+  fallbackRevertPolicy: cooldown-expiry
+  maxDelayMs: 0
   fallbackChains:
-    google-antigravity/gemini-3.8-flash:
-      - zai/glm-5.3-flash
-      - opencode-go/deepseek-v4.1-flash
-    zai/glm-5.3-flash:
-      - google-antigravity/gemini-3.8-flash
-      - zai/glm-5.3
-    zai/glm-5.3:
-      - google-antigravity/gemini-3.8-flash
-      - openai-codex/gpt-5.6-luna:max
-      - opencode-go/muse-spark-1.3-contributor
+    default:
+      - zai/glm-5.3-flash:high
+      - google-antigravity/gemini-3.8-flash:high
     anthropic/claude-opus-5:
-      - openai-codex/gpt-5.6-luna:max
+      - google-antigravity/claude-opus-4-6:high
+      - anthropic/claude-fable-5-1:high
+      - zai/glm-5.3:max
+    anthropic/claude-fable-5-1:
+      - anthropic/claude-opus-5:high
+      - google-antigravity/claude-opus-4-6:high
+    openai-codex/gpt-6-astra:
+      - openai-codex/gpt-5.6-sol:high
+      - google-antigravity/claude-opus-4-6:high
+      - zai/glm-5.3:max
+    openai-codex/gpt-5.6-sol:
+      - anthropic/claude-opus-5:high
       - zai/glm-5.3:max
     openai-codex/gpt-5.6-luna:
-      - zai/glm-5.3:max
-      - opencode-go/muse-spark-1.3-contributor
-    opencode-go/muse-spark-1.3-contributor:
-      - openai-codex/gpt-5.6-luna:max
-      - zai/glm-5.3:high
-    opencode-go/deepseek-v4.1-flash:
-      - zai/glm-5.3-flash
-  maxDelayMs: 0
+      - opencode-go/muse-spark-1.3-contributor:high
+      - zai/glm-5.3-flash:high
+    zai/glm-5.3:
+      - google-antigravity/claude-sonnet-4-6:high
+      - opencode-go/muse-spark-1.3-contributor:high
+    zai/glm-5.3-flash:
+      - opencode-go/muse-spark-1.3-contributor:medium
+      - google-antigravity/gemini-3.8-flash:high
+    google-antigravity/gemini-3.8-flash:
+      - zai/glm-5.3-flash:high
+      - opencode-go/deepseek-v4.1-flash:high
+    google-antigravity/*:
+      - anthropic/*
+    opencode-go/*:
+      - zai/glm-5.3-flash:high
+      - google-antigravity/gemini-3.8-flash:high
 composer:
   shape: box
 codexResets:
