@@ -79,6 +79,39 @@ Edit configs in this repository, never in `~/.omp`. Anything under `~/.omp` that
 
 A model id absent from both the catalog and this file resolves to nothing, and any role pointing at it fails at startup. The `advisor` role reports `no model is assigned` without naming the bad id, so check the id against `omp models <provider>` first. The file declares only `glm-5.3-flash`, whose efforts are `high` and `max`; `glm-5.3` comes from the bundled catalog with `low`, `high`, and `max`, which makes `zai/glm-5.3:xhigh` invalid on both.
 
+### AGY CLI provider
+
+`omp/.omp/agent/extensions/antigravity-cli.ts` registers the `antigravity-cli` provider. It runs the installed `agy` binary, so AGY keeps its own authentication and model access. OMP does not need a Google OAuth token for this provider.
+
+Run `agy` once and complete its authentication flow before the first OMP request. There is no separate `omp login` step for this provider.
+
+The root profile keeps its native model for default, vision, commit, and smol work, and uses the CLI provider for the text-only tiny role. The `mix` profile keeps its existing tool and image roles, and uses the CLI provider for tiny. The `china` profile stays on its existing providers.
+
+After stowing the package, select a model by its provider selector:
+
+```sh
+omp --model antigravity-cli/gemini-3.8-flash --thinking high -p "Reply with one word: pong"
+```
+
+Role config uses the effort suffix, for example `antigravity-cli/gemini-3.8-flash:high`. Use `AGY_BIN=/path/to/agy` when `agy` is not on `PATH`.
+
+AGY headless mode denies native command tools unless AGY already has an allow rule. To let AGY approve its own native tools without prompting, opt in for that command:
+
+```sh
+AGY_OMP_DANGEROUSLY_SKIP_PERMISSIONS=1 omp --model antigravity-cli/gemini-3.8-flash --thinking high
+```
+
+The provider returns text only and does not forward OMP tool calls. AGY native tools are separate from OMP's approval UI and remain subject to AGY's own permission rules. The provider rejects image input because it has no image transport.
+
+Before sending the prompt, the bridge renames OMP-specific headers so the headless CLI transport is not misread as third-party API usage.
+
+Profile clients inherit the shared extension through `~/.omp/profiles/*/agent/extensions`. Verify the deployed link before using a profile:
+
+```sh
+readlink -f ~/.omp/agent/extensions/antigravity-cli.ts
+readlink -f ~/.omp/profiles/mix/agent/extensions/antigravity-cli.ts
+```
+
 ## Tools
 
 `tools/.local/bin/claude-usage-check` reports Claude Code OAuth usage (5-hour and 7-day window utilization) and can send a formatted report to Telegram. It refreshes the OAuth access token through the same `~/.claude/.credentials.json` the `claude` CLI uses, so it stays authenticated as long as the refresh token stays valid; a dead refresh token triggers a Telegram warning to run `claude auth login` instead of failing silently.

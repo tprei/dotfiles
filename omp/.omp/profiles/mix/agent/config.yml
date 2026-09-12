@@ -12,7 +12,7 @@ modelRoles:
   vision: google-antigravity/gemini-3.8-flash:medium
   commit: google-antigravity/gemini-3.8-flash:minimal
   smol: google-antigravity/gemini-3.8-flash:minimal
-  tiny: google-antigravity/gemini-3.8-flash:minimal
+  tiny: antigravity-cli/gemini-3.8-flash:minimal
 defaultThinkingLevel: auto
 advisor:
   enabled: true
@@ -80,6 +80,8 @@ retry:
       - zai/glm-5.3-flash:high
       - opencode-go/deepseek-v4.1-flash:high
     google-antigravity/*:
+      - anthropic/*
+    antigravity-cli/*:
       - anthropic/*
     opencode-go/*:
       - zai/glm-5.3-flash:high
