@@ -26,8 +26,8 @@ Pipe a prompt through the local `agy` CLI and return the advisor's answer as pla
 | Code | Meaning |
 |------|---------|
 | 0 | Success: the advisor response is on stdout |
-| 1 | Advisor failure: `agy` exited non-zero, returned a non-SUCCESS status, hit a denial (`denied_actions` non-empty), returned an empty response, or produced unparseable output; detail is on stderr |
-| 64 | Usage error: more than one argument, unreadable prompt file, or empty prompt |
+| 1 | Advisor failure: `agy` exited non-zero, returned a non-SUCCESS status, hit a denial (`denied_actions` non-empty), returned an empty or truncated response, or produced unparseable output; detail is on stderr |
+| 64 | Usage error: more than one argument, unreadable prompt file, directory as prompt file, empty prompt, or no piped input on a terminal |
 
 ## Quota
 
