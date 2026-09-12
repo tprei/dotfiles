@@ -1,19 +1,21 @@
 providers:
   {}
+disabledProviders:
+  - google-antigravity
 symbolPreset: nerd
 theme:
   dark: titanium
   light: light
 setupVersion: 2
 modelRoles:
-  default: google-antigravity/gemini-3.8-flash:high
+  default: zai/glm-5.3:high
   slow: anthropic/claude-opus-5:high
   plan: openai-codex/gpt-6-astra:medium
   advisor: zai/glm-5.3:max
   task: zai/glm-5.3-flash:high
-  vision: google-antigravity/gemini-3.8-flash:medium
-  commit: google-antigravity/gemini-3.8-flash:minimal
-  smol: google-antigravity/gemini-3.8-flash:minimal
+  vision: zai/glm-5.3:high
+  commit: zai/glm-5.3:low
+  smol: zai/glm-5.3:low
   tiny: antigravity-cli/gemini-3.8-flash:minimal
 defaultThinkingLevel: auto
 advisor:
@@ -37,8 +39,8 @@ task:
     adversary: zai/glm-5.3:max
     enemy: anthropic/claude-opus-5:high
     security-reviewer: zai/glm-5.3:max
-    triage: google-antigravity/gemini-3.8-flash:minimal
-    git-commit-specialist: google-antigravity/gemini-3.8-flash:minimal
+    triage: zai/glm-5.3:low
+    git-commit-specialist: zai/glm-5.3:low
     task: zai/glm-5.3-flash:high
 dev:
   autoqaConsent: granted
@@ -49,8 +51,6 @@ retry:
   fallbackChains:
     default:
       - zai/glm-5.3-flash:high
-      - google-antigravity/gemini-3.8-flash:high
-      - google-antigravity/claude-opus-4-6:high
     anthropic/claude-opus-5:
       - anthropic/claude-fable-5-1:high
       - zai/glm-5.3:max
@@ -66,22 +66,15 @@ retry:
     openai-codex/gpt-5.6-luna:
       - opencode-go/muse-spark-1.3-contributor:high
       - zai/glm-5.3-flash:high
-    zai/glm-5.3: []
+    zai/glm-5.3:
+      []
     zai/glm-5.3-flash:
       - opencode-go/muse-spark-1.3-contributor:medium
-      - google-antigravity/gemini-3.8-flash:high
-      - google-antigravity/claude-opus-4-6:high
-    google-antigravity/gemini-3.8-flash:
-      - zai/glm-5.3-flash:high
-      - opencode-go/deepseek-v4.1-flash:high
-    google-antigravity/*:
-      - anthropic/*
     antigravity-cli/*:
       - anthropic/*
     opencode-go/*:
       - zai/glm-5.3-flash:high
-      - google-antigravity/gemini-3.8-flash:high
-hideThinkingBlock: true
+hideThinkingBlock: false
 composer:
   shape: box
 codexResets:
