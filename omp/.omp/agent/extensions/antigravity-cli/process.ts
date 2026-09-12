@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
+import { isRecord } from "@oh-my-pi/pi-utils/type-guards";
 
 const MAX_STDERR_LENGTH = 16_384;
 
@@ -42,10 +43,6 @@ class AgyAbortError extends AgyProcessError {
 		super("AGY CLI request aborted");
 		this.name = "AbortError";
 	}
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function readString(record: Record<string, unknown>, key: string): string | undefined {

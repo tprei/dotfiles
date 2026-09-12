@@ -81,7 +81,7 @@ A model id absent from both the catalog and this file resolves to nothing, and a
 
 Run `agy` once and complete its authentication flow before the first OMP request. There is no separate `omp login` step for this provider.
 
-The root OMP profile now uses `antigravity-cli/gemini-3.8-flash:high` as its default model. The `mix` profile uses the provider for vision, commit, smol, and tiny roles, plus its `triage` and `git-commit-specialist` task overrides. The `china` profile stays on its existing providers.
+The root profile keeps its native model for default, vision, commit, and smol work, and uses the CLI provider for the text-only tiny role. The `mix` profile keeps its existing tool and image roles, and uses the CLI provider for tiny. The `china` profile stays on its existing providers.
 
 After stowing the package, select a model by its provider selector:
 
@@ -97,7 +97,7 @@ AGY headless mode denies native command tools unless AGY already has an allow ru
 AGY_OMP_DANGEROUSLY_SKIP_PERMISSIONS=1 omp --model antigravity-cli/gemini-3.8-flash --thinking high
 ```
 
-That flag gives AGY native tools permission to act without OMP's approval UI. Use it only when that is what you want. The provider rejects image input because it has no image transport.
+The provider returns text only and does not forward OMP tool calls. AGY native tools are separate from OMP's approval UI and remain subject to AGY's own permission rules. The provider rejects image input because it has no image transport.
 
 Profile clients inherit the shared extension through `~/.omp/profiles/*/agent/extensions`. Verify the deployed link before using a profile:
 

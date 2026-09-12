@@ -9,9 +9,9 @@ modelRoles:
   plan: openai-codex/gpt-6-astra:medium
   advisor: zai/glm-5.3:max
   task: zai/glm-5.3-flash:high
-  vision: antigravity-cli/gemini-3.8-flash:medium
-  commit: antigravity-cli/gemini-3.8-flash:minimal
-  smol: antigravity-cli/gemini-3.8-flash:minimal
+  vision: google-antigravity/gemini-3.8-flash:medium
+  commit: google-antigravity/gemini-3.8-flash:minimal
+  smol: google-antigravity/gemini-3.8-flash:minimal
   tiny: antigravity-cli/gemini-3.8-flash:minimal
 defaultThinkingLevel: auto
 advisor:
@@ -35,8 +35,8 @@ task:
     adversary: zai/glm-5.3:max
     enemy: anthropic/claude-opus-5:high
     security-reviewer: zai/glm-5.3:max
-    triage: antigravity-cli/gemini-3.8-flash:minimal
-    git-commit-specialist: antigravity-cli/gemini-3.8-flash:minimal
+    triage: google-antigravity/gemini-3.8-flash:minimal
+    git-commit-specialist: google-antigravity/gemini-3.8-flash:minimal
     task: zai/glm-5.3-flash:high
 dev:
   autoqaConsent: granted
@@ -73,9 +73,9 @@ retry:
     zai/glm-5.3-flash:
       - openrouter/meta/muse-spark-1.3-contributor:max
       - opencode-go/muse-spark-1.3-contributor:medium
-      - antigravity-cli/gemini-3.8-flash:high
+      - google-antigravity/gemini-3.8-flash:high
       - google-antigravity/claude-opus-4-6:high
-    antigravity-cli/gemini-3.8-flash:
+    google-antigravity/gemini-3.8-flash:
       - openrouter/meta/muse-spark-1.3-contributor:max
       - zai/glm-5.3-flash:high
       - opencode-go/deepseek-v4.1-flash:high
@@ -85,7 +85,7 @@ retry:
       - anthropic/*
     opencode-go/*:
       - zai/glm-5.3-flash:high
-      - antigravity-cli/gemini-3.8-flash:high
+      - google-antigravity/gemini-3.8-flash:high
 composer:
   shape: box
 codexResets:

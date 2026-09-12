@@ -16,7 +16,7 @@ This is a CLI-backed OMP provider, not an ACP client. OMP's `acp` command remain
 - `omp/.omp/profiles/mix/agent/config.yml`: `mix` role and fallback selections for the CLI provider.
 - `README.md`: deployment, profile, authentication, and permission setup.
 
-The provider is available after the extension is deployed through the existing stow-managed extension directory. Users select `antigravity-cli/gemini-3.8-flash` and AGY owns authentication under its existing CLI state.
+The provider is available after the extension is deployed through the existing stow-managed extension directory. Users can select `antigravity-cli/gemini-3.8-flash` for text-only prompts, and the root and `mix` profiles assign it to their `tiny` role. AGY owns authentication under its existing CLI state.
 
 ## Provider contract
 
@@ -80,7 +80,7 @@ Write one `{"event":"user","message":{"role":"user","content":"<prompt>"}}` NDJS
 
 On a new AGY conversation, serialize the OMP system prompt and all text content from OMP messages as labeled transcript sections, ending with an instruction to answer the latest request. On an existing binding, send only newly appended text messages. Reject image content explicitly rather than silently dropping it.
 
-Track bindings by `SimpleStreamOptions.sessionId`. OMP appends the partial assistant message after consuming `start`, so store `context.messages.length + 1` after a successful turn. The next call then starts at its newly appended message. Do not share a conversation when OMP supplies no session id. Clear a binding after a failed turn so a later retry starts from the OMP context instead of reusing uncertain AGY state.
+Track bindings by `SimpleStreamOptions.sessionId`. Capture the provider context's message count before the AGY turn. OMP records one assistant message in session history after the provider starts, so store the first message index after that assistant, along with an exact serialized fingerprint of the provider-context prefix that AGY has seen. Resume only when the incoming provider context still contains that prefix at the stored boundary. If the prefix changed, the context was compacted, or the boundary is unavailable, discard the binding and send the full serialized context in a new AGY conversation. Do not share a conversation when OMP supplies no session id. Clear a binding after a failed turn so a later retry starts from the OMP context instead of reusing uncertain AGY state.
 
 ## Stream contract
 

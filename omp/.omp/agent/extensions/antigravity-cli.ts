@@ -17,10 +17,23 @@ import { runAgyTurn, type AgyTurnResult } from "./antigravity-cli/process.ts";
 type ConversationBinding = {
 	conversationId: string;
 	messageCount: number;
+	prefixMessageCount: number;
+	prefixFingerprint: string;
 };
 
 const AGY_API_KEY_MARKER = "AGY_CLI_MANAGED";
 const bindings = new Map<string, ConversationBinding>();
+
+function contextPrefixFingerprint(context: Context, messageCount: number): string {
+	const fingerprint = JSON.stringify(context.messages.slice(0, messageCount));
+	if (fingerprint === undefined) throw new Error("OMP context could not be serialized for AGY conversation reuse.");
+	return fingerprint;
+}
+
+function bindingMatches(context: Context, binding: ConversationBinding): boolean {
+	if (context.messages.length < binding.messageCount) return false;
+	return contextPrefixFingerprint(context, binding.prefixMessageCount) === binding.prefixFingerprint;
+}
 
 function bindingKey(options: SimpleStreamOptions | undefined): string | undefined {
 	const sessionId = options?.sessionId;
@@ -82,10 +95,11 @@ function streamAgy(
 	context: Context,
 	options: SimpleStreamOptions | undefined,
 ): AssistantMessageEventStream {
+	const initialMessageCount = context.messages.length;
 	const stream = createAssistantMessageEventStream();
 	const key = bindingKey(options);
 	const currentBinding = key ? bindings.get(key) : undefined;
-	const canResume = currentBinding !== undefined && context.messages.length >= currentBinding.messageCount;
+	const canResume = currentBinding !== undefined && bindingMatches(context, currentBinding);
 	const previousMessageCount = canResume ? currentBinding.messageCount : undefined;
 	const conversationId = canResume ? currentBinding.conversationId : undefined;
 	const partial = createAssistantMessage(model);
@@ -107,9 +121,11 @@ function streamAgy(
 	void (async () => {
 		try {
 			const prompt = buildAgyPrompt(context, previousMessageCount);
+			const prefixFingerprint = contextPrefixFingerprint(context, initialMessageCount);
 			const result = await runAgyTurn({
 				prompt,
 				modelId: resolveAgyModelId(model.id, options?.reasoning, options?.disableReasoning),
+				conversationId,
 				cwd: options?.cwd ?? process.cwd(),
 				signal: options?.signal,
 				dangerouslySkipPermissions: process.env.AGY_OMP_DANGEROUSLY_SKIP_PERMISSIONS === "1",
@@ -127,7 +143,9 @@ function streamAgy(
 			if (key) {
 				bindings.set(key, {
 					conversationId: result.conversationId,
-					messageCount: context.messages.length + 1,
+					messageCount: initialMessageCount + 1,
+					prefixMessageCount: initialMessageCount,
+					prefixFingerprint,
 				});
 			}
 			if (textBlock) stream.push({ type: "text_end", contentIndex: 0, content: response, partial });
