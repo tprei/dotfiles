@@ -1,14 +1,15 @@
 import type { ProviderModelConfig } from "@oh-my-pi/pi-coding-agent";
 
-const EFFORT_LEVELS = ["minimal", "low", "medium", "high", "xhigh", "max"] as const;
-type Effort = (typeof EFFORT_LEVELS)[number];
+const EFFORTS = ["minimal", "low", "medium", "high", "xhigh", "max"] as const;
+type AgyEffort = (typeof EFFORTS)[number];
+type AgyReasoning = AgyEffort | "off";
 
 export const AGY_PROVIDER_ID = "antigravity-cli";
 export const AGY_API_ID = "antigravity-cli";
 
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-const FLASH_EFFORTS: Effort[] = ["minimal", "low", "medium", "high"];
-const PRO_EFFORTS: Effort[] = ["low", "high"];
+const FLASH_EFFORTS: AgyEffort[] = ["minimal", "low", "medium", "high"];
+const PRO_EFFORTS: AgyEffort[] = ["low", "high"];
 
 type WireModelIds = {
 	low: string;
@@ -16,8 +17,8 @@ type WireModelIds = {
 	high: string;
 };
 
-function createModel(id: string, name: string, efforts: Effort[], wire: WireModelIds): ProviderModelConfig {
-	const effortRouting: Partial<Record<Effort | "off", string>> = {
+function createModel(id: string, name: string, efforts: AgyEffort[], wire: WireModelIds): ProviderModelConfig {
+	const effortRouting: Partial<Record<AgyReasoning, string>> = {
 		minimal: wire.low,
 		low: wire.low,
 		medium: wire.medium ?? wire.high,
@@ -37,7 +38,7 @@ function createModel(id: string, name: string, efforts: Effort[], wire: WireMode
 			efforts,
 			defaultLevel: "high",
 			effortRouting,
-		},
+		} as unknown as NonNullable<ProviderModelConfig["thinking"]>,
 		input: ["text"],
 		cost: { ...ZERO_COST },
 		contextWindow: 1_048_576,
@@ -69,7 +70,7 @@ export const AGY_MODELS: ProviderModelConfig[] = [
 
 export function resolveAgyModelId(
 	modelId: string,
-	reasoning: Effort | undefined,
+	reasoning: AgyEffort | undefined,
 	disableReasoning = false,
 ): string {
 	const model = AGY_MODELS.find(candidate => candidate.id === modelId);
@@ -77,7 +78,7 @@ export function resolveAgyModelId(
 		throw new Error(`AGY CLI provider does not support model "${modelId}".`);
 	}
 
-	let effort: Effort | "off" = "high";
+	let effort: AgyReasoning = "high";
 	if (disableReasoning) {
 		effort = "off";
 	} else if (reasoning === "minimal" || reasoning === "low") {

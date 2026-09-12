@@ -108,9 +108,10 @@ def run_omp_usage() -> dict:
         raise UsageError(f"OMP produced invalid JSON: {error}", 1) from error
     if not isinstance(payload, dict):
         raise UsageError("OMP JSON payload is not an object", 1)
-    if not isinstance(payload.get("reports"), list):
+    reports = payload.get("reports")
+    if not isinstance(reports, list):
         raise UsageError("OMP payload has no reports list", 1)
-    if not usable_reports(payload):
+    if reports and not usable_reports(payload):
         raise UsageError("OMP payload has no provider reports", 1)
     return payload
 
@@ -315,7 +316,7 @@ def format_message(payload: dict) -> str:
             block.extend(entry)
         blocks.append("\n".join(block))
     if not blocks:
-        return f"{header}\nNo provider usage data in the OMP payload."
+        return f"{header}\nNo provider reports."
     return "\n\n".join([header] + blocks)
 
 
@@ -763,7 +764,10 @@ def run_json() -> int:
         payload = run_omp_usage()
     except UsageError as error:
         return fail(error)
-    print(json.dumps(payload, indent=2))
+    if not payload["reports"]:
+        print(plain_image_text(format_message(payload)))
+    else:
+        print(json.dumps(payload, indent=2))
     return 0
 
 
