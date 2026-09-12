@@ -12,7 +12,7 @@ Personal WSL/Linux and MacBook config for shell, tmux, nvim, terminals, keyboard
 
 ## Herdr
 
-`herdr/.config/herdr/config.toml` runs herdr inside tmux panes and mirrors the tmux keymap on herdr's `ctrl+b` prefix: bare `C-b` enters herdr, `alt+n/p/w/]/x`, `alt+1..9` tabs, `alt+h/j/k/l` resize, and `ctrl+h/j/k/l` pane nav match the tmux root bindings, and `prefix -`/`prefix =` split side-by-side/stacked like tmux `-h`/`-v` (herdr's vertical/horizontal names are the reverse of tmux's). `herdr/.config/herdr/scripts/open-pane-dir.sh` backs `alt+e`. `@in_nested` and `@vim_navigator_check` include `herdr`, so Alt+Shift forwarding and the navigator keys pass one level into herdr panes.
+`herdr/.config/herdr/config.toml` runs herdr inside tmux panes and mirrors the tmux keymap on herdr's `ctrl+b` prefix: bare `C-b` enters herdr, `alt+n/p/w/x`, `alt+]`/`alt+}` copy mode, `alt+1..9` tabs, `alt+h/j/k/l` resize, and `ctrl+h/j/k/l` pane nav match the tmux root bindings, and `prefix -`/`prefix =` split side-by-side/stacked like tmux `-h`/`-v` (herdr's vertical/horizontal names are the reverse of tmux's). `herdr/.config/herdr/scripts/open-pane-dir.sh` backs `alt+e`. `@in_nested` and `@vim_navigator_check` include `herdr`, so Alt+Shift forwarding and the navigator keys pass one level into herdr panes.
 
 ## Neovim
 

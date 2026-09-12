@@ -11,9 +11,9 @@ shell_mode = "non_login"
 prefix = "ctrl+b"
 split_vertical = ["prefix+v", "prefix+minus"]
 split_horizontal = "prefix+="
+copy_mode = ["prefix+[", "alt+]", "alt+shift+]", "alt+}"]
 next_tab = ["prefix+n", "alt+n"]
 previous_tab = ["prefix+p", "alt+p"]
-copy_mode = ["prefix+[", "alt+]"]
 close_pane = ["prefix+x", "alt+x"]
 reload_config = "prefix+r"
 resize_mode = "prefix+shift+r"
