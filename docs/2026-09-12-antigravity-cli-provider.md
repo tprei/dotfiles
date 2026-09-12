@@ -12,7 +12,6 @@ This is a CLI-backed OMP provider, not an ACP client. OMP's `acp` command remain
 - `omp/.omp/agent/extensions/antigravity-cli/models.ts`: static Gemini model catalog and effort-to-CLI model mapping.
 - `omp/.omp/agent/extensions/antigravity-cli/context.ts`: conversion of OMP text context into a single AGY prompt.
 - `omp/.omp/agent/extensions/antigravity-cli/process.ts`: `agy` child-process lifecycle, NDJSON parsing, response assembly, and usage conversion.
-- `omp/.omp/agent/extensions/antigravity-cli/sanitize.ts`: prompt-text neutralization so OMP-specific headers are not sent to the AGY CLI.
 - `omp/.omp/agent/config.yml`: root role and fallback selections for the CLI provider.
 - `omp/.omp/profiles/mix/agent/config.yml`: `mix` role and fallback selections for the CLI provider.
 - `README.md`: deployment, profile, authentication, and permission setup.
@@ -76,8 +75,6 @@ Add `--conversation <id>` when resuming an in-process binding. Add `--dangerousl
 Write one `{"event":"user","message":{"role":"user","content":"<prompt>"}}` NDJSON record to stdin and close stdin. Read stdout as NDJSON. Accept `init`, `step_update`, and `result` events. Capture `step_update.text_delta` from `agent_response`, pass each delta to `onTextDelta`, and use `result.response` as the completed response. Reject malformed stdout, a failed result, a missing conversation id, or a non-zero child exit with an explicit error. On abort, terminate the child and reject the turn. Do not swallow stderr or protocol errors.
 
 `agy` writes diagnostics to stderr. Include a bounded stderr tail in process errors without exposing environment values or credentials.
-
-Before writing the NDJSON user record, `runAgyTurn` passes the prompt through `sanitizeAgyText`. It renames OMP-specific tags (`system-conventions` to `conventions`, `system-directive` to `instructions`, `critical` to `important`) and neutralizes product names (`Oh My Pi coding harness` to `AI coding assistant`, `Oh My Pi` to `coding assistant`, `omp Live` to `coding assistant live`). The bridge calls the AGY CLI headless over stdin, not the HTTP API, so only message text needs this treatment. Fingerprints and resume logic keep using the raw OMP context and are unaffected.
 
 ## Context contract
 
