@@ -22,7 +22,9 @@ advisor:
   enabled: true
   syncBacklog: "off"
 task:
-  eager: always
+  eager: preferred
+  agentAdvisor:
+    task: "on"
   disabledAgents:
     - designer
     - librarian
@@ -44,6 +46,29 @@ task:
     task: zai/glm-5.3-flash:high
 dev:
   autoqaConsent: granted
+github:
+  enabled: true
+memory:
+  backend: mnemopi
+mnemopi:
+  scoping: per-project-tagged
+compaction:
+  handoffSaveToDisk: true
+  idleEnabled: true
+bash:
+  patterns:
+    - match: "sed -i*"
+      approval: deny
+    - match: "sed --in-place*"
+      approval: deny
+    - match: "perl -i*"
+      approval: deny
+    - match: "perl -pi*"
+      approval: deny
+    - match: "git commit -n*"
+      approval: deny
+    - match: "git push -f*"
+      approval: deny
 retry:
   modelFallback: true
   fallbackRevertPolicy: cooldown-expiry

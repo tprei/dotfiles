@@ -1,7 +1,7 @@
 ---
 name: forgejo-access-is-configured
 description: "forgejo.yfrit.com Access is already wired: git routes are Bypass, /api/v1 uses a CF service token; a bare 302 is not a blocker"
-condition: ["cloudflareaccess.com", "behind Cloudflare Access", "Access is blocking", "mint a service token", "bypass policy", "302 to", "HTTP 307"]
+condition: ["forgejo.yfrit.com", "yfrit.cloudflareaccess.com", "Yfrit Forgejo API"]
 scope: "text"
 ---
 

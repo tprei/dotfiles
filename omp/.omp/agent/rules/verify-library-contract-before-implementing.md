@@ -1,8 +1,9 @@
 ---
 name: verify-library-contract-before-implementing
 description: "Verify @xyflow/react / elkjs behavior via context7 or docs before building a load-bearing fix on assumptions"
-condition: ["appears to race node measurement", "reliably toggle between levels"]
-scope: "text"
+globs: ["**/*.ts", "**/*.tsx"]
+condition: ["@xyflow/react", "useNodesInitialized", "considerModelOrder", "elkjs"]
+scope: "tool:edit, tool:write"
 ---
 
 Stop — you are diagnosing library behavior (React Flow `@xyflow/react` v12 / elkjs) by assumption and are about to build a load-bearing effect rewrite on it. Proceeding here is exactly the autonomous, unverified change that gets sent back for reassessment.
