@@ -1,0 +1,48 @@
+onboarding = false
+
+[theme]
+name = "terminal"
+
+[terminal]
+default_shell = "/bin/zsh"
+shell_mode = "non_login"
+
+[keys]
+prefix = "ctrl+b"
+split_vertical = ["prefix+v", "prefix+minus"]
+split_horizontal = "prefix+="
+next_tab = ["prefix+n", "alt+n"]
+previous_tab = ["prefix+p", "alt+p"]
+copy_mode = ["prefix+[", "alt+]"]
+close_pane = ["prefix+x", "alt+x"]
+reload_config = "prefix+r"
+resize_mode = "prefix+shift+r"
+detach = ["prefix+q", "prefix+d"]
+workspace_picker = ["prefix+w", "prefix+s", "alt+w"]
+settings = "prefix+shift+s"
+move_tab_previous = ["prefix+shift+left", "ctrl+shift+left"]
+move_tab_next = ["prefix+shift+right", "ctrl+shift+right"]
+focus_pane_left = ["prefix+h", "ctrl+h"]
+focus_pane_down = ["prefix+j", "ctrl+j"]
+focus_pane_up = ["prefix+k", "ctrl+k"]
+focus_pane_right = ["prefix+l", "ctrl+l"]
+swap_pane_left = ["prefix+shift+h", "alt+left"]
+swap_pane_right = ["prefix+shift+l", "alt+right"]
+resize_pane_left = "alt+h"
+resize_pane_down = "alt+j"
+resize_pane_up = "alt+k"
+resize_pane_right = "alt+l"
+last_pane = "prefix+semicolon"
+
+[keys.indexed]
+tabs = "alt"
+
+[[keys.command]]
+key = "alt+e"
+type = "shell"
+command = "~/.config/herdr/scripts/open-pane-dir.sh"
+
+[ui]
+tab_bar_position = "bottom"
+prompt_new_tab_name = false
+tab_bar_right = [{ type = "zoom" }, { type = "hostname" }]
