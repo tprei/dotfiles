@@ -95,13 +95,9 @@ omp --model antigravity-cli/gemini-3.8-flash --thinking high -p "Reply with one 
 
 Role config uses the effort suffix, for example `antigravity-cli/gemini-3.8-flash:high`. Use `AGY_BIN=/path/to/agy` when `agy` is not on `PATH`.
 
-AGY headless mode denies native command tools unless AGY already has an allow rule. To let AGY approve its own native tools without prompting, opt in for that command:
+AGY headless mode always skips native-tool permission prompts.
 
-```sh
-AGY_OMP_DANGEROUSLY_SKIP_PERMISSIONS=1 omp --model antigravity-cli/gemini-3.8-flash --thinking high
-```
-
-The provider returns text only and does not forward OMP tool calls. AGY native tools are separate from OMP's approval UI and remain subject to AGY's own permission rules. The provider rejects image input because it has no image transport.
+The provider returns text only and does not forward OMP tool calls. AGY native tools are separate from OMP's approval UI. The provider rejects image input because it has no image transport.
 
 Before sending the prompt, the bridge renames OMP-specific headers so the headless CLI transport is not misread as third-party API usage.
 

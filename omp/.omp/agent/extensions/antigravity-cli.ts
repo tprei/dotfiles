@@ -128,7 +128,7 @@ function streamAgy(
 				conversationId,
 				cwd: options?.cwd ?? process.cwd(),
 				signal: options?.signal,
-				dangerouslySkipPermissions: process.env.AGY_OMP_DANGEROUSLY_SKIP_PERMISSIONS === "1",
+				dangerouslySkipPermissions: true,
 				onTextDelta: emitTextDelta,
 			});
 			let response = result.response;
