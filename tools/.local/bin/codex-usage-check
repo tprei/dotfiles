@@ -42,12 +42,13 @@ IMAGE_MUTED_COLOR = "0xaab4c3"
 IMAGE_GOOD_COLOR = "0x8fe388"
 IMAGE_WARNING_COLOR = "0xffc857"
 IMAGE_BAD_COLOR = "0xff6b6b"
-PROVIDER_BADGES = {
-    "OpenAI Codex": ("OC", "0x10a37f"),
-    "ZAI": ("Z", "0x7c5cff"),
-    "OpenCode Go": ("OG", "0x3b82f6"),
-    "Google Antigravity": ("G", "0x4285f4"),
-    "Anthropic": ("A", "0xd97757"),
+LOGO_DIR = Path(__file__).resolve().parent.parent / "share" / "codex-usage" / "logos"
+PROVIDER_LOGOS = {
+    "OpenAI Codex": ("openai.svg", True),
+    "ZAI": ("zai.svg", False),
+    "OpenCode Go": ("opencode.svg", True),
+    "Google Antigravity": ("google.svg", False),
+    "Anthropic": ("anthropic.svg", False),
 }
 PROVIDER_DISPLAY_NAMES = {
     "openai-codex": "OpenAI Codex",
@@ -361,13 +362,20 @@ def render_image(text: str) -> bytes:
     if longest > 100:
         font_size = 20
     line_height = font_size + 14
-    badge_size = font_size + 16
+    logo_size = font_size + 8
     content_width = longest * font_size * 0.62 + 96
-    for line in lines:
-        if line in PROVIDER_BADGES:
+    logo_specs = []
+    for index, line in enumerate(lines):
+        logo = PROVIDER_LOGOS.get(line)
+        if logo:
+            logo_filename, invert = logo
+            logo_path = LOGO_DIR / logo_filename
+            if not logo_path.is_file():
+                raise UsageError(f"logo asset not found for {line}: {logo_path}", 2)
+            logo_specs.append((index, logo_path, invert))
             content_width = max(
                 content_width,
-                len(line) * font_size * 0.62 + 96 + badge_size + 16,
+                len(line) * font_size * 0.62 + logo_size + 112,
             )
     width = max(900, int(content_width))
     height = max(180, 72 + len(lines) * line_height)
@@ -380,39 +388,28 @@ def render_image(text: str) -> bytes:
     try:
         with tempfile.TemporaryDirectory(prefix="omp-usage-") as directory:
             drawtext_filters = []
+            logo_inputs = []
+            logo_overlays = []
+            logo_by_index = {
+                index: (logo_path, invert)
+                for index, logo_path, invert in logo_specs
+            }
             for index, line in enumerate(lines):
                 if not line:
                     continue
                 y = 36 + index * line_height
                 line_path = Path(directory) / f"line-{index:03d}.txt"
                 line_path.write_text(line, encoding="utf-8")
-                badge = PROVIDER_BADGES.get(line)
                 text_x = 48
-                if badge:
-                    badge_text, badge_color = badge
-                    badge_path = Path(directory) / f"badge-{index:03d}.txt"
-                    badge_path.write_text(badge_text, encoding="utf-8")
-                    drawtext_filters.append(
-                        f"drawbox=x=48:y={y + 4}:w={badge_size}:h={badge_size}:"
-                        f"color={badge_color}:t=fill"
+                logo = logo_by_index.get(index)
+                if logo:
+                    logo_path, invert = logo
+                    text_x += logo_size + 16
+                    input_index = 1 + len(logo_overlays)
+                    logo_inputs.extend(
+                        ["-f", "svg_pipe", "-loop", "1", "-i", str(logo_path)]
                     )
-                    badge_font_size = max(14, int(font_size * 0.62))
-                    badge_text_width = len(badge_text) * badge_font_size * 0.62
-                    badge_text_x = 48 + max(
-                        4,
-                        int((badge_size - badge_text_width) / 2),
-                    )
-                    badge_text_y = y + max(
-                        2,
-                        int((badge_size - badge_font_size) * 0.45),
-                    )
-                    drawtext_filters.append(
-                        f"drawtext=fontfile={ffmpeg_filter_path(font_path)}:"
-                        f"textfile={ffmpeg_filter_path(str(badge_path))}:"
-                        f"fontcolor={IMAGE_TEXT_COLOR}:fontsize={badge_font_size}:"
-                        f"expansion=none:x={badge_text_x}:y={badge_text_y}"
-                    )
-                    text_x += badge_size + 16
+                    logo_overlays.append((input_index, y, invert))
                 drawtext_filters.append(
                     f"drawtext=fontfile={ffmpeg_filter_path(font_path)}:"
                     f"textfile={ffmpeg_filter_path(str(line_path))}:"
@@ -421,6 +418,31 @@ def render_image(text: str) -> bytes:
                 )
             if not drawtext_filters:
                 raise UsageError("usage image has no text", 2)
+            filter_parts = [f"[0:v]{','.join(drawtext_filters)}[base]"]
+            last_label = "base"
+            for index, (input_index, y, invert) in enumerate(logo_overlays):
+                logo_label = f"logo{index}"
+                logo_filters = []
+                if invert:
+                    logo_filters.append("lutrgb=r=negval:g=negval:b=negval")
+                logo_filters.extend(
+                    [
+                        f"scale={logo_size}:{logo_size}:"
+                        "force_original_aspect_ratio=decrease",
+                        "format=rgba",
+                    ]
+                )
+                filter_parts.append(
+                    f"[{input_index}:v]{','.join(logo_filters)}[{logo_label}]"
+                )
+                output_label = f"stage{index}"
+                overlay_y = y + max(0, (line_height - logo_size) // 2)
+                filter_parts.append(
+                    f"[{last_label}][{logo_label}]overlay=x=48:y={overlay_y}:"
+                    f"eof_action=repeat:repeatlast=1[{output_label}]"
+                )
+                last_label = output_label
+            filter_parts.append(f"[{last_label}]format=rgb24[out]")
             command = [
                 ffmpeg,
                 "-hide_banner",
@@ -431,8 +453,11 @@ def render_image(text: str) -> bytes:
                 "lavfi",
                 "-i",
                 f"color=c=0x26263f:s={width}x{height}",
-                "-vf",
-                ",".join(drawtext_filters),
+                *logo_inputs,
+                "-filter_complex",
+                ";".join(filter_parts),
+                "-map",
+                "[out]",
                 "-frames:v",
                 "1",
                 "-f",
