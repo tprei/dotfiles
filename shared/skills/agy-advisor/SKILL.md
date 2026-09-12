@@ -16,7 +16,7 @@ Pipe a prompt through the local `agy` CLI and return the advisor's answer as pla
 ## Instructions
 
 1. Invoke on demand only, when the user asks for it; never run this skill automatically, speculatively, from hooks, or as an unrequested step in another workflow.
-2. Write the prompt to a temporary file or prepare it on stdin; keep it lean because every call draws from the same pool as the interactive Gemini session.
+2. Write the prompt to a temporary file or prepare it on stdin; keep it lean because every call draws from the same pool as the interactive Gemini session. Inline all reviewed content into the prompt text itself: the advisor runs in an empty directory with no access to your files.
 3. Call the runner: `scripts/agy-review.sh [prompt-file]` from this skill's directory, passing the prompt file path as the only argument, or pipe the prompt text on stdin with no arguments.
 4. Read the advisor's answer from stdout when the exit code is 0.
 5. On a non-zero exit, read the status, denial, or error text on stderr and report it verbatim to the user; do not retry automatically.
@@ -31,4 +31,4 @@ Pipe a prompt through the local `agy` CLI and return the advisor's answer as pla
 
 ## Quota
 
-Script calls share the interactive Gemini quota pool, so batch questions into a single lean prompt and never loop, poll, or fan out repeated calls.
+Script calls share the interactive Gemini quota pool, so batch questions into a single lean prompt and never loop, poll, or fan out repeated calls. Reviewed content persists in agy conversation history, so do not send secrets.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MODEL=gemini-3.8-flash-low
+MODEL=gemini-3.8-flash-high
 
 if (( $# > 1 )); then
   echo "agy-review: usage: agy-review.sh [prompt-file] (or pipe prompt on stdin)" >&2
@@ -9,13 +9,23 @@ if (( $# > 1 )); then
 fi
 
 if (( $# == 1 )); then
-  if [[ ! -f $1 || ! -r $1 ]]; then
+  if [[ -d $1 ]]; then
+    echo "agy-review: not a file: $1" >&2
+    exit 64
+  fi
+  if ! prompt=$(cat -- "$1" 2>/dev/null); then
     echo "agy-review: cannot read prompt file: $1" >&2
     exit 64
   fi
-  prompt=$(cat -- "$1")
 else
-  prompt=$(cat)
+  if [[ -t 0 ]]; then
+    echo "agy-review: usage: agy-review.sh [prompt-file] (or pipe prompt on stdin)" >&2
+    exit 64
+  fi
+  if ! prompt=$(cat); then
+    echo "agy-review: cannot read prompt on stdin" >&2
+    exit 64
+  fi
 fi
 
 if [[ -z $prompt ]]; then
@@ -27,7 +37,7 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"
 
-if ! agy -p "$prompt" --output-format json --model "$MODEL" --effort low --print-timeout 10m >result.json 2>agy-stderr.txt; then
+if ! agy -p "$prompt" --output-format json --model "$MODEL" --effort high --print-timeout 10m --disable-slash-commands >result.json 2>agy-stderr.txt; then
   echo "agy-review: agy run failed" >&2
   cat agy-stderr.txt >&2
   exit 1
@@ -45,6 +55,11 @@ if [[ $status != SUCCESS ]]; then
   cat agy-stderr.txt >&2
   exit 1
 fi
+if grep -qiE 'timeout|truncat|partial' agy-stderr.txt; then
+  echo "agy-review: response may be truncated:" >&2
+  cat agy-stderr.txt >&2
+  exit 1
+fi
 
 denied=$(jq -c '.denied_actions // []' result.json)
 if [[ $denied != '[]' ]]; then
@@ -59,4 +74,4 @@ if [[ -z $response ]]; then
   exit 1
 fi
 
-printf '%s\n' "$response"
+printf '%s\n' "$response" || exit 0
