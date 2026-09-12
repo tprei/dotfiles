@@ -37,12 +37,13 @@ WARNING_PERCENT = 80.0
 BAR_CELLS = 10
 BAR_FILLED = "█"
 BAR_EMPTY = "░"
+LOGO_INSET = 3
 IMAGE_TEXT_COLOR = "0xf4f7ff"
 IMAGE_MUTED_COLOR = "0xaab4c3"
 IMAGE_GOOD_COLOR = "0x8fe388"
 IMAGE_WARNING_COLOR = "0xffc857"
 IMAGE_BAD_COLOR = "0xff6b6b"
-LOGO_DIR = Path(__file__).resolve().parent.parent / "share" / "codex-usage" / "logos"
+LOGO_DIR = Path(__file__).resolve().parents[1] / "share" / "codex-usage" / "logos"
 PROVIDER_LOGOS = {
     "OpenAI Codex": ("openai.svg", True),
     "ZAI": ("zai.svg", False),
@@ -363,6 +364,7 @@ def render_image(text: str) -> bytes:
         font_size = 20
     line_height = font_size + 14
     logo_size = font_size + 8
+    logo_content_size = logo_size - 2 * LOGO_INSET
     content_width = longest * font_size * 0.62 + 96
     logo_specs = []
     for index, line in enumerate(lines):
@@ -427,8 +429,9 @@ def render_image(text: str) -> bytes:
                     logo_filters.append("lutrgb=r=negval:g=negval:b=negval")
                 logo_filters.extend(
                     [
-                        f"scale={logo_size}:{logo_size}:"
-                        "force_original_aspect_ratio=decrease",
+                        f"scale={logo_content_size}:{logo_content_size}:"
+                        "force_original_aspect_ratio=decrease,"
+                        f"pad={logo_size}:{logo_size}:(ow-iw)/2:(oh-ih)/2:color=0x00000000,"
                         "format=rgba",
                     ]
                 )
@@ -436,7 +439,7 @@ def render_image(text: str) -> bytes:
                     f"[{input_index}:v]{','.join(logo_filters)}[{logo_label}]"
                 )
                 output_label = f"stage{index}"
-                overlay_y = y + max(0, (line_height - logo_size) // 2)
+                overlay_y = y + int(0.6 * font_size - logo_size / 2)
                 filter_parts.append(
                     f"[{last_label}][{logo_label}]overlay=x=48:y={overlay_y}:"
                     f"eof_action=repeat:repeatlast=1[{output_label}]"
