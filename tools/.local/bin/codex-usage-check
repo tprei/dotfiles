@@ -764,10 +764,7 @@ def run_json() -> int:
         payload = run_omp_usage()
     except UsageError as error:
         return fail(error)
-    if not payload["reports"]:
-        print(plain_image_text(format_message(payload)))
-    else:
-        print(json.dumps(payload, indent=2))
+    print(json.dumps(payload, indent=2))
     return 0
 
 
