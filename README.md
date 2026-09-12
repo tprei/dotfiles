@@ -93,6 +93,13 @@ TELEGRAM_BOT_TOKEN=<token from @BotFather> claude-usage-check --setup-telegram
 
 This writes `~/.config/claude-usage/config` (0600, untracked).
 
+`tools/.local/bin/codex-usage-check` reports usage for every provider OMP supports by wrapping `omp usage --json --redact` with no provider filter. It includes OpenAI Codex, Anthropic, Google Antigravity, OpenCode Go, and ZAI when authenticated, and its limit rows include the provider-reported window and usage unit so similar names such as Google or ZAI meters stay distinct. Rows within each provider are ordered by the next reset time, and reset labels use estimates such as `~in 5 minutes`; the image header shows when the usage data was last updated. It reuses the existing Telegram credentials at `~/.config/claude-usage/config` for the same bot and chat, so no second BotFather setup is needed, and the Claude bot/chat config stays unchanged. In Telegram mode the report is rendered into a readable PNG image with the system ffmpeg and edited as a Telegram photo in place, so the pinned message stays legible instead of wrapping as text; ffmpeg is required for Telegram mode, and the service pins the binary with `FFMPEG_BIN=/usr/bin/ffmpeg`. It keeps only `~/.config/codex-usage/state.json` (0600, untracked) for its separate pinned message, refreshed every five minutes by `tools/.config/systemd/user/codex-usage-report.{service,timer}`. A standalone `codex` installation is not required when OMP is authenticated. Users without an OMP provider account must log in through OMP first.
+
+```sh
+systemctl --user daemon-reload
+systemctl --user enable --now codex-usage-report.timer
+```
+
 ## Helpers
 
 `tmux/scripts/tmux-paste-image.sh` sends a WSL clipboard image path into tmux.

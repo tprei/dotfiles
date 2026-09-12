@@ -1,0 +1,718 @@
+#!/usr/bin/env python3
+"""OMP usage reporter: all provider limits from OMP, posted to the Claude Telegram chat.
+
+Modes:
+  codex-usage-check                  print the validated OMP JSON payload
+  codex-usage-check --telegram       update the pinned OMP usage image
+  codex-usage-check --setup-telegram verify the Claude Telegram config and pin an image
+
+The Telegram bot token and chat come from ~/.config/claude-usage/config only;
+delivery state lives in ~/.config/codex-usage/state.json.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import urllib.error
+import urllib.request
+from datetime import datetime, timezone
+from html import escape, unescape
+from pathlib import Path
+from uuid import uuid4
+
+CLAUDE_CONFIG_PATH = Path.home() / ".config" / "claude-usage" / "config"
+CODEX_STATE_PATH = Path.home() / ".config" / "codex-usage" / "state.json"
+TELEGRAM_API_BASE = "https://api.telegram.org"
+OMP_TIMEOUT_SECONDS = 60
+FFMPEG_TIMEOUT_SECONDS = 30
+DEFAULT_FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
+TELEGRAM_TIMEOUT_SECONDS = 30
+WARNING_PERCENT = 80.0
+BAR_CELLS = 10
+BAR_FILLED = "█"
+BAR_EMPTY = "░"
+PROVIDER_DISPLAY_NAMES = {
+    "openai-codex": "OpenAI Codex",
+    "google-antigravity": "Google Antigravity",
+    "opencode-go": "OpenCode Go",
+    "zai": "ZAI",
+    "anthropic": "Anthropic",
+}
+
+
+class UsageError(Exception):
+    """Running or validating the OMP usage payload failed."""
+
+    def __init__(self, message: str, exit_code: int):
+        super().__init__(message)
+        self.exit_code = exit_code
+
+
+class TelegramError(RuntimeError):
+    """Telegram rejected a request or returned an unusable response."""
+
+
+def usable_report(report) -> bool:
+    if not isinstance(report, dict):
+        return False
+    provider = report.get("provider")
+    return isinstance(provider, str) and bool(provider.strip())
+
+
+def usable_reports(payload: dict) -> list[dict]:
+    reports = payload.get("reports")
+    if not isinstance(reports, list):
+        return []
+    return [report for report in reports if usable_report(report)]
+
+
+def run_omp_usage() -> dict:
+    command = [os.environ.get("OMP_BIN", "omp"), "usage", "--json", "--redact"]
+    try:
+        completed = subprocess.run(
+            command, capture_output=True, text=True, timeout=OMP_TIMEOUT_SECONDS, check=False
+        )
+    except FileNotFoundError:
+        raise UsageError(f"OMP binary not found: {command[0]}", 1) from None
+    except subprocess.TimeoutExpired:
+        raise UsageError(f"OMP usage timed out after {OMP_TIMEOUT_SECONDS}s", 2) from None
+    except OSError as error:
+        raise UsageError(f"failed to run OMP: {error}", 2) from error
+    if completed.returncode != 0:
+        raise UsageError(f"OMP exited with code {completed.returncode}", 2)
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError as error:
+        raise UsageError(f"OMP produced invalid JSON: {error}", 1) from error
+    if not isinstance(payload, dict):
+        raise UsageError("OMP JSON payload is not an object", 1)
+    if not isinstance(payload.get("reports"), list):
+        raise UsageError("OMP payload has no reports list", 1)
+    if not usable_reports(payload):
+        raise UsageError("OMP payload has no provider reports", 1)
+    return payload
+
+
+def utc_today() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def to_percent(used) -> float | None:
+    if isinstance(used, bool) or not isinstance(used, (int, float)):
+        return None
+    value = float(used) * 100.0
+    return max(0.0, min(100.0, value)) if math.isfinite(value) else None
+
+
+def bar(percent: float | None) -> str:
+    if percent is None:
+        return BAR_EMPTY * BAR_CELLS
+    filled = round(max(0.0, min(100.0, percent)) / 100 * BAR_CELLS)
+    return BAR_FILLED * filled + BAR_EMPTY * (BAR_CELLS - filled)
+
+
+def status_mark(percent: float | None, status) -> str:
+    if status == "exhausted":
+        return " 🚫"
+    if status == "warning":
+        return " ⚠️"
+    if status == "unknown" or percent is None:
+        return " (unknown)"
+    if status == "ok":
+        return ""
+    if percent >= 100:
+        return " 🚫"
+    if percent >= WARNING_PERCENT:
+        return " ⚠️"
+    return ""
+
+
+def reset_datetime(value) -> datetime | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        seconds = float(value)
+        if not math.isfinite(seconds):
+            return None
+        if seconds > 1_000_000_000_000:
+            seconds /= 1000
+        try:
+            return datetime.fromtimestamp(seconds, tz=timezone.utc)
+        except (OSError, OverflowError, ValueError):
+            return None
+    if isinstance(value, str):
+        text = value.strip()
+        if text.endswith(("Z", "z")):
+            text = text[:-1] + "+00:00"
+        try:
+            moment = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        return moment.astimezone(timezone.utc)
+    return None
+
+
+def fmt_reset(value) -> str:
+    moment = reset_datetime(value)
+    if moment is None:
+        return ""
+    if moment.date() == datetime.now(timezone.utc).date():
+        return f"{moment.strftime('%H:%M')} UTC"
+    return f"{moment.strftime('%b %d %H:%M')} UTC"
+
+
+def fmt_reset_estimate(value) -> str:
+    moment = reset_datetime(value)
+    if moment is None:
+        return ""
+    seconds = (moment - datetime.now(timezone.utc)).total_seconds()
+    if seconds <= 0:
+        return "~now"
+    if seconds < 3_600:
+        count = max(1, math.ceil(seconds / 60))
+        unit = "minute" if count == 1 else "minutes"
+    elif seconds < 86_400:
+        count = math.ceil(seconds / 3_600)
+        unit = "hour" if count == 1 else "hours"
+    else:
+        count = math.ceil(seconds / 86_400)
+        unit = "day" if count == 1 else "days"
+    return f"~in {count} {unit}"
+
+def limit_reset_key(limit: dict) -> tuple[int, datetime]:
+    window = limit.get("window")
+    window = window if isinstance(window, dict) else {}
+    moment = reset_datetime(window.get("resetsAt"))
+    if moment is None:
+        return 1, datetime.max.replace(tzinfo=timezone.utc)
+    return 0, moment
+
+
+def plan_metadata(plan) -> str:
+    if isinstance(plan, str) and plan.strip():
+        return escape(plan.strip())
+    if isinstance(plan, dict):
+        for key in ("name", "plan", "id", "title"):
+            value = plan.get(key)
+            if isinstance(value, str) and value.strip():
+                return escape(value.strip())
+    return ""
+def limit_label(limit: dict) -> str:
+    window = limit.get("window")
+    window = window if isinstance(window, dict) else {}
+    scope = limit.get("scope")
+    scope = scope if isinstance(scope, dict) else {}
+    amount = limit.get("amount")
+    amount = amount if isinstance(amount, dict) else {}
+    label = limit.get("label") or window.get("label") or limit.get("id")
+    label_text = str(label) if label else "?"
+    additions = []
+    tier = scope.get("tier")
+    if isinstance(tier, str) and tier.strip() and tier.casefold() not in label_text.casefold():
+        additions.append(tier.strip())
+    window_label = window.get("label") or scope.get("windowId")
+    if isinstance(window_label, str) and window_label.strip():
+        window_text = window_label.strip()
+        if window_text.casefold() != "quota window" and window_text.casefold() not in label_text.casefold():
+            additions.append(window_text)
+    unit = amount.get("unit")
+    if isinstance(unit, str) and unit in ("requests", "tokens", "credits") and unit not in label_text.casefold():
+        additions.append(unit)
+    if additions:
+        label_text += f" ({', '.join(additions)})"
+    return escape(label_text)
+
+
+
+def format_limit(limit: dict, label_width: int) -> str:
+    window = limit.get("window")
+    window = window if isinstance(window, dict) else {}
+    label_text = limit_label(limit)
+    amount = limit.get("amount")
+    amount = amount if isinstance(amount, dict) else {}
+    percent = to_percent(amount.get("usedFraction"))
+    percent_text = "?" if percent is None else f"{percent:5.1f}%"
+    line = f"{bar(percent)} {percent_text:>6} · {label_text:<{label_width}}"
+    raw_reset = window.get("resetsAt")
+    when = fmt_reset_estimate(raw_reset)
+    if when:
+        line += f" · resets {when}"
+    line += status_mark(percent, limit.get("status"))
+    return f"<code>{line}</code>"
+
+
+
+def provider_display(provider: str) -> str:
+    known = PROVIDER_DISPLAY_NAMES.get(provider)
+    if known:
+        return escape(known)
+    words = [part.title() for part in provider.split("-") if part]
+    return escape(" ".join(words) if words else provider)
+
+
+def format_message(payload: dict) -> str:
+    header = f"<b>OMP usage</b> · {utc_today()}"
+    updated = fmt_reset(payload.get("generatedAt"))
+    if updated:
+        header += f" · last updated {updated}"
+    grouped: dict[str, list[dict]] = {}
+    for report in usable_reports(payload):
+        grouped.setdefault(report["provider"], []).append(report)
+    label_width = 0
+    for reports in grouped.values():
+        for report in reports:
+            limits = report.get("limits")
+            if not isinstance(limits, list):
+                continue
+            for limit in limits:
+                if isinstance(limit, dict):
+                    label_width = max(label_width, len(limit_label(limit)))
+    blocks = []
+    for provider, reports in grouped.items():
+        block = [f"<b>{provider_display(provider)}</b>"]
+        for index, report in enumerate(reports, start=1):
+            entry = []
+            if len(reports) > 1:
+                entry.append(f"<i>account {index}</i>")
+            metadata = report.get("metadata")
+            metadata = metadata if isinstance(metadata, dict) else {}
+            plan = plan_metadata(metadata.get("planType"))
+            if plan:
+                entry.append(f"<i>plan: {plan}</i>")
+            limits = report.get("limits")
+            if isinstance(limits, list):
+                for limit in sorted(
+                    (limit for limit in limits if isinstance(limit, dict)),
+                    key=limit_reset_key,
+                ):
+                    entry.append(format_limit(limit, label_width))
+            if not entry:
+                entry.append("No limits reported.")
+            block.extend(entry)
+        blocks.append("\n".join(block))
+    if not blocks:
+        return f"{header}\nNo provider usage data in the OMP payload."
+    return "\n\n".join([header] + blocks)
+
+
+def plain_image_text(html_text: str) -> str:
+    text = re.sub(r"</?[A-Za-z][^>]*>", "", html_text)
+    text = unescape(text)
+    lines = []
+    for raw_line in text.splitlines():
+        line = raw_line.replace("\t", "    ")
+        line = "".join(char if char.isprintable() else " " for char in line)
+        line = line.replace("⚠️", "[!]").replace("🚫", "[!]")
+        lines.append(line.rstrip())
+    return "\n".join(lines).strip("\n")
+
+
+def ffmpeg_filter_path(path: str) -> str:
+    return path.replace("\\", "\\\\").replace(":", "\\:").replace(",", "\\,").replace("'", "\\'")
+
+
+def render_image(text: str) -> bytes:
+    lines = text.splitlines() or [""]
+    if not any(lines):
+        raise UsageError("usage image has no text", 2)
+    longest = max(len(line) for line in lines)
+    font_size = 28
+    if longest > 70:
+        font_size = 24
+    if longest > 100:
+        font_size = 20
+    line_height = font_size + 14
+    width = max(900, int(longest * font_size * 0.62 + 96))
+    height = max(180, 72 + len(lines) * line_height)
+    if width % 2:
+        width += 1
+    if height % 2:
+        height += 1
+    ffmpeg = os.environ.get("FFMPEG_BIN", "ffmpeg")
+    font_path = os.environ.get("OMP_USAGE_FONT", DEFAULT_FONT_PATH)
+    try:
+        with tempfile.TemporaryDirectory(prefix="omp-usage-") as directory:
+            text_path = Path(directory) / "report.txt"
+            drawtext_text = text.replace("\\", "\\\\").replace("%", "\\%")
+            text_path.write_text(drawtext_text, encoding="utf-8")
+            drawtext = (
+                f"drawtext=fontfile={ffmpeg_filter_path(font_path)}:"
+                f"textfile={ffmpeg_filter_path(str(text_path))}:"
+                f"fontcolor=white:fontsize={font_size}:line_spacing=10:x=48:y=36"
+            )
+            command = [
+                ffmpeg,
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                f"color=c=0x26263f:s={width}x{height}",
+                "-vf",
+                drawtext,
+                "-frames:v",
+                "1",
+                "-f",
+                "image2pipe",
+                "-vcodec",
+                "png",
+                "pipe:1",
+            ]
+            try:
+                completed = subprocess.run(
+                    command,
+                    capture_output=True,
+                    timeout=FFMPEG_TIMEOUT_SECONDS,
+                    check=False,
+                )
+            except FileNotFoundError:
+                raise UsageError(f"ffmpeg binary not found: {ffmpeg}", 1) from None
+            except subprocess.TimeoutExpired:
+                raise UsageError(f"ffmpeg image render timed out after {FFMPEG_TIMEOUT_SECONDS}s", 2) from None
+            except OSError as error:
+                raise UsageError(f"failed to render usage image: {error}", 2) from error
+            if completed.returncode != 0 or not completed.stdout:
+                raise UsageError(
+                    f"ffmpeg failed to render usage image (exit {completed.returncode})",
+                    2,
+                )
+            return completed.stdout
+    except UsageError:
+        raise
+    except OSError as error:
+        raise UsageError(f"failed to prepare usage image: {error}", 2) from error
+
+
+def load_config() -> dict | None:
+    try:
+        raw = CLAUDE_CONFIG_PATH.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    config = {}
+    for line in raw.splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, value = line.split("=", 1)
+            config[key.strip()] = value.strip()
+    token = config.get("TELEGRAM_BOT_TOKEN")
+    chat_id = config.get("TELEGRAM_CHAT_ID")
+    if isinstance(token, str) and token and isinstance(chat_id, str) and chat_id:
+        return {"bot_token": token, "chat_id": chat_id}
+    return None
+
+
+def credentials(config: dict | None) -> tuple[str, object] | None:
+    if not isinstance(config, dict):
+        return None
+    token = config.get("bot_token")
+    chat_id = config.get("chat_id")
+    if not isinstance(token, str) or not token or chat_id in (None, ""):
+        return None
+    return token, chat_id
+
+
+def load_state() -> dict:
+    try:
+        raw = CODEX_STATE_PATH.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    try:
+        state = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return state if isinstance(state, dict) else {}
+
+
+def save_state(state: dict) -> None:
+    CODEX_STATE_PATH.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(CODEX_STATE_PATH.parent, 0o700)
+    descriptor, temporary = tempfile.mkstemp(
+        dir=CODEX_STATE_PATH.parent, prefix=".state-", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(state, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, CODEX_STATE_PATH)
+    except BaseException:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
+
+
+def tg_call(bot_token: str, method: str, params: dict) -> dict:
+    request = urllib.request.Request(
+        f"{TELEGRAM_API_BASE}/bot{bot_token}/{method}",
+        data=json.dumps(params).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=TELEGRAM_TIMEOUT_SECONDS) as response:
+        body = response.read()
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise TelegramError(f"Telegram {method} returned invalid JSON: {error}") from error
+    if not isinstance(payload, dict) or payload.get("ok") is not True:
+        description = payload.get("description", "unknown error") if isinstance(payload, dict) else "malformed response"
+        raise TelegramError(f"Telegram {method} failed: {description}")
+    return payload
+
+
+def multipart_form(
+    fields: dict[str, object],
+    file_field: str,
+    filename: str,
+    media: bytes,
+) -> tuple[bytes, str]:
+    boundary = f"----omp-usage-{uuid4().hex}"
+    parts = []
+    for name, value in fields.items():
+        parts.extend(
+            [
+                f"--{boundary}\r\n".encode("ascii"),
+                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("ascii"),
+                str(value).encode("utf-8"),
+                b"\r\n",
+            ]
+        )
+    parts.extend(
+        [
+            f"--{boundary}\r\n".encode("ascii"),
+            (
+                f'Content-Disposition: form-data; name="{file_field}"; '
+                f'filename="{filename}"\r\n'
+            ).encode("ascii"),
+            b"Content-Type: image/png\r\n\r\n",
+            media,
+            b"\r\n",
+            f"--{boundary}--\r\n".encode("ascii"),
+        ]
+    )
+    return b"".join(parts), boundary
+
+
+def tg_upload(
+    bot_token: str,
+    method: str,
+    fields: dict[str, object],
+    file_field: str,
+    filename: str,
+    media: bytes,
+) -> dict:
+    body, boundary = multipart_form(fields, file_field, filename, media)
+    request = urllib.request.Request(
+        f"{TELEGRAM_API_BASE}/bot{bot_token}/{method}",
+        data=body,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=TELEGRAM_TIMEOUT_SECONDS) as response:
+        response_body = response.read()
+    try:
+        payload = json.loads(response_body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise TelegramError(f"Telegram {method} returned invalid JSON: {error}") from error
+    if not isinstance(payload, dict) or payload.get("ok") is not True:
+        description = (
+            payload.get("description", "unknown error")
+            if isinstance(payload, dict)
+            else "malformed response"
+        )
+        raise TelegramError(f"Telegram {method} failed: {description}")
+    return payload
+
+
+def tg_send_photo(config: dict, image: bytes) -> int:
+    payload = tg_upload(
+        config["bot_token"],
+        "sendPhoto",
+        {"chat_id": config["chat_id"]},
+        "photo",
+        "omp-usage.png",
+        image,
+    )
+    result = payload.get("result")
+    result = result if isinstance(result, dict) else {}
+    message_id = result.get("message_id")
+    if not isinstance(message_id, int):
+        raise TelegramError("Telegram sendPhoto returned no message_id")
+    return message_id
+
+
+def tg_edit_photo(config: dict, message_id: int, image: bytes) -> None:
+    tg_upload(
+        config["bot_token"],
+        "editMessageMedia",
+        {
+            "chat_id": config["chat_id"],
+            "message_id": message_id,
+            "media": json.dumps(
+                {"type": "photo", "media": "attach://photo"},
+                separators=(",", ":"),
+            ),
+        },
+        "photo",
+        "omp-usage.png",
+        image,
+    )
+
+
+def tg_pin(config: dict, message_id: int) -> None:
+    tg_call(
+        config["bot_token"],
+        "pinChatMessage",
+        {
+            "chat_id": config["chat_id"],
+            "message_id": message_id,
+            "disable_notification": True,
+        },
+    )
+
+
+def update_pinned(config: dict, image: bytes) -> bool:
+    state = load_state()
+    message_id = state.get("message_id")
+    if isinstance(message_id, int):
+        try:
+            tg_edit_photo(config, message_id, image)
+            tg_pin(config, message_id)
+            return True
+        except urllib.error.HTTPError as error:
+            if error.code != 400:
+                return False
+        except (OSError, TimeoutError, TelegramError):
+            return False
+    try:
+        new_message_id = tg_send_photo(config, image)
+        state["message_id"] = new_message_id
+        save_state(state)
+        tg_pin(config, new_message_id)
+    except (OSError, TimeoutError, TelegramError, TypeError, ValueError):
+        return False
+    return True
+
+
+def build_image() -> tuple[bytes, int]:
+    try:
+        payload = run_omp_usage()
+    except UsageError as error:
+        if error.exit_code == 1:
+            raise
+        warning = (
+            f"<b>OMP usage</b> · {utc_today()} · "
+            f"last updated {datetime.now(timezone.utc).strftime('%H:%M UTC')}\n"
+            f"⚠️ OMP usage unavailable: {escape(str(error))}"
+        )
+        try:
+            return render_image(plain_image_text(warning)), error.exit_code
+        except UsageError:
+            raise
+        except (TypeError, ValueError, KeyError, AttributeError, OSError) as render_error:
+            raise UsageError(f"failed to render usage image: {render_error}", 2) from render_error
+    try:
+        text = format_message(payload)
+        return render_image(plain_image_text(text)), 0
+    except UsageError:
+        raise
+    except (TypeError, ValueError, KeyError, AttributeError, OSError) as error:
+        raise UsageError(f"failed to render usage image: {error}", 2) from error
+
+
+def fail(error: Exception) -> int:
+    print(f"codex-usage-check: {error}", file=sys.stderr)
+    return getattr(error, "exit_code", 2)
+
+
+def run_json() -> int:
+    try:
+        payload = run_omp_usage()
+    except UsageError as error:
+        return fail(error)
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
+def run_telegram() -> int:
+    config = load_config()
+    if credentials(config) is None:
+        print(
+            "codex-usage-check: no Claude Telegram config; run: claude-usage-check --setup-telegram",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        image, usage_code = build_image()
+    except UsageError as error:
+        return fail(error)
+    if not update_pinned(config, image):
+        print("codex-usage-check: failed to update the Telegram message", file=sys.stderr)
+        return 2
+    return usage_code
+
+
+def setup_telegram() -> int:
+    config = load_config()
+    if credentials(config) is None:
+        print(
+            "codex-usage-check: no Claude Telegram config found; "
+            "run: claude-usage-check --setup-telegram first",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        me = tg_call(config["bot_token"], "getMe", {})
+    except urllib.error.HTTPError as error:
+        print(
+            f"codex-usage-check: Telegram rejected getMe (HTTP {error.code}); "
+            "fix the Claude config",
+            file=sys.stderr,
+        )
+        return 1
+    except (OSError, TimeoutError, TelegramError) as error:
+        return fail(error)
+    result = me.get("result")
+    result = result if isinstance(result, dict) else {}
+    bot_username = result.get("username") or "unknown"
+    try:
+        image, usage_code = build_image()
+    except UsageError as error:
+        return fail(error)
+    if not update_pinned(config, image):
+        print("codex-usage-check: failed to update the Telegram message", file=sys.stderr)
+        return 2
+    print(f"Telegram bot @{bot_username} verified; OMP provider usage pinned in the Claude chat.")
+    return usage_code
+
+
+def main(argv: list[str]) -> int:
+    selected = [flag for flag in ("--setup-telegram", "--telegram") if flag in argv]
+    unknown = [arg for arg in argv if arg.startswith("-") and arg not in selected]
+    if unknown:
+        print(f"codex-usage-check: unknown argument: {unknown[0]}", file=sys.stderr)
+        return 1
+    if len(selected) > 1:
+        print("codex-usage-check: choose either --setup-telegram or --telegram", file=sys.stderr)
+        return 1
+    if "--setup-telegram" in selected:
+        return setup_telegram()
+    if "--telegram" in selected:
+        return run_telegram()
+    return run_json()
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

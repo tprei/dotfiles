@@ -1,0 +1,12 @@
+[Unit]
+Description=OMP provider usage pinned-message refresh, every 5 minutes
+
+[Service]
+Type=oneshot
+ExecStart=/home/prei/.local/bin/codex-usage-check --telegram
+Environment=OMP_BIN=/home/prei/.bun/bin/omp
+Environment=PATH=/home/prei/.bun/bin:/home/prei/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=FFMPEG_BIN=/usr/bin/ffmpeg
+Restart=on-failure
+RestartPreventExitStatus=1
+RestartSec=60
