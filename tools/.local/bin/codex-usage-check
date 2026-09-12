@@ -37,6 +37,18 @@ WARNING_PERCENT = 80.0
 BAR_CELLS = 10
 BAR_FILLED = "█"
 BAR_EMPTY = "░"
+IMAGE_TEXT_COLOR = "0xf4f7ff"
+IMAGE_MUTED_COLOR = "0xaab4c3"
+IMAGE_GOOD_COLOR = "0x8fe388"
+IMAGE_WARNING_COLOR = "0xffc857"
+IMAGE_BAD_COLOR = "0xff6b6b"
+PROVIDER_BADGES = {
+    "OpenAI Codex": ("OC", "0x10a37f"),
+    "ZAI": ("Z", "0x7c5cff"),
+    "OpenCode Go": ("OG", "0x3b82f6"),
+    "Google Antigravity": ("G", "0x4285f4"),
+    "Anthropic": ("A", "0xd97757"),
+}
 PROVIDER_DISPLAY_NAMES = {
     "openai-codex": "OpenAI Codex",
     "google-antigravity": "Google Antigravity",
@@ -310,9 +322,28 @@ def plain_image_text(html_text: str) -> str:
     for raw_line in text.splitlines():
         line = raw_line.replace("\t", "    ")
         line = "".join(char if char.isprintable() else " " for char in line)
-        line = line.replace("⚠️", "[!]").replace("🚫", "[!]")
+        line = line.replace("⚠️", "[!]").replace("🚫", "[X]")
         lines.append(line.rstrip())
     return "\n".join(lines).strip("\n")
+
+
+def image_line_color(line: str) -> str:
+    if not line.startswith((BAR_FILLED, BAR_EMPTY)):
+        return IMAGE_TEXT_COLOR
+    if "[X]" in line:
+        return IMAGE_BAD_COLOR
+    if "[!]" in line:
+        return IMAGE_WARNING_COLOR
+    match = re.search(r"\s(\d+(?:\.\d+)?)%\s·", line)
+    if match:
+        percent = float(match.group(1))
+        if percent >= 100:
+            return IMAGE_BAD_COLOR
+        if percent >= WARNING_PERCENT:
+            return IMAGE_WARNING_COLOR
+    if "?" in line:
+        return IMAGE_MUTED_COLOR
+    return IMAGE_GOOD_COLOR
 
 
 def ffmpeg_filter_path(path: str) -> str:
@@ -330,7 +361,15 @@ def render_image(text: str) -> bytes:
     if longest > 100:
         font_size = 20
     line_height = font_size + 14
-    width = max(900, int(longest * font_size * 0.62 + 96))
+    badge_size = font_size + 16
+    content_width = longest * font_size * 0.62 + 96
+    for line in lines:
+        if line in PROVIDER_BADGES:
+            content_width = max(
+                content_width,
+                len(line) * font_size * 0.62 + 96 + badge_size + 16,
+            )
+    width = max(900, int(content_width))
     height = max(180, 72 + len(lines) * line_height)
     if width % 2:
         width += 1
@@ -340,14 +379,48 @@ def render_image(text: str) -> bytes:
     font_path = os.environ.get("OMP_USAGE_FONT", DEFAULT_FONT_PATH)
     try:
         with tempfile.TemporaryDirectory(prefix="omp-usage-") as directory:
-            text_path = Path(directory) / "report.txt"
-            drawtext_text = text.replace("\\", "\\\\").replace("%", "\\%")
-            text_path.write_text(drawtext_text, encoding="utf-8")
-            drawtext = (
-                f"drawtext=fontfile={ffmpeg_filter_path(font_path)}:"
-                f"textfile={ffmpeg_filter_path(str(text_path))}:"
-                f"fontcolor=white:fontsize={font_size}:line_spacing=10:x=48:y=36"
-            )
+            drawtext_filters = []
+            for index, line in enumerate(lines):
+                if not line:
+                    continue
+                y = 36 + index * line_height
+                line_path = Path(directory) / f"line-{index:03d}.txt"
+                line_path.write_text(line, encoding="utf-8")
+                badge = PROVIDER_BADGES.get(line)
+                text_x = 48
+                if badge:
+                    badge_text, badge_color = badge
+                    badge_path = Path(directory) / f"badge-{index:03d}.txt"
+                    badge_path.write_text(badge_text, encoding="utf-8")
+                    drawtext_filters.append(
+                        f"drawbox=x=48:y={y + 4}:w={badge_size}:h={badge_size}:"
+                        f"color={badge_color}:t=fill"
+                    )
+                    badge_font_size = max(14, int(font_size * 0.62))
+                    badge_text_width = len(badge_text) * badge_font_size * 0.62
+                    badge_text_x = 48 + max(
+                        4,
+                        int((badge_size - badge_text_width) / 2),
+                    )
+                    badge_text_y = y + max(
+                        2,
+                        int((badge_size - badge_font_size) * 0.45),
+                    )
+                    drawtext_filters.append(
+                        f"drawtext=fontfile={ffmpeg_filter_path(font_path)}:"
+                        f"textfile={ffmpeg_filter_path(str(badge_path))}:"
+                        f"fontcolor={IMAGE_TEXT_COLOR}:fontsize={badge_font_size}:"
+                        f"expansion=none:x={badge_text_x}:y={badge_text_y}"
+                    )
+                    text_x += badge_size + 16
+                drawtext_filters.append(
+                    f"drawtext=fontfile={ffmpeg_filter_path(font_path)}:"
+                    f"textfile={ffmpeg_filter_path(str(line_path))}:"
+                    f"fontcolor={image_line_color(line)}:fontsize={font_size}:"
+                    f"expansion=none:x={text_x}:y={y}"
+                )
+            if not drawtext_filters:
+                raise UsageError("usage image has no text", 2)
             command = [
                 ffmpeg,
                 "-hide_banner",
@@ -359,7 +432,7 @@ def render_image(text: str) -> bytes:
                 "-i",
                 f"color=c=0x26263f:s={width}x{height}",
                 "-vf",
-                drawtext,
+                ",".join(drawtext_filters),
                 "-frames:v",
                 "1",
                 "-f",
