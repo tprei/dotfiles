@@ -99,6 +99,8 @@ AGY_OMP_DANGEROUSLY_SKIP_PERMISSIONS=1 omp --model antigravity-cli/gemini-3.8-fl
 
 The provider returns text only and does not forward OMP tool calls. AGY native tools are separate from OMP's approval UI and remain subject to AGY's own permission rules. The provider rejects image input because it has no image transport.
 
+Before sending the prompt, the bridge renames OMP-specific headers so the headless CLI transport is not misread as third-party API usage.
+
 Profile clients inherit the shared extension through `~/.omp/profiles/*/agent/extensions`. Verify the deployed link before using a profile:
 
 ```sh

@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { isRecord } from "@oh-my-pi/pi-utils/type-guards";
+import { sanitizeAgyText } from "./sanitize.ts";
 
 const MAX_STDERR_LENGTH = 16_384;
 
@@ -259,7 +260,7 @@ export async function runAgyTurn(request: AgyTurnRequest): Promise<AgyTurnResult
 		try {
 			const input = JSON.stringify({
 				event: "user",
-				message: { role: "user", content: request.prompt },
+				message: { role: "user", content: sanitizeAgyText(request.prompt) },
 			});
 			child.stdin.end(`${input}\n`);
 		} catch (error) {
