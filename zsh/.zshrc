@@ -162,7 +162,7 @@ link_shared_definitions
 
 alias mini="ssh mbn@mini-1"
 alias nihao="omp --profile china"
-alias mix="omp --profile mix --plan-yolo --plan-yolo-into=google-antigravity/gemini-3.8-flash:high"
+alias mix="omp --profile mix --plan-yolo --plan-yolo-into=anthropic/claude-opus-5:high"
 alias omp-claude="omp --profile claude"
 
 export NVM_DIR="$HOME/.nvm"

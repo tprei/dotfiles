@@ -81,11 +81,11 @@ A model id absent from both the catalog and this file resolves to nothing, and a
 
 ### AGY CLI provider
 
-`omp/.omp/agent/extensions/antigravity-cli.ts` registers the `antigravity-cli` provider. It runs the installed `agy` binary, so AGY keeps its own authentication and model access. OMP does not need a Google OAuth token for this provider.
+`omp/.omp/agent/extensions/antigravity-cli.ts` registers the `antigravity-cli` provider as an `agy` stream-json bridge. AGY keeps its own authentication and model access, and OMP does not need a Google OAuth token for this provider.
 
 Run `agy` once and complete its authentication flow before the first OMP request. There is no separate `omp login` step for this provider.
 
-The root profile keeps its native model for default, vision, commit, and smol work, and uses the CLI provider for the text-only tiny role. The `mix` profile keeps its existing tool and image roles, and uses the CLI provider for tiny. The `china` profile stays on its existing providers.
+The root and `mix` profiles keep their existing models for every driver role and use the CLI provider for the advisor role. The `china` profile stays on its existing providers.
 
 After stowing the package, select a model by its provider selector:
 

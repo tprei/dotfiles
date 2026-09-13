@@ -1,9 +1,12 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import { isRecord } from "@oh-my-pi/pi-utils/type-guards";
 import { sanitizeAgyText } from "./sanitize.ts";
 
 const MAX_STDERR_LENGTH = 16_384;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 interface AgyUsageFields {
 	inputTokens?: number;

@@ -1,7 +1,8 @@
 onboarding = false
 
 [theme]
-name = "terminal"
+name = "one-dark"
+auto_switch = false
 
 [terminal]
 default_shell = "/bin/zsh"
@@ -46,3 +47,13 @@ command = "~/.config/herdr/scripts/open-pane-dir.sh"
 tab_bar_position = "bottom"
 prompt_new_tab_name = false
 tab_bar_right = [{ type = "zoom" }, { type = "hostname" }]
+
+agent_panel_scope = "all"
+show_agent_labels_on_pane_borders = true
+status_indicators = "symbols"
+
+[ui.toast]
+delivery = "terminal"
+
+[experimental]
+pane_history = false

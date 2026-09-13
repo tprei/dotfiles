@@ -9,12 +9,12 @@ modelRoles:
   default: anthropic/claude-opus-5:medium
   slow: anthropic/claude-opus-5:high
   plan: openai-codex/gpt-6-astra:medium
-  advisor: zai/glm-5.3:max
+  advisor: antigravity-cli/gemini-3.8-flash:high
   task: zai/glm-5.3-flash:high
   vision: zai/glm-5.3:high
   commit: zai/glm-5.3:low
   smol: zai/glm-5.3:low
-  tiny: antigravity-cli/gemini-3.8-flash:minimal
+  tiny: zai/glm-5.3:low
 defaultThinkingLevel: auto
 advisor:
   enabled: true

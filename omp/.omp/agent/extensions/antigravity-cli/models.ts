@@ -1,12 +1,14 @@
-import { Effort } from "@oh-my-pi/pi-catalog/effort";
 import type { ProviderModelConfig } from "@oh-my-pi/pi-coding-agent";
+
+const EFFORT_LEVELS = ["minimal", "low", "medium", "high", "xhigh", "max"] as const;
+type Effort = (typeof EFFORT_LEVELS)[number];
 
 export const AGY_PROVIDER_ID = "antigravity-cli";
 export const AGY_API_ID = "antigravity-cli";
 
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-const FLASH_EFFORTS: Effort[] = [Effort.Minimal, Effort.Low, Effort.Medium, Effort.High];
-const PRO_EFFORTS: Effort[] = [Effort.Low, Effort.High];
+const FLASH_EFFORTS: Effort[] = ["minimal", "low", "medium", "high"];
+const PRO_EFFORTS: Effort[] = ["low", "high"];
 
 type WireModelIds = {
 	low: string;
@@ -16,12 +18,12 @@ type WireModelIds = {
 
 function createModel(id: string, name: string, efforts: Effort[], wire: WireModelIds): ProviderModelConfig {
 	const effortRouting: Partial<Record<Effort | "off", string>> = {
-		[Effort.Minimal]: wire.low,
-		[Effort.Low]: wire.low,
-		[Effort.Medium]: wire.medium ?? wire.high,
-		[Effort.High]: wire.high,
-		[Effort.XHigh]: wire.high,
-		[Effort.Max]: wire.high,
+		minimal: wire.low,
+		low: wire.low,
+		medium: wire.medium ?? wire.high,
+		high: wire.high,
+		xhigh: wire.high,
+		max: wire.high,
 		off: wire.low,
 	};
 
@@ -33,7 +35,7 @@ function createModel(id: string, name: string, efforts: Effort[], wire: WireMode
 		thinking: {
 			mode: "effort",
 			efforts,
-			defaultLevel: Effort.High,
+			defaultLevel: "high",
 			effortRouting,
 		},
 		input: ["text"],
@@ -75,13 +77,13 @@ export function resolveAgyModelId(
 		throw new Error(`AGY CLI provider does not support model "${modelId}".`);
 	}
 
-	let effort: Effort | "off" = Effort.High;
+	let effort: Effort | "off" = "high";
 	if (disableReasoning) {
 		effort = "off";
-	} else if (reasoning === Effort.Minimal || reasoning === Effort.Low) {
-		effort = Effort.Low;
-	} else if (reasoning === Effort.Medium) {
-		effort = Effort.Medium;
+	} else if (reasoning === "minimal" || reasoning === "low") {
+		effort = "low";
+	} else if (reasoning === "medium") {
+		effort = "medium";
 	}
 	const wireModelId = model.thinking.effortRouting[effort];
 	if (!wireModelId) {
