@@ -1,4 +1,5 @@
 import type { AssistantMessage, Context, Message } from "@oh-my-pi/pi-ai";
+import { sanitizeAgySystemText } from "./sanitize.ts";
 
 type ContentBlock = AssistantMessage["content"][number];
 
@@ -40,16 +41,17 @@ function renderMessage(message: Message, index: number): string {
 
 	return `${message.role.toUpperCase()} MESSAGE ${index + 1}:\n${content}`;
 }
-
-export function buildAgyPrompt(context: Context, previousMessageCount: number | undefined): string {
+export function buildAgyPrompt(context: Context, previousMessageCount: number | undefined, toolPrompt?: string): string {
 	const sections: string[] = [];
 	let start = 0;
 	if (previousMessageCount !== undefined) {
 		start = Math.max(0, Math.min(previousMessageCount, context.messages.length));
 	}
 
-	if (previousMessageCount === undefined && context.systemPrompt) {
-		const system = context.systemPrompt.filter(Boolean).join("\n\n");
+	if (previousMessageCount === undefined) {
+		const systemSections = context.systemPrompt?.filter(Boolean) ?? [];
+		if (toolPrompt) systemSections.push(toolPrompt);
+		const system = sanitizeAgySystemText(systemSections.join("\n\n"));
 		if (system) sections.push(`SYSTEM INSTRUCTIONS:\n${system}`);
 	}
 
@@ -58,7 +60,7 @@ export function buildAgyPrompt(context: Context, previousMessageCount: number | 
 	}
 
 	sections.push(
-		"Respond to the latest request. This prompt is handled by OMP through the AGY CLI. Use the CLI's native tools when needed, and do not emit OMP tool calls.",
+		"Respond to the latest request. This prompt is handled by OMP through the AGY CLI. Follow the XML tool-call format in the system instructions, emit the complete tool call and stop when a tool is needed, and do not invoke AGY-native tools because OMP executes tools.",
 	);
 	return sections.join("\n\n");
 }
