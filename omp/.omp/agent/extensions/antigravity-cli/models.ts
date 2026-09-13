@@ -8,7 +8,7 @@ export const AGY_PROVIDER_ID = "antigravity-cli";
 export const AGY_API_ID = "antigravity-cli";
 
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-const FLASH_EFFORTS: AgyEffort[] = ["minimal", "low", "medium", "high"];
+const FLASH_EFFORTS: AgyEffort[] = ["low", "medium", "high"];
 const PRO_EFFORTS: AgyEffort[] = ["low", "high"];
 
 type WireModelIds = {
@@ -33,6 +33,7 @@ function createModel(id: string, name: string, efforts: AgyEffort[], wire: WireM
 		name,
 		api: AGY_API_ID,
 		reasoning: true,
+		supportsTools: true,
 		thinking: {
 			mode: "effort",
 			efforts,

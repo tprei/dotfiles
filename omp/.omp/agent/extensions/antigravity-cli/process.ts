@@ -1,8 +1,10 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import { sanitizeAgyText } from "./sanitize.ts";
 
 const MAX_STDERR_LENGTH = 16_384;
+const AGY_PRINT_TIMEOUT = "10m";
+const AGY_HARD_DEADLINE_MS = 11 * 60_000;
+const AGY_AGENT_NAME = "omp-provider";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -22,7 +24,6 @@ export interface AgyTurnRequest {
 	conversationId?: string;
 	cwd: string;
 	signal?: AbortSignal;
-	dangerouslySkipPermissions: boolean;
 	onTextDelta?: (delta: string) => void;
 }
 
@@ -33,12 +34,9 @@ export interface AgyTurnResult extends AgyUsageFields {
 }
 
 class AgyProcessError extends Error {
-	readonly status?: number;
-
-	constructor(message: string, status?: number) {
+	constructor(message: string) {
 		super(message);
 		this.name = "AgyProcessError";
-		this.status = status;
 	}
 }
 
@@ -101,12 +99,14 @@ export async function runAgyTurn(request: AgyTurnRequest): Promise<AgyTurnResult
 		"stream-json",
 		"--output-format",
 		"stream-json",
+		"--print-timeout",
+		AGY_PRINT_TIMEOUT,
 		"--model",
 		request.modelId,
 		"--disable-slash-commands",
 	];
+	if (!request.conversationId) args.push("--agent", AGY_AGENT_NAME);
 	if (request.conversationId) args.push("--conversation", request.conversationId);
-	if (request.dangerouslySkipPermissions) args.push("--dangerously-skip-permissions");
 
 	const child = spawn(executable, args, {
 		cwd: request.cwd,
@@ -121,7 +121,8 @@ export async function runAgyTurn(request: AgyTurnRequest): Promise<AgyTurnResult
 	return await new Promise<AgyTurnResult>((resolve, reject) => {
 		let settled = false;
 		let childClosed = false;
-		let forceKillTimer: ReturnType<typeof setTimeout> | undefined;
+		let forceKillTimer: NodeJS.Timeout | undefined;
+		let deadlineTimer: NodeJS.Timeout | undefined;
 		let conversationId: string | undefined;
 		let responseFromResult: string | undefined;
 		let responseFromDeltas = "";
@@ -137,10 +138,16 @@ export async function runAgyTurn(request: AgyTurnRequest): Promise<AgyTurnResult
 			clearTimeout(forceKillTimer);
 			forceKillTimer = undefined;
 		};
+		const clearDeadlineTimer = (): void => {
+			if (deadlineTimer === undefined) return;
+			clearTimeout(deadlineTimer);
+			deadlineTimer = undefined;
+		};
 
 		const cleanup = (): void => {
 			request.signal?.removeEventListener("abort", onAbort);
 			lines.close();
+			clearDeadlineTimer();
 			if (childClosed) clearForceKillTimer();
 		};
 
@@ -175,6 +182,10 @@ export async function runAgyTurn(request: AgyTurnRequest): Promise<AgyTurnResult
 		const onAbort = (): void => {
 			fail(new AgyAbortError());
 		};
+		deadlineTimer = setTimeout(() => {
+			fail(new AgyProcessError(`AGY CLI exceeded the ${AGY_HARD_DEADLINE_MS / 60_000}-minute hard deadline.`));
+		}, AGY_HARD_DEADLINE_MS);
+		deadlineTimer.unref?.();
 
 		lines.on("line", line => {
 			if (settled || line.trim().length === 0) return;
@@ -194,24 +205,28 @@ export async function runAgyTurn(request: AgyTurnRequest): Promise<AgyTurnResult
 						request.onTextDelta?.(delta);
 						break;
 					}
+					case "error": {
+						throw new AgyProcessError(`AGY CLI emitted an error event: ${JSON.stringify(event).slice(0, 2_000)}`);
+					}
 					case "result": {
 						if (!isRecord(event.result)) throw new AgyProcessError("AGY CLI emitted an invalid result event.");
 						resultSeen = true;
 						const status = readString(event.result, "status");
 						if (status !== "SUCCESS") {
-							const statusCode = readNumber(event.result, "status_code") ?? readNumber(event.result, "http_status");
-							const detail = JSON.stringify(event.result) ?? "";
-							throw new AgyProcessError(
-								errorWithStderr(
-									`AGY CLI returned status ${status ?? "unknown"}${detail ? `: ${detail.slice(0, 2_000)}` : "."}`,
-									stderr,
-								).message,
-								statusCode,
-							);
+							const errorText = readString(event.result, "error");
+							const errorDescription = readString(event.result, "error_description");
+							const detail = [errorText, errorDescription].filter(part => part !== undefined).join(": ")
+								|| JSON.stringify(event.result).slice(0, 2_000);
+							throw errorWithStderr(`AGY CLI returned status ${status ?? "unknown"}: ${detail}`, stderr);
+						}
+						const deniedActions = event.result.denied_actions;
+						if (Array.isArray(deniedActions) && deniedActions.length > 0) {
+							throw errorWithStderr(`AGY CLI denied ${deniedActions.length} action(s): ${JSON.stringify(deniedActions).slice(0, 2_000)}`, stderr);
 						}
 						const resultConversationId = readString(event.result, "conversation_id")?.trim();
 						if (resultConversationId) conversationId = resultConversationId;
-						responseFromResult = readString(event.result, "response");
+						const responseText = readString(event.result, "response");
+						if (responseText) responseFromResult = responseText;
 						resultUsage = parseUsage(event.result.usage);
 						const seconds = readNumber(event.result, "duration_seconds");
 						if (seconds !== undefined) durationMs = Math.max(0, Math.round(seconds * 1_000));
@@ -229,6 +244,7 @@ export async function runAgyTurn(request: AgyTurnRequest): Promise<AgyTurnResult
 		});
 		child.stdout.on("error", fail);
 		child.stderr.on("error", fail);
+		child.stdin.on("error", fail);
 		child.once("error", fail);
 		child.once("close", (code, signal) => {
 			childClosed = true;
@@ -263,7 +279,7 @@ export async function runAgyTurn(request: AgyTurnRequest): Promise<AgyTurnResult
 		try {
 			const input = JSON.stringify({
 				event: "user",
-				message: { role: "user", content: sanitizeAgyText(request.prompt) },
+				message: { role: "user", content: request.prompt },
 			});
 			child.stdin.end(`${input}\n`);
 		} catch (error) {

@@ -5,11 +5,13 @@ import type {
 	AssistantMessage,
 	AssistantMessageEventStream,
 	Context,
+	Message,
 	Model,
 	SimpleStreamOptions,
 	TextContent,
 	Usage,
 } from "@oh-my-pi/pi-ai";
+import { renderInbandToolPrompt, wrapInbandToolStream } from "@oh-my-pi/pi-ai/dialect/index";
 import { buildAgyPrompt } from "./antigravity-cli/context.ts";
 import { AGY_API_ID, AGY_MODELS, AGY_PROVIDER_ID, resolveAgyModelId } from "./antigravity-cli/models.ts";
 import { runAgyTurn, type AgyTurnResult } from "./antigravity-cli/process.ts";
@@ -24,15 +26,41 @@ type ConversationBinding = {
 const AGY_API_KEY_MARKER = "AGY_CLI_MANAGED";
 const bindings = new Map<string, ConversationBinding>();
 
-function contextPrefixFingerprint(context: Context, messageCount: number): string {
-	const fingerprint = JSON.stringify(context.messages.slice(0, messageCount));
+function assistantFingerprint(message: AssistantMessage): object {
+	return {
+		role: message.role,
+		content: message.content.map(block =>
+			block.type === "toolCall"
+				? {
+						type: block.type,
+						id: block.id,
+						name: block.name,
+						arguments: block.arguments,
+						rawBlock: block.rawBlock,
+					}
+				: block,
+		),
+		provider: message.provider,
+		model: message.model,
+		responseId: message.responseId,
+		stopReason: message.stopReason,
+	};
+}
+
+function contextPrefixFingerprint(context: Context, messageCount: number, assistantMessage?: AssistantMessage): string {
+	const messages = assistantMessage
+		? [...context.messages.slice(0, messageCount), assistantFingerprint(assistantMessage)]
+		: context.messages.slice(0, messageCount);
+	const fingerprint = JSON.stringify(messages);
 	if (fingerprint === undefined) throw new Error("OMP context could not be serialized for AGY conversation reuse.");
 	return fingerprint;
 }
 
 function bindingMatches(context: Context, binding: ConversationBinding): boolean {
 	if (context.messages.length < binding.messageCount) return false;
-	return contextPrefixFingerprint(context, binding.prefixMessageCount) === binding.prefixFingerprint;
+	const assistantMessage = context.messages[binding.prefixMessageCount];
+	if (assistantMessage?.role !== "assistant") return false;
+	return contextPrefixFingerprint(context, binding.prefixMessageCount, assistantMessage) === binding.prefixFingerprint;
 }
 
 function bindingKey(options: SimpleStreamOptions | undefined): string | undefined {
@@ -84,12 +112,6 @@ function createAssistantMessage(model: Model<Api>): AssistantMessage {
 	};
 }
 
-function errorStatus(error: unknown): number | undefined {
-	if (typeof error !== "object" || error === null || !("status" in error)) return undefined;
-	const status = error.status;
-	return typeof status === "number" && Number.isFinite(status) ? status : undefined;
-}
-
 function streamAgy(
 	model: Model<Api>,
 	context: Context,
@@ -103,6 +125,7 @@ function streamAgy(
 	const previousMessageCount = canResume ? currentBinding.messageCount : undefined;
 	const conversationId = canResume ? currentBinding.conversationId : undefined;
 	const partial = createAssistantMessage(model);
+	const tools = context.tools ?? [];
 	let textBlock: TextContent | undefined;
 	let streamedText = "";
 
@@ -110,6 +133,7 @@ function streamAgy(
 		if (!textBlock) {
 			textBlock = { type: "text", text: "" };
 			partial.content = [textBlock];
+			partial.ttft = Date.now() - partial.timestamp;
 			stream.push({ type: "text_start", contentIndex: 0, partial });
 		}
 		streamedText += delta;
@@ -120,19 +144,22 @@ function streamAgy(
 	stream.push({ type: "start", partial });
 	void (async () => {
 		try {
-			const prompt = buildAgyPrompt(context, previousMessageCount);
-			const prefixFingerprint = contextPrefixFingerprint(context, initialMessageCount);
-			const result = await runAgyTurn({
-				prompt,
-				modelId: resolveAgyModelId(model.id, options?.reasoning, options?.disableReasoning),
-				conversationId,
-				cwd: options?.cwd ?? process.cwd(),
-				signal: options?.signal,
-				dangerouslySkipPermissions: true,
-				onTextDelta: emitTextDelta,
-			});
-			let response = result.response;
-			if (response.length === 0 && streamedText.length > 0) response = streamedText;
+			const prompt = buildAgyPrompt(
+				context,
+				previousMessageCount,
+				tools.length > 0 ? renderInbandToolPrompt(tools, "xml") : undefined,
+			);
+			const result = await stream.trackLocalWork(
+				runAgyTurn({
+					prompt,
+					modelId: resolveAgyModelId(model.id, options?.reasoning, options?.disableReasoning),
+					conversationId,
+					cwd: options?.cwd ?? process.cwd(),
+					signal: options?.signal,
+					onTextDelta: emitTextDelta,
+				}),
+			);
+			const response = result.response;
 			if (!textBlock && response.length > 0) emitTextDelta(response);
 			if (textBlock) textBlock.text = response;
 			partial.content = textBlock ? [textBlock] : [];
@@ -140,14 +167,6 @@ function streamAgy(
 			partial.responseId = result.conversationId;
 			if (result.durationMs !== undefined) partial.duration = result.durationMs;
 			partial.stopReason = "stop";
-			if (key) {
-				bindings.set(key, {
-					conversationId: result.conversationId,
-					messageCount: initialMessageCount + 1,
-					prefixMessageCount: initialMessageCount,
-					prefixFingerprint,
-				});
-			}
 			if (textBlock) stream.push({ type: "text_end", contentIndex: 0, content: response, partial });
 			stream.push({ type: "done", reason: "stop", message: partial });
 		} catch (error) {
@@ -158,12 +177,39 @@ function streamAgy(
 					: "error";
 			partial.stopReason = reason;
 			partial.errorMessage = error instanceof Error ? error.message : String(error);
-			const status = errorStatus(error);
-			if (status !== undefined) partial.errorStatus = status;
 			stream.push({ type: "error", reason, error: partial });
 		}
 	})();
-	return stream;
+	const wrapped = wrapInbandToolStream(stream, tools, "xml");
+	wrapped.forwardLocalWorkFrom(stream);
+	const output = createAssistantMessageEventStream();
+	output.forwardLocalWorkFrom(wrapped);
+	void (async () => {
+		try {
+			for await (const event of wrapped) {
+				if (event.type === "done") {
+					if (key && event.message.responseId) {
+						bindings.set(key, {
+							conversationId: event.message.responseId,
+							messageCount: initialMessageCount + 1,
+							prefixMessageCount: initialMessageCount,
+							prefixFingerprint: contextPrefixFingerprint(context, initialMessageCount, event.message),
+						});
+					}
+					output.forwardLocalWorkFrom(undefined);
+				} else if (event.type === "error") {
+					if (key) bindings.delete(key);
+					output.forwardLocalWorkFrom(undefined);
+				}
+				output.push(event);
+			}
+		} catch (error) {
+			if (key) bindings.delete(key);
+			output.forwardLocalWorkFrom(undefined);
+			output.fail(error);
+		}
+	})();
+	return output;
 }
 
 export default function antigravityCli(pi: ExtensionAPI): void {

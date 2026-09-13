@@ -7,7 +7,7 @@ const REPLACEMENTS: [RegExp, string][] = [
 	[/omp Live/gi, "coding assistant live"],
 ];
 
-export function sanitizeAgyText(raw: string): string {
+export function sanitizeAgySystemText(raw: string): string {
 	let text = raw;
 	for (const [pattern, replacement] of REPLACEMENTS) {
 		text = text.replace(pattern, replacement);

@@ -66,6 +66,7 @@ Layout:
 - `omp/.omp/agent/rules/`, `omp/.omp/agent/extensions/` — global rules and TypeScript extensions.
 - `omp/.omp/agent/models.yml` — custom model definitions merged over the bundled catalog. Each profile symlinks it.
 - `omp/.omp/profiles/{mix,claude,china}/agent/` — per-profile overrides, each with its own `config.yml`, `agents/`, and optional `rules/`, `APPEND_SYSTEM.md`, `WATCHDOG.md`.
+- `omp/.gemini/config/agents/omp-provider/agent.md` — isolated AGY transport agent installed by the same Stow package.
 
 Verification, in order:
 
@@ -75,17 +76,17 @@ Verification, in order:
 
 Edit configs in this repository, never in `~/.omp`. Anything under `~/.omp` that is a real file is drift; reconcile it into the repo and re-stow. The rest of `~/.omp` (`agent.db`, `history.db`, `models.db`, `sessions/`, `logs/`, `cache/`) is runtime state and stays untracked.
 
-`models.yml` exists because the bundled catalog trails Z.ai's releases. OMP already routes the `zai` provider through `https://api.z.ai/api/anthropic`, so the file only declares the missing GLM id `glm-5.3-flash`. A provider that declares `models` must also carry `apiKey`; `auth: oauth` alone makes OMP reject the entire file silently, and `auth: none` sends no credential at all. `apiKey: "!printenv MY_ZAI_AUTH_TOKEN"` runs the command and uses its stdout, falling through to the stored key when the variable is absent, so no secret is pinned in the repo.
+`models.yml` narrows the tracked GPT-6 Astra overrides for OpenAI Codex and OpenRouter to the supported `low` and `medium` effort levels. The rest of the bundled catalog remains unchanged.
 
-A model id absent from both the catalog and this file resolves to nothing, and any role pointing at it fails at startup. The `advisor` role reports `no model is assigned` without naming the bad id, so check the id against `omp models <provider>` first. The file declares only `glm-5.3-flash`, whose efforts are `high` and `max`; `glm-5.3` comes from the bundled catalog with `low`, `high`, and `max`, which makes `zai/glm-5.3:xhigh` invalid on both.
+A model id absent from the bundled catalog, provider extension, and this file resolves to nothing. The `advisor` role reports `no model is assigned` without naming the bad id, so check selectors with `omp models <provider>`.
 
 ### AGY CLI provider
 
-`omp/.omp/agent/extensions/antigravity-cli.ts` registers the `antigravity-cli` provider as an `agy` stream-json bridge. AGY keeps its own authentication and model access, and OMP does not need a Google OAuth token for this provider.
+`omp/.omp/agent/extensions/antigravity-cli.ts` registers the `antigravity-cli` provider as an `agy` stream-json bridge. AGY is not an ACP implementation. OMP remains the agent process exposed to ACP clients, while AGY supplies Gemini model turns with its own authentication and model access.
 
 Run `agy` once and complete its authentication flow before the first OMP request. There is no separate `omp login` step for this provider.
 
-The root and `mix` profiles keep their existing models for every driver role and use the CLI provider for the advisor role. The `china` profile stays on its existing providers.
+The root and `mix` profiles use Gemini 3.8 Flash for the advisor and commit roles, plus the latency-tolerant `surveyor`, `adversary`, and `git-commit-specialist` background agents. Gemini 3.8 Flash high is also a fallback for GPT-5.6 Luna, GLM-5.3 Flash, and OpenCode Go. Interactive driver, planner, generic task, explorer, and latency-sensitive roles keep their primary providers. The `china` profile stays unchanged.
 
 After stowing the package, select a model by its provider selector:
 
@@ -95,11 +96,11 @@ omp --model antigravity-cli/gemini-3.8-flash --thinking high -p "Reply with one 
 
 Role config uses the effort suffix, for example `antigravity-cli/gemini-3.8-flash:high`. Use `AGY_BIN=/path/to/agy` when `agy` is not on `PATH`.
 
-AGY headless mode always skips native-tool permission prompts.
+The tracked `omp-provider` AGY agent removes AGY's default prompt components and inherited MCP tools. The bridge never grants AGY native-tool permissions. Instead, it renders OMP's tool catalog with OMP's XML dialect, parses Gemini's XML calls into normal OMP `toolCall` blocks, and leaves execution and approval to OMP.
 
-The provider returns text only and does not forward OMP tool calls. AGY native tools are separate from OMP's approval UI. The provider rejects image input because it has no image transport.
+The bridge reuses an AGY conversation only while the complete OMP transcript prefix still matches. Each tool batch adds another local AGY process round trip. The provider rejects image input because it has no image transport.
 
-Before sending the prompt, the bridge renames OMP-specific headers so the headless CLI transport is not misread as third-party API usage.
+Before sending the prompt, the bridge renames OMP-specific headers only in OMP-authored system text. User messages, tool results, and quoted source remain unchanged.
 
 Profile clients inherit the shared extension through `~/.omp/profiles/*/agent/extensions`. Verify the deployed link before using a profile:
 
