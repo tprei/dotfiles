@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+
+import argparse
+import contextlib
+import fcntl
+import os
+import re
+import shutil
+import sqlite3
+import stat
+import sys
+import tempfile
+import time
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Iterator
+
+
+DATABASE_NAMES = ("agent.db", "models.db", "history.db")
+CONFIG_NAMES = ("config.yml", "models.yml", "keybindings.yml")
+SNAPSHOT_PATTERN = re.compile(r"^snapshot-[0-9]{8}T[0-9]{12}Z$")
+LOCK_NAME = ".omp-state-backup.lock"
+
+
+def positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
+def is_within(path: Path, directory: Path) -> bool:
+    try:
+        path.relative_to(directory)
+    except ValueError:
+        return False
+    return True
+
+
+def validate_directory_relationship(agent_dir: Path, backup_dir: Path) -> None:
+    resolved_agent_dir = agent_dir.resolve()
+    resolved_backup_dir = backup_dir.resolve()
+    if is_within(resolved_backup_dir, resolved_agent_dir):
+        raise ValueError("backup directory must not be inside the agent directory")
+    if is_within(resolved_agent_dir, resolved_backup_dir):
+        raise ValueError("agent directory must not be inside the backup directory")
+
+
+def prepare_backup_root(backup_dir: Path) -> Path:
+    if backup_dir.is_symlink():
+        raise ValueError("backup directory must not be a symlink")
+    backup_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if backup_dir.is_symlink():
+        raise ValueError("backup directory must not be a symlink")
+    if not backup_dir.is_dir():
+        raise NotADirectoryError(f"backup directory is not a directory: {backup_dir}")
+    backup_dir.chmod(0o700)
+    return backup_dir.resolve(strict=True)
+
+
+@contextlib.contextmanager
+def exclusive_lock(backup_root: Path) -> Iterator[None]:
+    flags = os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | os.O_NOFOLLOW
+    lock_descriptor = os.open(backup_root / LOCK_NAME, flags, 0o600)
+    with contextlib.closing(os.fdopen(lock_descriptor, "a+", encoding="utf-8")) as lock_file:
+        os.fchmod(lock_file.fileno(), 0o600)
+        if not stat.S_ISREG(os.fstat(lock_file.fileno()).st_mode):
+            raise RuntimeError("backup lock is not a regular file")
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise RuntimeError("another OMP state backup is already running") from error
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def backup_database(source: Path, destination: Path) -> None:
+    if not source.is_file():
+        raise FileNotFoundError(f"required database is missing: {source}")
+    resolved_source = source.resolve(strict=True)
+    deadline = time.monotonic() + 60
+
+    def progress(status: int, remaining: int, total: int) -> None:
+        if time.monotonic() >= deadline:
+            if status == sqlite3.SQLITE_BUSY:
+                raise RuntimeError(f"backup timed out while waiting for {source.name}")
+            raise RuntimeError(f"backup timed out for {source.name}")
+
+    source_uri = resolved_source.as_uri() + "?mode=ro"
+    try:
+        with contextlib.closing(sqlite3.connect(source_uri, uri=True)) as source_connection:
+            with contextlib.closing(sqlite3.connect(destination)) as destination_connection:
+                source_connection.backup(destination_connection, pages=256, progress=progress, sleep=0.05)
+                integrity_result = destination_connection.execute("PRAGMA integrity_check").fetchall()
+    except sqlite3.Error as error:
+        raise RuntimeError(f"backup failed for {source.name}") from error
+    if integrity_result != [("ok",)]:
+        raise RuntimeError(f"integrity check failed for {source.name}")
+    destination.chmod(0o600)
+    sync_file(destination)
+
+
+def sync_file(path: Path) -> None:
+    with path.open("rb") as file:
+        os.fsync(file.fileno())
+
+
+def sync_directory(path: Path) -> None:
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC
+    descriptor = os.open(path, flags)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def snapshot_path(backup_root: Path) -> Path:
+    timestamp = datetime.now(timezone.utc)
+    while True:
+        candidate = backup_root / timestamp.strftime("snapshot-%Y%m%dT%H%M%S%fZ")
+        if not os.path.lexists(candidate):
+            return candidate
+        timestamp += timedelta(microseconds=1)
+
+
+def remove_directory_within(backup_root: Path, directory: Path) -> None:
+    resolved_directory = directory.resolve(strict=True)
+    if not is_within(resolved_directory, backup_root):
+        raise RuntimeError("refusing to remove a directory outside the backup root")
+    shutil.rmtree(resolved_directory)
+
+
+def prune_snapshots(backup_root: Path, keep: int) -> None:
+    snapshots = [
+        entry
+        for entry in backup_root.iterdir()
+        if not entry.is_symlink() and entry.is_dir() and SNAPSHOT_PATTERN.fullmatch(entry.name)
+    ]
+    snapshots.sort(key=lambda entry: entry.name, reverse=True)
+    for snapshot in snapshots[keep:]:
+        remove_directory_within(backup_root, snapshot)
+
+
+def create_snapshot(agent_dir: Path, backup_dir: Path, keep: int) -> Path:
+    if keep < 1:
+        raise ValueError("keep must be a positive integer")
+    validate_directory_relationship(agent_dir, backup_dir)
+    if not agent_dir.is_dir():
+        raise NotADirectoryError(f"agent directory is not a directory: {agent_dir}")
+    databases = tuple(agent_dir / name for name in DATABASE_NAMES)
+    for database in databases:
+        if not database.is_file():
+            raise FileNotFoundError(f"required database is missing: {database}")
+    backup_root = prepare_backup_root(backup_dir)
+    with exclusive_lock(backup_root):
+        staging: Path | None = None
+        try:
+            staging = Path(tempfile.mkdtemp(prefix=".omp-state-backup-", dir=backup_root))
+            for database in databases:
+                backup_database(database, staging / database.name)
+            for name in CONFIG_NAMES:
+                source = agent_dir / name
+                if source.is_file():
+                    destination = staging / name
+                    shutil.copyfile(source, destination, follow_symlinks=True)
+                    destination.chmod(0o600)
+                    sync_file(destination)
+            published_snapshot = snapshot_path(backup_root)
+            sync_directory(staging)
+            staging.rename(published_snapshot)
+            staging = None
+            sync_directory(backup_root)
+        finally:
+            if staging is not None and staging.exists():
+                remove_directory_within(backup_root, staging)
+        prune_snapshots(backup_root, keep)
+        sync_directory(backup_root)
+    return published_snapshot
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Create a verified backup of OMP agent state")
+    parser.add_argument("--agent-dir", type=Path, default=Path.home() / ".omp" / "agent")
+    parser.add_argument("--backup-dir", type=Path, default=Path.home() / ".local" / "state" / "omp-backups")
+    parser.add_argument("--keep", type=positive_int, default=48)
+    arguments = parser.parse_args()
+    os.umask(0o077)
+    try:
+        published_snapshot = create_snapshot(arguments.agent_dir, arguments.backup_dir, arguments.keep)
+    except (OSError, sqlite3.Error, RuntimeError, ValueError) as error:
+        print(f"omp-state-backup: {error}", file=sys.stderr)
+        return 1
+    print(published_snapshot)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

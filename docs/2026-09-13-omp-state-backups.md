@@ -1,0 +1,21 @@
+# Verified OMP state backups
+
+## Scope
+
+Add hourly, private, verified SQLite backups for the default OMP agent directory. This protects recoverability, not the unconfirmed cause of corruption. Do not change providers, extensions, model routing, existing usage services, or shell configuration.
+
+## Files and implementation
+
+Add `tools/.local/bin/omp-state-backup`, an executable Python 3 standard-library script. Add `tools/.config/systemd/user/omp-state-backup.service` and `tools/.config/systemd/user/omp-state-backup.timer`. Add `tools/tests/test_omp_state_backup.py` using unittest and subprocess against temporary fixture directories.
+
+The script exposes `main() -> int` with argparse options `--agent-dir` (Path, default Path.home()/'.omp/agent'), `--backup-dir` (Path, default Path.home()/'.local/state/omp-backups'), and `--keep` (positive int, default 48). Reject backup directories inside the source directory and source directories inside the backup directory. Set umask 077. Create backup root with mode 0700 and reject symlink root before chmod. Hold an exclusive nonblocking flock on a private lock file in backup root for the entire operation; concurrent calls fail clearly with nonzero status.
+
+Implement `backup_database(source: Path, destination: Path) -> None`: connect source with its resolved `as_uri() + '?mode=ro'` and `uri=True`; never use immutable for live backups. Connect destination and use sqlite3.Connection.backup with pages=256 and a progress callback enforcing a 60-second monotonic deadline, including SQLITE_BUSY retries. Close both connections explicitly using contextlib.closing. Run full PRAGMA integrity_check on destination; require exactly [('ok',)] and raise RuntimeError naming the database without dumping contents. Require agent.db, models.db, and history.db to exist; do not create missing source databases.
+
+Implement `create_snapshot(agent_dir: Path, backup_dir: Path, keep: int) -> Path`: create a unique staging directory using tempfile.mkdtemp under backup root, backup the three databases, copy optional config.yml/models.yml/keybindings.yml if present using shutil.copyfile (dereference the expected stow symlinks). Do not copy live WAL or SHM files. Set each completed snapshot file to 0600 and fsync it by opening it in rb mode and calling os.fsync on its fileno. Fsync the staging directory before renaming it to `snapshot-YYYYMMDDTHHMMSSffffffZ`, then fsync the backup root immediately after the rename and before pruning any previous snapshot. Propagate any fsync failure without pruning prior snapshots. Fsync the backup root again after pruning. In finally, remove the staging directory only if still present. Failed operations must not prune successful snapshots. After success, keep the newest `keep` directories matching the exact timestamp naming regex, ignoring symlinks and unrelated entries; remove older matching directories using shutil.rmtree only within the resolved backup root. The backup treats the databases as independently recoverable files; cross-database transactional consistency is a non-goal because OMP has no observed cross-file transactional dependency. Print the successful snapshot path. Catch only OSError, sqlite3.Error, RuntimeError, and ValueError at the CLI boundary; report a concise error to stderr and exit 1. No credentials in output. No comments, suppressions, fallbacks, third-party dependencies, or automatic restore.
+
+Service: Type=oneshot, ExecStart=%h/.local/bin/omp-state-backup, UMask=0077, TimeoutStartSec=5min. Timer: OnCalendar=hourly, Persistent=true, RandomizedDelaySec=2min, WantedBy=timers.target. Use clear descriptions. Do not enable units or install outside the worktree; the main agent handles activation after review.
+
+## Verification
+
+Tests exercise a committed WAL row with an open source connection, retained snapshot contents, corruption failure without pruning an existing backup, an fsync failure before publication that preserves an existing snapshot, retention ignoring unrelated directories, and owner-only permissions. Run `python3 -m unittest discover -s tools/tests -p 'test_omp_state_backup.py' -v` and `git diff --check`; expect both to pass. Do not execute existing Telegram usage tools. No updates to existing files or call sites are required.

@@ -1,0 +1,8 @@
+[Unit]
+Description=Verified backup of OMP agent state
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/omp-state-backup
+UMask=0077
+TimeoutStartSec=5min
