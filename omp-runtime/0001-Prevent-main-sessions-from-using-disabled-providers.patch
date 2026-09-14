@@ -1,0 +1,605 @@
+From f9fd9395825a7c2da136fcf5b9fc62185c69d434 Mon Sep 17 00:00:00 2001
+From: tprei <37089330+tprei@users.noreply.github.com>
+Date: Mon, 14 Sep 2026 22:09:29 +0100
+Subject: [PATCH] Prevent main sessions from using disabled providers
+
+---
+ .../src/config/settings-schema.ts             |   1 +
+ .../coding-agent/src/session/agent-session.ts |  18 +-
+ .../src/session/main-agent-model-policy.ts    |  16 ++
+ .../src/session/model-controls.ts             |  15 +-
+ .../coding-agent/src/session/turn-recovery.ts |  24 ++-
+ .../agent-session-model-switch-auth.test.ts   |  84 ++++++++-
+ .../test/agent-session-retry-fallback.test.ts | 161 ++++++++++++++++++
+ ...sue-2750-subagent-runtime-fallback.test.ts |   1 +
+ .../test/turn-recovery-replay-unsafe.test.ts  |   1 +
+ 9 files changed, 314 insertions(+), 7 deletions(-)
+ create mode 100644 packages/coding-agent/src/session/main-agent-model-policy.ts
+
+diff --git a/packages/coding-agent/src/config/settings-schema.ts b/packages/coding-agent/src/config/settings-schema.ts
+index c5a6911..a7297f5 100644
+--- a/packages/coding-agent/src/config/settings-schema.ts
++++ b/packages/coding-agent/src/config/settings-schema.ts
+@@ -626,6 +626,7 @@ export const SETTINGS_SCHEMA = {
+ 	enabledProviders: { type: "array", default: EMPTY_STRING_ARRAY },
+ 
+ 	disabledProviders: { type: "array", default: EMPTY_STRING_ARRAY },
++	"mainAgent.disabledProviders": { type: "array", default: EMPTY_STRING_ARRAY },
+ 
+ 	"providers.maxInFlightRequests": {
+ 		type: "record",
+diff --git a/packages/coding-agent/src/session/agent-session.ts b/packages/coding-agent/src/session/agent-session.ts
+index 865f957..7581911 100644
+--- a/packages/coding-agent/src/session/agent-session.ts
++++ b/packages/coding-agent/src/session/agent-session.ts
+@@ -306,6 +306,7 @@ import {
+ 	LAUNCH_COMPLETION_MESSAGE_TYPE,
+ 	type LaunchCompletionEntry,
+ } from "./launch-completion";
++import { assertMainAgentProviderAllowed } from "./main-agent-model-policy";
+ import {
+ 	type BashExecutionMessage,
+ 	buildReplanTitleContext,
+@@ -1240,6 +1241,18 @@ export class AgentSession {
+ 		this.#codeModeState = config.codeModeState ?? {};
+ 		this.sessionManager = config.sessionManager;
+ 		this.settings = config.settings;
++		this.#agentKind = config.agentKind ?? "main";
++		const initialModel = this.agent.state.model;
++		if (initialModel) {
++			assertMainAgentProviderAllowed(this.settings, this.#agentKind, initialModel.provider);
++		}
++		if (this.#agentKind === "main") {
++			const ownedStreamFn = this.agent.streamFn;
++			this.agent.streamFn = (model, context, options) => {
++				assertMainAgentProviderAllowed(this.settings, this.#agentKind, model.provider);
++				return ownedStreamFn(model, context, options);
++			};
++		}
+ 		this.#modelRegistry = config.modelRegistry;
+ 		this.#extensionRoots =
+ 			config.extensionRoots ??
+@@ -1341,6 +1354,7 @@ export class AgentSession {
+ 			sessionManager: this.sessionManager,
+ 			providerSessionState: this.#providerSessionState,
+ 			model: () => this.model,
++			agentKind: () => this.#agentKind,
+ 			sessionId: () => this.sessionId,
+ 			promptGeneration: () => this.#promptGeneration,
+ 			resolveActiveEditMode: () => this.#tools.resolveActiveEditMode(),
+@@ -1373,6 +1387,7 @@ export class AgentSession {
+ 			modelRegistry: this.#modelRegistry,
+ 			configWarnings: this.configWarnings,
+ 			model: () => this.model,
++			agentKind: () => this.#agentKind,
+ 			contextFitsModel: (model, excludedMessage) => this.#maintenance.contextFitsModel(model, excludedMessage),
+ 			textOutputCommitted: () => this.#textOutputCommitted,
+ 			thinkingLevel: () => this.thinkingLevel,
+@@ -1671,7 +1686,6 @@ export class AgentSession {
+ 		this.#streamingEditGuard = new StreamingEditGuard(streamGuardsHost);
+ 		this.#loopGuards = new LoopGuards(streamGuardsHost);
+ 		this.#agentId = config.agentId;
+-		this.#agentKind = config.agentKind ?? "main";
+ 		this.#scoutAllowedBySpawnPolicy = config.scoutAllowedBySpawnPolicy ?? true;
+ 		this.#providerSessionId = config.providerSessionId;
+ 		this.#inheritedProviderPromptCacheKey =
+@@ -8500,6 +8514,7 @@ export class AgentSession {
+ 	}
+ 
+ 	async #setModelWithProviderSessionReset(model: Model): Promise<void> {
++		assertMainAgentProviderAllowed(this.settings, this.#agentKind, model.provider);
+ 		const currentModel = this.model;
+ 		const isChanging = !currentModel || !modelsAreEqual(currentModel, model);
+ 		if (currentModel) {
+@@ -9173,6 +9188,7 @@ export class AgentSession {
+ 					if (match) break;
+ 				}
+ 				if (match) {
++					assertMainAgentProviderAllowed(this.settings, this.#agentKind, match.provider);
+ 					const currentModel = this.model;
+ 					const shouldResetProviderState =
+ 						switchingToDifferentSession ||
+diff --git a/packages/coding-agent/src/session/main-agent-model-policy.ts b/packages/coding-agent/src/session/main-agent-model-policy.ts
+new file mode 100644
+index 0000000..5dd2213
+--- /dev/null
++++ b/packages/coding-agent/src/session/main-agent-model-policy.ts
+@@ -0,0 +1,16 @@
++import type { Settings } from "../config/settings";
++
++export function isMainAgentProviderDisabled(settings: Settings, agentKind: "main" | "sub", provider: string): boolean {
++	if (agentKind === "sub") return false;
++	const disabled: unknown = settings.get("mainAgent.disabledProviders");
++	if (!Array.isArray(disabled) || disabled.some(id => typeof id !== "string")) {
++		throw new Error("mainAgent.disabledProviders must be an array of provider IDs.");
++	}
++	return disabled.includes(provider);
++}
++
++export function assertMainAgentProviderAllowed(settings: Settings, agentKind: "main" | "sub", provider: string): void {
++	if (isMainAgentProviderDisabled(settings, agentKind, provider)) {
++		throw new Error(`Provider "${provider}" is disabled for the main driver.`);
++	}
++}
+diff --git a/packages/coding-agent/src/session/model-controls.ts b/packages/coding-agent/src/session/model-controls.ts
+index 4ed785e..81ab90e 100644
+--- a/packages/coding-agent/src/session/model-controls.ts
++++ b/packages/coding-agent/src/session/model-controls.ts
+@@ -37,12 +37,14 @@ import {
+ import type { EditMode } from "../utils/edit-mode";
+ import type { AgentSessionEvent } from "./agent-session-events";
+ import type { ModelCycleResult, ResolvedRoleModel, RoleModelCycle, RoleModelCycleResult } from "./agent-session-types";
++import { assertMainAgentProviderAllowed, isMainAgentProviderDisabled } from "./main-agent-model-policy";
+ import { formatRoleModelValue, resolveRoleModelFull } from "./role-models";
+ import { EPHEMERAL_MODEL_CHANGE_ROLE } from "./session-entries";
+ import type { SessionManager } from "./session-manager";
+ 
+ /** Capabilities borrowed from the owning AgentSession. */
+ export interface ModelControlsHost {
++	agentKind(): "main" | "sub";
+ 	agent: Agent;
+ 	settings: Settings;
+ 	modelRegistry: ModelRegistry;
+@@ -221,6 +223,7 @@ export class ModelControls {
+ 			persist?: boolean;
+ 		},
+ 	): Promise<{ switched: boolean }> {
++		assertMainAgentProviderAllowed(this.#host.settings, this.#host.agentKind(), model.provider);
+ 		const previousEditMode = this.#host.resolveActiveEditMode();
+ 		if (!this.#host.modelRegistry.hasConfiguredAuth(model)) {
+ 			throw new Error(`No API key for ${model.provider}/${model.id}`);
+@@ -266,6 +269,7 @@ export class ModelControls {
+ 		thinkingLevel?: ConfiguredThinkingLevel,
+ 		options?: { ephemeral?: boolean },
+ 	): Promise<void> {
++		assertMainAgentProviderAllowed(this.#host.settings, this.#host.agentKind(), model.provider);
+ 		const previousEditMode = this.#host.resolveActiveEditMode();
+ 		if (!this.#host.modelRegistry.hasConfiguredAuth(model)) {
+ 			throw new Error(`No API key for ${model.provider}/${model.id}`);
+@@ -336,6 +340,8 @@ export class ModelControls {
+ 				matchPreferences,
+ 			});
+ 			if (!resolved.model) continue;
++			if (isMainAgentProviderDisabled(this.#host.settings, this.#host.agentKind(), resolved.model.provider))
++				continue;
+ 
+ 			models.push({
+ 				role,
+@@ -402,6 +408,7 @@ export class ModelControls {
+ 		const result: Array<{ model: Model; thinkingLevel?: ThinkingLevel }> = [];
+ 
+ 		for (const scoped of this.#scopedModels) {
++			if (isMainAgentProviderDisabled(this.#host.settings, this.#host.agentKind(), scoped.model.provider)) continue;
+ 			const provider = scoped.model.provider;
+ 			let apiKey: string | undefined;
+ 			if (apiKeysByProvider.has(provider)) {
+@@ -448,7 +455,9 @@ export class ModelControls {
+ 
+ 	async #cycleAvailableModel(direction: "forward" | "backward"): Promise<ModelCycleResult | undefined> {
+ 		const previousEditMode = this.#host.resolveActiveEditMode();
+-		const availableModels = this.#host.modelRegistry.getAvailable();
++		const availableModels = this.#host.modelRegistry
++			.getAvailable()
++			.filter(model => !isMainAgentProviderDisabled(this.#host.settings, this.#host.agentKind(), model.provider));
+ 		if (availableModels.length <= 1) return undefined;
+ 
+ 		const currentModel = this.#model;
+@@ -481,7 +490,9 @@ export class ModelControls {
+ 	 * See {@link filterAvailableModelsByEnabledPatterns} for supported pattern forms and limitations.
+ 	 */
+ 	getAvailableModels(): Model[] {
+-		const all = this.#host.modelRegistry.getAvailable();
++		const all = this.#host.modelRegistry
++			.getAvailable()
++			.filter(model => !isMainAgentProviderDisabled(this.#host.settings, this.#host.agentKind(), model.provider));
+ 		const patterns = this.#host.settings.get("enabledModels");
+ 		if (!patterns || patterns.length === 0) return all;
+ 		return filterAvailableModelsByEnabledPatterns(all, patterns, this.#host.settings);
+diff --git a/packages/coding-agent/src/session/turn-recovery.ts b/packages/coding-agent/src/session/turn-recovery.ts
+index 37489c2..f37faf8 100644
+--- a/packages/coding-agent/src/session/turn-recovery.ts
++++ b/packages/coding-agent/src/session/turn-recovery.ts
+@@ -28,6 +28,7 @@ import type { ModelRegistry } from "../config/model-registry";
+ import { formatModelStringWithRouting, resolveModelOverride } from "../config/model-resolver";
+ 
+ import type { Settings } from "../config/settings";
++import { isMainAgentProviderDisabled } from "./main-agent-model-policy";
+ import type { RetryErrorUpdate } from "../extensibility/shared-events";
+ import emptyStopRetryTemplate from "../prompts/system/empty-stop-retry.md" with { type: "text" };
+ import malformedFunctionCallRetryTemplate from "../prompts/system/malformed-function-call-retry.md" with { type: "text" };
+@@ -175,6 +176,7 @@ export interface TurnRecoveryHost {
+ 	settings: Settings;
+ 	modelRegistry: ModelRegistry;
+ 	configWarnings: string[];
++	agentKind(): "main" | "sub";
+ 	model(): Model | undefined;
+ 	/**
+ 	 * Whether the live context fits `model`'s usable window. `excludedMessage`
+@@ -343,6 +345,11 @@ export class TurnRecovery {
+ 		this.#fallbackRoutedFor = this.#host.sessionManager.getSessionId();
+ 	}
+ 
++	/** Whether `provider` is disabled for the main driver on this host. Subagents never filter. */
++	#isMainAgentProviderDisabled(provider: string): boolean {
++		return isMainAgentProviderDisabled(this.#host.settings, this.#host.agentKind(), provider);
++	}
++
+ 	/**
+ 	 * Model this session's produced work is attributed to.
+ 	 *
+@@ -1681,7 +1688,9 @@ export class TurnRecovery {
+ 				if (this.isRetryFallbackSelectorSuppressed(candidate)) continue;
+ 				const resolved = resolveModelOverride([candidate.raw], this.#host.modelRegistry, this.#host.settings);
+ 				const candidateModel = resolved.model ?? this.#host.modelRegistry.find(candidate.provider, candidate.id);
+-				if (!candidateModel || !this.#host.modelRegistry.hasConfiguredAuth(candidateModel)) continue;
++				if (!candidateModel) continue;
++				if (this.#isMainAgentProviderDisabled(candidateModel.provider)) continue;
++				if (!this.#host.modelRegistry.hasConfiguredAuth(candidateModel)) continue;
+ 				if (ceiling !== undefined && !modelSupportsEffortCeiling(candidateModel, ceiling)) continue;
+ 				// A usage fallback must also fit: skip a candidate whose window cannot
+ 				// hold the live context so we never switch onto an oversized request
+@@ -1792,6 +1801,7 @@ export class TurnRecovery {
+ 		if (!candidate) {
+ 			throw new Error(`Retry fallback model not found: ${selector.raw}`);
+ 		}
++		if (this.#isMainAgentProviderDisabled(candidate.provider)) return false;
+ 		const apiKey =
+ 			options?.apiKey ??
+ 			(await this.#host.modelRegistry.getApiKey(candidate, this.#host.sessionId(), { signal: options?.signal }));
+@@ -1882,6 +1892,7 @@ export class TurnRecovery {
+ 				const resolved = resolveModelOverride([selector.raw], this.#host.modelRegistry, this.#host.settings);
+ 				const candidate = resolved.model ?? this.#host.modelRegistry.find(selector.provider, selector.id);
+ 				if (!candidate) continue;
++				if (this.#isMainAgentProviderDisabled(candidate.provider)) continue;
+ 				if (options?.excludeProvider === candidate.provider) continue;
+ 				// Anthropic signatures and redacted blocks are model-bound, while the
+ 				// latest assistant response must remain byte-identical. A same-provider
+@@ -1991,8 +2002,13 @@ export class TurnRecovery {
+ 		}
+ 		if (this.#hasReplayUnsafeOutput(message)) return false;
+ 		const currentSelector = formatRetryFallbackSelector(model, this.#host.thinkingLevel());
+-		return this.retryFallbackChainKeys(currentSelector).some(
+-			role => this.findRetryFallbackCandidates(role, currentSelector).length > 0,
++		return this.retryFallbackChainKeys(currentSelector).some(role =>
++			this.findRetryFallbackCandidates(role, currentSelector).some(selector => {
++				const resolved = resolveModelOverride([selector.raw], this.#host.modelRegistry, this.#host.settings);
++				const candidate = resolved.model ?? this.#host.modelRegistry.find(selector.provider, selector.id);
++				if (!candidate) return false;
++				return !this.#isMainAgentProviderDisabled(candidate.provider);
++			}),
+ 		);
+ 	}
+ 
+@@ -2007,6 +2023,7 @@ export class TurnRecovery {
+ 		if (!model) return false;
+ 		const baseModel = this.#host.modelRegistry.find("fireworks", toFireworksBaseModelId(model.id));
+ 		if (!baseModel) return false;
++		if (this.#isMainAgentProviderDisabled(baseModel.provider)) return false;
+ 		const apiKey = await this.#host.modelRegistry.getApiKey(baseModel, this.#host.sessionId());
+ 		if (!apiKey) return false;
+ 		const baseSelector = formatModelStringWithRouting(baseModel);
+@@ -2065,6 +2082,7 @@ export class TurnRecovery {
+ 		const primaryModel =
+ 			resolvedPrimary.model ?? this.#host.modelRegistry.find(originalSelector.provider, originalSelector.id);
+ 		if (!primaryModel) return false;
++		if (this.#isMainAgentProviderDisabled(primaryModel.provider)) return false;
+ 		const apiKey = await this.#host.modelRegistry.getApiKey(primaryModel, this.#host.sessionId());
+ 		if (!apiKey) return false;
+ 
+diff --git a/packages/coding-agent/test/agent-session-model-switch-auth.test.ts b/packages/coding-agent/test/agent-session-model-switch-auth.test.ts
+index 2dcf69b..acc149b 100644
+--- a/packages/coding-agent/test/agent-session-model-switch-auth.test.ts
++++ b/packages/coding-agent/test/agent-session-model-switch-auth.test.ts
+@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, spyOn } from "bun
+ import * as path from "node:path";
+ import { Agent } from "@oh-my-pi/pi-agent-core";
+ import { type Api, Effort, type Model } from "@oh-my-pi/pi-ai";
++import { createMockModel } from "@oh-my-pi/pi-ai/providers/mock";
+ import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
+ import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
+ import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
+@@ -49,7 +50,14 @@ describe("AgentSession model switch auth pre-flight", () => {
+ 		return model;
+ 	}
+ 
+-	function makeSession(initialModel: Model<Api>, roles?: Record<string, string>): AgentSession {
++	function makeSession(
++		initialModel: Model<Api>,
++		roles?: Record<string, string>,
++		options?: {
++			agentKind?: "main" | "sub";
++			streamFn?: Agent["streamFn"];
++		},
++	): AgentSession {
+ 		const settings = Settings.isolated();
+ 		if (roles) {
+ 			for (const role in roles) settings.setModelRole(role, roles[role]);
+@@ -62,12 +70,14 @@ describe("AgentSession model switch auth pre-flight", () => {
+ 				messages: [],
+ 				thinkingLevel: Effort.Medium,
+ 			},
++			...(options?.streamFn ? { streamFn: options.streamFn } : {}),
+ 		});
+ 		session = new AgentSession({
+ 			agent,
+ 			sessionManager: SessionManager.inMemory(),
+ 			settings,
+ 			modelRegistry: registry,
++			...(options?.agentKind ? { agentKind: options.agentKind } : {}),
+ 		});
+ 		return session;
+ 	}
+@@ -134,4 +144,76 @@ describe("AgentSession model switch auth pre-flight", () => {
+ 		expect(s.model?.id).toBe(from.id);
+ 		expect(getApiKeySpy).not.toHaveBeenCalled();
+ 	});
++	it("rejects direct model switches to a main-driver-disabled provider without touching auth", async () => {
++		const from = modelOrThrow("claude-sonnet-4-5");
++		const to = modelOrThrow("claude-sonnet-4-6");
++		const s = makeSession(from);
++		s.settings.set("mainAgent.disabledProviders", [from.provider]);
++
++		const getApiKeySpy = spyOn(registry, "getApiKey");
++		const hasAuthSpy = spyOn(registry, "hasConfiguredAuth");
++		spies.push(getApiKeySpy, hasAuthSpy);
++
++		await expect(s.setModel(to)).rejects.toThrow(`Provider "${from.provider}" is disabled for the main driver.`);
++		expect(s.model?.id).toBe(from.id);
++		expect(hasAuthSpy).not.toHaveBeenCalled();
++		expect(getApiKeySpy).not.toHaveBeenCalled();
++	});
++
++	it("rejects temporary switches to a main-driver-disabled provider without touching auth", async () => {
++		const from = modelOrThrow("claude-sonnet-4-5");
++		const to = modelOrThrow("claude-sonnet-4-6");
++		const s = makeSession(from);
++		s.settings.set("mainAgent.disabledProviders", [from.provider]);
++
++		const getApiKeySpy = spyOn(registry, "getApiKey");
++		const hasAuthSpy = spyOn(registry, "hasConfiguredAuth");
++		spies.push(getApiKeySpy, hasAuthSpy);
++
++		await expect(s.setModelTemporary(to)).rejects.toThrow(
++			`Provider "${from.provider}" is disabled for the main driver.`,
++		);
++		expect(s.model?.id).toBe(from.id);
++		expect(hasAuthSpy).not.toHaveBeenCalled();
++		expect(getApiKeySpy).not.toHaveBeenCalled();
++	});
++
++	it("allows subagents to switch to a main-driver-disabled provider", async () => {
++		const from = modelOrThrow("claude-sonnet-4-5");
++		const to = modelOrThrow("claude-sonnet-4-6");
++		const s = makeSession(from, undefined, { agentKind: "sub" });
++		s.settings.set("mainAgent.disabledProviders", [from.provider]);
++
++		const getApiKeySpy = spyOn(registry, "getApiKey");
++		spies.push(getApiKeySpy);
++
++		await s.setModel(to);
++
++		expect(s.model?.id).toBe(to.id);
++		expect(getApiKeySpy).not.toHaveBeenCalled();
++	});
++
++	it("blocks a live-disabled provider at dispatch without invoking the stream", async () => {
++		const from = modelOrThrow("claude-sonnet-4-5");
++		const mock = createMockModel();
++		let streamInvocations = 0;
++		const s = makeSession(from, undefined, {
++			streamFn: (model, context, options) => {
++				streamInvocations += 1;
++				mock.push({ content: ["should never stream"] });
++				return mock.stream(model, context, options);
++			},
++		});
++		s.settings.set("compaction.enabled", false);
++		s.settings.set("mainAgent.disabledProviders", [from.provider]);
++
++		await s.prompt("Hello");
++		await s.waitForIdle();
++
++		const lastMessage = s.messages.at(-1);
++		if (lastMessage?.role !== "assistant") throw new Error("Expected final assistant message");
++		expect(lastMessage.stopReason).toBe("error");
++		expect(lastMessage.errorMessage).toBe(`Provider "${from.provider}" is disabled for the main driver.`);
++		expect(streamInvocations).toBe(0);
++	});
+ });
+diff --git a/packages/coding-agent/test/agent-session-retry-fallback.test.ts b/packages/coding-agent/test/agent-session-retry-fallback.test.ts
+index 9a847c0..ae3a95b 100644
+--- a/packages/coding-agent/test/agent-session-retry-fallback.test.ts
++++ b/packages/coding-agent/test/agent-session-retry-fallback.test.ts
+@@ -6194,4 +6194,165 @@ describe("AgentSession retry fallback", () => {
+ 		const finalAssistant = getLastAssistantMessage(session);
+ 		expect(finalAssistant.content).toEqual([{ type: "text", text: "Recovered on the same model." }]);
+ 	});
++	it("skips a main-driver-disabled provider in the fallback chain", async () => {
++		const primaryModel = getBundledModel("anthropic", "claude-sonnet-4-5");
++		const blockedFallback = getBundledModel("openai", "gpt-4o-mini");
++		const allowedFallback = getBundledModel("google", "gemini-2.5-flash");
++		if (!primaryModel || !blockedFallback || !allowedFallback) {
++			throw new Error("Expected bundled test models to exist");
++		}
++
++		const requestedModels: string[] = [];
++		const agent = createFallbackAgent(primaryModel, requestedModels);
++
++		const settings = Settings.isolated({
++			"compaction.enabled": false,
++			"retry.baseDelayMs": 5,
++			"retry.fallbackChains": {
++				default: [
++					`${blockedFallback.provider}/${blockedFallback.id}`,
++					`${allowedFallback.provider}/${allowedFallback.id}`,
++				],
++			},
++			"mainAgent.disabledProviders": [blockedFallback.provider],
++		});
++		settings.setModelRole("default", `${primaryModel.provider}/${primaryModel.id}`);
++
++		session = new AgentSession({
++			agent,
++			sessionManager: SessionManager.inMemory(),
++			settings,
++			modelRegistry,
++		});
++
++		const fallbackAppliedEvents: Array<Extract<AgentSessionEvent, { type: "retry_fallback_applied" }>> = [];
++		session.subscribe(event => {
++			if (event.type === "retry_fallback_applied") {
++				fallbackAppliedEvents.push(event);
++			}
++		});
++
++		await session.prompt("Recover while skipping the disabled provider");
++		await session.waitForIdle();
++
++		expect(requestedModels).toEqual([
++			`${primaryModel.provider}/${primaryModel.id}`,
++			`${allowedFallback.provider}/${allowedFallback.id}`,
++		]);
++		expect(session.model?.provider).toBe(allowedFallback.provider);
++		expect(session.model?.id).toBe(allowedFallback.id);
++		expect(fallbackAppliedEvents).toEqual([
++			{
++				type: "retry_fallback_applied",
++				from: `${primaryModel.provider}/${primaryModel.id}`,
++				to: `${allowedFallback.provider}/${allowedFallback.id}`,
++				role: "default",
++			},
++		]);
++	});
++
++	it("lets subagents fall back to a main-driver-disabled provider", async () => {
++		const primaryModel = getBundledModel("anthropic", "claude-sonnet-4-5");
++		const blockedFallback = getBundledModel("openai", "gpt-4o-mini");
++		const allowedFallback = getBundledModel("google", "gemini-2.5-flash");
++		if (!primaryModel || !blockedFallback || !allowedFallback) {
++			throw new Error("Expected bundled test models to exist");
++		}
++
++		const requestedModels: string[] = [];
++		const agent = createFallbackAgent(primaryModel, requestedModels);
++
++		const settings = Settings.isolated({
++			"compaction.enabled": false,
++			"retry.baseDelayMs": 5,
++			"retry.fallbackChains": {
++				default: [
++					`${blockedFallback.provider}/${blockedFallback.id}`,
++					`${allowedFallback.provider}/${allowedFallback.id}`,
++				],
++			},
++			"mainAgent.disabledProviders": [blockedFallback.provider],
++		});
++		settings.setModelRole("default", `${primaryModel.provider}/${primaryModel.id}`);
++
++		session = new AgentSession({
++			agent,
++			sessionManager: SessionManager.inMemory(),
++			settings,
++			modelRegistry,
++			agentKind: "sub",
++		});
++
++		await session.prompt("Recover on the blocked provider as a subagent");
++		await session.waitForIdle();
++
++		expect(requestedModels).toEqual([
++			`${primaryModel.provider}/${primaryModel.id}`,
++			`${blockedFallback.provider}/${blockedFallback.id}`,
++		]);
++		expect(session.model?.provider).toBe(blockedFallback.provider);
++		expect(session.model?.id).toBe(blockedFallback.id);
++	});
++
++	it("keeps the primary error when every fallback is disabled for the main driver", async () => {
++		const primaryModel = getBundledModel("anthropic", "claude-sonnet-4-5");
++		const blockedFallback = getBundledModel("openai", "gpt-4o-mini");
++		if (!primaryModel || !blockedFallback) {
++			throw new Error("Expected bundled test models to exist");
++		}
++
++		const requestedModels: string[] = [];
++		const mock = createMockModel();
++		const agent = new Agent({
++			getApiKey: model => `${model.provider}-test-key`,
++			initialState: {
++				model: primaryModel,
++				systemPrompt: ["Test"],
++				tools: [],
++				messages: [],
++			},
++			streamFn: (model, context, options) => {
++				requestedModels.push(`${model.provider}/${model.id}`);
++				mock.push({ throw: "overloaded_error: provider returned error 503" });
++				return mock.stream(model, context, options);
++			},
++		});
++
++		const settings = Settings.isolated({
++			"compaction.enabled": false,
++			"retry.baseDelayMs": 5,
++			"retry.maxRetries": 1,
++			"retry.fallbackChains": {
++				default: [`${blockedFallback.provider}/${blockedFallback.id}`],
++			},
++			"mainAgent.disabledProviders": [blockedFallback.provider],
++		});
++		settings.setModelRole("default", `${primaryModel.provider}/${primaryModel.id}`);
++
++		session = new AgentSession({
++			agent,
++			sessionManager: SessionManager.inMemory(),
++			settings,
++			modelRegistry,
++		});
++
++		const fallbackAppliedEvents: Array<Extract<AgentSessionEvent, { type: "retry_fallback_applied" }>> = [];
++		session.subscribe(event => {
++			if (event.type === "retry_fallback_applied") {
++				fallbackAppliedEvents.push(event);
++			}
++		});
++
++		await session.prompt("Fail with no eligible fallback");
++		await session.waitForIdle();
++
++		expect(fallbackAppliedEvents).toHaveLength(0);
++		expect(requestedModels).toEqual([
++			`${primaryModel.provider}/${primaryModel.id}`,
++			`${primaryModel.provider}/${primaryModel.id}`,
++		]);
++		const finalAssistant = getLastAssistantMessage(session);
++		expect(finalAssistant.stopReason).toBe("error");
++		expect(finalAssistant.errorMessage).toMatch(/overloaded|503/i);
++	});
+ });
+diff --git a/packages/coding-agent/test/issue-2750-subagent-runtime-fallback.test.ts b/packages/coding-agent/test/issue-2750-subagent-runtime-fallback.test.ts
+index dee88a6..378fdf5 100644
+--- a/packages/coding-agent/test/issue-2750-subagent-runtime-fallback.test.ts
++++ b/packages/coding-agent/test/issue-2750-subagent-runtime-fallback.test.ts
+@@ -108,6 +108,7 @@ describe("subagent runtime model resolution", () => {
+ 				let activeModel = options.model;
+ 				let activeLevel: ThinkingLevel | undefined = level;
+ 				const recovery = new TurnRecovery({
++					agentKind: () => "sub" as const,
+ 					model: () => activeModel,
+ 					thinkingLevel: () => activeLevel,
+ 					sessionManager: { getSessionId: () => "literal-model" },
+diff --git a/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts b/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
+index 5a6e154..e5f8a0c 100644
+--- a/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
++++ b/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
+@@ -60,6 +60,7 @@ function createHost(
+ 		}
+ 	}
+ 	return {
++		agentKind: () => "main" as const,
+ 		agent: { state: { messages: options.messages ?? [] } } as never,
+ 		sessionManager: {
+ 			getLastModelChangeRole: () => options.lastModelChangeRole,
+-- 
+2.43.0
+

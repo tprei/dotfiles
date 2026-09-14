@@ -1,0 +1,16 @@
+Upstream OMP release this customization builds on.
+Release: v18.1.18
+Upstream commit: 00085d4e7dfdcfbf302c122fa2682b410a0f43d1
+Tarball: https://codeload.github.com/can1357/oh-my-pi/tar.gz/00085d4e7dfdcfbf302c122fa2682b410a0f43d1
+
+Local history.
+Baseline commit message: Upstream OMP v18.1.18 baseline 00085d4
+Baseline SHA: 21f7a6fd897bbc563fb5bb278f898eabe4149c1c
+Runtime commit message: Prevent main sessions from using disabled providers
+Runtime SHA: f9fd9395825a7c2da136fcf5b9fc62185c69d434
+Patch file: 0001-Prevent-main-sessions-from-using-disabled-providers.patch
+
+Live locations on this machine, kept out of this repo.
+Source checkout: /home/mbn/src/oh-my-pi, branch upstream-v18.1.18
+Worktree: /home/mbn/.worktrees/oh-my-pi-main-driver-no-agy, branch main-driver-no-agy
+Launcher: /home/mbn/.bun/bin/omp -> .../packages/coding-agent/scripts/omp
