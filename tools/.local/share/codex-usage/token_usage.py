@@ -34,7 +34,8 @@ class ProviderTotal(TypedDict):
     tokens: int
     estimated_usd: float
     unpriced_records: int
-
+    unpriced_tokens: int
+    unpriced_estimated_usd: float
 
 class DayTotal(TypedDict):
     start_ms: int
@@ -61,6 +62,10 @@ _BASELINE_PROVIDERS = ("openai-codex", "anthropic", "google-antigravity", "openc
 _DISPLAY_PROVIDERS = {"antigravity-cli": "google-antigravity"}
 _TOKEN_BUCKETS = ("input", "output", "cacheRead", "cacheWrite")
 _ORCHESTRATION_BUCKETS = ("input", "output", "cacheRead")
+_UNPRICED_USD_PER_MTOK = {
+    "gemini-3.8-flash": 0.1242,
+    "glm-5.3": 0.3150,
+}
 
 
 class _UnreadableFile(Exception):
@@ -511,12 +516,16 @@ def _provider_total(name: str, slot: dict | None) -> ProviderTotal:
             "tokens": 0,
             "estimated_usd": 0.0,
             "unpriced_records": 0,
+            "unpriced_tokens": 0,
+            "unpriced_estimated_usd": 0.0,
         }
     return {
         "provider": name,
         "tokens": slot["tokens"],
         "estimated_usd": math.fsum(slot["costs"]),
         "unpriced_records": slot["unpriced"],
+        "unpriced_tokens": slot["unpriced_tokens"],
+        "unpriced_estimated_usd": math.fsum(slot["unpriced_ests"]),
     }
 
 
@@ -544,7 +553,7 @@ def merge_usage(
             grouped.setdefault(key, []).append(record)
     token_conflicts = 0
     price_conflicts = 0
-    merged: list[tuple[str, int, int, float | None]] = []
+    merged: list[tuple[str, int, int, float | None, str]] = []
     for key in sorted(grouped):
         copies = grouped[key]
         token_values = {copy["tokens"] for copy in copies}
@@ -568,17 +577,20 @@ def merge_usage(
             estimated = 0.0
         else:
             estimated = None
-        merged.append((key[2], key[1], tokens, estimated))
+        merged.append((key[2], key[1], tokens, estimated, key[3]))
     totals: dict[str, dict] = {}
-    for provider, _timestamp_ms, tokens, estimated in merged:
+    for provider, _timestamp_ms, tokens, estimated, model in merged:
         display = _DISPLAY_PROVIDERS.get(provider, provider)
         slot = totals.setdefault(
-            display, {"tokens": 0, "costs": [], "unpriced": 0, "raw": set()}
+            display,
+            {"tokens": 0, "costs": [], "unpriced": 0, "raw": set(), "unpriced_tokens": 0, "unpriced_ests": []},
         )
         slot["tokens"] += tokens
         slot["raw"].add(provider)
         if estimated is None:
             slot["unpriced"] += 1
+            slot["unpriced_tokens"] += tokens
+            slot["unpriced_ests"].append(tokens / 1_000_000 * _UNPRICED_USD_PER_MTOK.get(model, 0.0))
         else:
             slot["costs"].append(estimated)
     providers: list[ProviderTotal] = []
@@ -595,16 +607,19 @@ def merge_usage(
         bin_start = start_ms + index * DAY_MS
         bin_end = min(bin_start + DAY_MS, end_ms)
         day_slots: dict[str, dict] = {}
-        for provider, timestamp_ms, tokens, estimated in merged:
+        for provider, timestamp_ms, tokens, estimated, model in merged:
             if timestamp_ms < bin_start or timestamp_ms >= bin_end:
                 continue
             display = _DISPLAY_PROVIDERS.get(provider, provider)
             slot = day_slots.setdefault(
-                display, {"tokens": 0, "costs": [], "unpriced": 0}
+                display,
+                {"tokens": 0, "costs": [], "unpriced": 0, "unpriced_tokens": 0, "unpriced_ests": []},
             )
             slot["tokens"] += tokens
             if estimated is None:
                 slot["unpriced"] += 1
+                slot["unpriced_tokens"] += tokens
+                slot["unpriced_ests"].append(tokens / 1_000_000 * _UNPRICED_USD_PER_MTOK.get(model, 0.0))
             else:
                 slot["costs"].append(estimated)
         day_providers = [
