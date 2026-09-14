@@ -1,3 +1,6 @@
+mainAgent:
+  disabledProviders:
+    - antigravity-cli
 disabledProviders:
   - google-antigravity
 symbolPreset: unicode
