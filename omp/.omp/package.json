@@ -1,0 +1,7 @@
+{
+  "name": "omp-agent-extensions",
+  "private": true,
+  "dependencies": {
+    "@oh-my-pi/pi-ai": "18.1.21"
+  }
+}

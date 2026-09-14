@@ -11,7 +11,7 @@ import type {
 	TextContent,
 	Usage,
 } from "@oh-my-pi/pi-ai";
-import { renderInbandToolPrompt, wrapInbandToolStream } from "@oh-my-pi/pi-ai/dialect/index";
+import { renderInbandToolPrompt, wrapInbandToolStream } from "@oh-my-pi/pi-ai/dialect";
 import { buildAgyPrompt } from "./antigravity-cli/context.ts";
 import { AGY_API_ID, AGY_MODELS, AGY_PROVIDER_ID, resolveAgyModelId } from "./antigravity-cli/models.ts";
 import { runAgyTurn, type AgyTurnResult } from "./antigravity-cli/process.ts";
