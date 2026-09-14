@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
-"""OMP usage reporter: all provider limits from OMP, posted to the Claude Telegram chat.
+"""OMP usage reporter: provider limits and 12-hour token usage for Telegram.
 
 Modes:
   codex-usage-check                  print the validated OMP JSON payload
-  codex-usage-check --telegram       update the pinned OMP usage image
-  codex-usage-check --setup-telegram verify the Claude Telegram config and pin an image
+  codex-usage-check --telegram       update the pinned limits and token images
+  codex-usage-check --setup-telegram verify the Telegram config and pin both images
 
 The Telegram bot token and chat come from ~/.config/claude-usage/config only;
-delivery state lives in ~/.config/codex-usage/state.json.
+delivery state lives in ~/.config/codex-usage/state.json with separate image IDs.
 """
 
 from __future__ import annotations
 
+import colorsys
+import hashlib
 import json
 import math
 import os
@@ -19,6 +21,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -46,6 +49,8 @@ IMAGE_USE_COLOR = "0xffd166"
 IMAGE_WARNING_COLOR = "0xffc857"
 IMAGE_BAD_COLOR = "0xff6b6b"
 LOGO_DIR = Path(__file__).resolve().parents[1] / "share" / "codex-usage" / "logos"
+TOKEN_USAGE_DIR = Path(__file__).resolve().parents[1] / "share" / "codex-usage"
+TOKEN_USAGE_PATH = TOKEN_USAGE_DIR / "token_usage.py"
 PROVIDER_LOGOS = {
     "OpenAI Codex": ("openai.svg", True),
     "ZAI": ("zai.svg", False),
@@ -60,6 +65,27 @@ PROVIDER_DISPLAY_NAMES = {
     "zai": "ZAI",
     "anthropic": "Anthropic",
 }
+TOKEN_BASELINE_PROVIDERS = (
+    "openai-codex",
+    "anthropic",
+    "google-antigravity",
+    "opencode-go",
+    "zai",
+)
+TOKEN_PROVIDER_COLORS = {
+    "openai-codex": "0x6ee7b7",
+    "anthropic": "0xf5a97f",
+    "google-antigravity": "0x8aadf4",
+    "opencode-go": "0xc6a0f6",
+    "zai": "0xeed49f",
+}
+TOKEN_WINDOW_MS = 43_200_000
+TOKEN_SSH_TIMEOUT_SECONDS = 60
+TOKEN_SSH_HOST_ENV = "OMP_TOKEN_SSH_HOST"
+TOKEN_SSH_PYTHON = "/usr/bin/python3"
+TOKEN_SSH_BINARY = "/usr/bin/ssh"
+LIMITS_STATE_KEY = "message_id"
+TOKENS_STATE_KEY = "tokens_message_id"
 
 
 class UsageError(Exception):
@@ -72,6 +98,21 @@ class UsageError(Exception):
 
 class TelegramError(RuntimeError):
     """Telegram rejected a request or returned an unusable response."""
+if str(TOKEN_USAGE_DIR) not in sys.path:
+    sys.path.insert(0, str(TOKEN_USAGE_DIR))
+try:
+    import token_usage
+except ImportError as error:
+    token_usage = None
+    TOKEN_USAGE_IMPORT_ERROR = error
+else:
+    TOKEN_USAGE_IMPORT_ERROR = None
+
+
+def require_token_usage():
+    if token_usage is None:
+        raise UsageError("token usage collector not available", 1) from TOKEN_USAGE_IMPORT_ERROR
+    return token_usage
 
 
 def usable_report(report) -> bool:
@@ -705,25 +746,57 @@ def tg_pin(config: dict, message_id: int) -> None:
     )
 
 
-def update_pinned(config: dict, image: bytes) -> bool:
+def edit_failure_action(description: str) -> str:
+    lowered = description.casefold()
+    if "message is not modified" in lowered:
+        return "ok"
+    if "message to edit not found" in lowered:
+        return "replace"
+    return "fail"
+
+
+def update_pinned(config: dict, image: bytes, state_key: str) -> bool:
     state = load_state()
-    message_id = state.get("message_id")
+    message_id = state.get(state_key)
     if isinstance(message_id, int):
         try:
             tg_edit_photo(config, message_id, image)
-            tg_pin(config, message_id)
-            return True
         except urllib.error.HTTPError as error:
-            if error.code != 400:
+            try:
+                description = error.read().decode("utf-8", "replace")
+            except (AttributeError, OSError, ValueError):
+                description = ""
+            action = edit_failure_action(description)
+            if action == "ok":
+                return True
+            if action != "replace":
                 return False
-        except (OSError, TimeoutError, TelegramError):
+        except TelegramError as error:
+            action = edit_failure_action(str(error))
+            if action == "ok":
+                return True
+            if action != "replace":
+                return False
+        except (OSError, TimeoutError):
             return False
+        else:
+            try:
+                tg_pin(config, message_id)
+            except (urllib.error.HTTPError, OSError, TimeoutError, TelegramError):
+                return False
+            return True
     try:
         new_message_id = tg_send_photo(config, image)
-        state["message_id"] = new_message_id
+    except (OSError, TimeoutError, TelegramError):
+        return False
+    state[state_key] = new_message_id
+    try:
         save_state(state)
+    except OSError:
+        return False
+    try:
         tg_pin(config, new_message_id)
-    except (OSError, TimeoutError, TelegramError, TypeError, ValueError):
+    except (urllib.error.HTTPError, OSError, TimeoutError, TelegramError):
         return False
     return True
 
@@ -753,6 +826,387 @@ def build_image() -> tuple[bytes, int]:
     except (TypeError, ValueError, KeyError, AttributeError, OSError) as error:
         raise UsageError(f"failed to render usage image: {error}", 2) from error
 
+def token_display_name(provider: str) -> str:
+    known = PROVIDER_DISPLAY_NAMES.get(provider)
+    if known:
+        return known
+    words = [part for part in provider.split("-") if part]
+    return " ".join(word[:1].upper() + word[1:] for word in words) if words else provider
+
+
+def token_provider_color(provider: str) -> str:
+    known = TOKEN_PROVIDER_COLORS.get(provider)
+    if known:
+        return known
+    digest = hashlib.sha256(provider.encode("utf-8")).digest()
+    hue = int.from_bytes(digest[:2], "big") / 65536.0
+    red, green, blue = colorsys.hsv_to_rgb(hue, 0.5, 0.9)
+    return f"0x{round(red * 255):02x}{round(green * 255):02x}{round(blue * 255):02x}"
+
+
+def valid_ssh_host(value: object) -> str | None:
+    if not isinstance(value, str) or not value:
+        return None
+    if value.startswith("-") or any(char.isspace() for char in value):
+        return None
+    return value
+
+
+def check_ssh_host() -> str | None:
+    return valid_ssh_host(os.environ.get(TOKEN_SSH_HOST_ENV))
+
+
+def remote_token_collection_source() -> bytes:
+    try:
+        return TOKEN_USAGE_PATH.read_bytes()
+    except OSError as error:
+        raise UsageError(f"token usage collector unreadable: {error}", 1) from error
+
+
+def local_token_collection(start_ms: int, end_ms: int) -> tuple[str, dict | None, list[str]]:
+    try:
+        collection = token_usage.collect_usage(Path.home() / ".omp", start_ms, end_ms)
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return "WSL", None, ["WSL unavailable: collector failure"]
+    if not isinstance(collection, dict):
+        return "WSL", None, ["WSL unavailable: invalid collection"]
+    return "WSL", collection, []
+
+
+def remote_token_collection(host: str, source: bytes, start_ms: int, end_ms: int) -> tuple[str, dict | None, list[str]]:
+    command = [
+        TOKEN_SSH_BINARY,
+        "-T",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "StrictHostKeyChecking=yes",
+        "-o",
+        "ConnectTimeout=10",
+        "-o",
+        "ServerAliveInterval=10",
+        "-o",
+        "ServerAliveCountMax=2",
+        host,
+        TOKEN_SSH_PYTHON,
+        "-",
+        "--start-ms",
+        str(start_ms),
+        "--end-ms",
+        str(end_ms),
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            input=source,
+            capture_output=True,
+            timeout=TOKEN_SSH_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except FileNotFoundError:
+        return "mini-1", None, ["mini-1 unavailable: ssh binary not found"]
+    except subprocess.TimeoutExpired:
+        return "mini-1", None, ["mini-1 unavailable: ssh timed out"]
+    except OSError as error:
+        return "mini-1", None, [f"mini-1 unavailable: {error}"]
+    stdout = completed.stdout or b""
+    if completed.returncode == 255:
+        print("codex-usage-check: token ssh connection failed", file=sys.stderr)
+        return "mini-1", None, ["mini-1 unavailable: ssh connection failed"]
+    if completed.returncode not in (0, 2):
+        print(f"codex-usage-check: token ssh exited {completed.returncode}", file=sys.stderr)
+        return "mini-1", None, [f"mini-1 unavailable: remote collector exited {completed.returncode}"]
+    try:
+        collection = json.loads(stdout.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        print("codex-usage-check: token ssh returned invalid JSON", file=sys.stderr)
+        return "mini-1", None, ["mini-1 unavailable: invalid remote collection"]
+    if not isinstance(collection, dict):
+        print("codex-usage-check: token ssh returned invalid collection", file=sys.stderr)
+        return "mini-1", None, ["mini-1 unavailable: invalid remote collection"]
+    if completed.returncode == 2 and not collection.get("issues"):
+        print("codex-usage-check: token ssh returned inconsistent collection", file=sys.stderr)
+        return "mini-1", None, ["mini-1 unavailable: invalid remote collection"]
+    return "mini-1", collection, []
+
+
+def collect_token_snapshot(now_ms: int) -> token_usage.TokenSnapshot:
+    require_token_usage()
+    end_ms = now_ms
+    start_ms = end_ms - TOKEN_WINDOW_MS
+    collections: list[tuple[str, dict]] = []
+    snapshot_issues: list[str] = []
+    label, local_collection, local_issues = local_token_collection(start_ms, end_ms)
+    snapshot_issues.extend(local_issues)
+    if local_collection is not None:
+        collections.append((label, local_collection))
+    host = check_ssh_host()
+    if host is None:
+        snapshot_issues.append("mini-1 unconfigured")
+    else:
+        try:
+            source = remote_token_collection_source()
+        except UsageError as error:
+            print(f"codex-usage-check: {error}", file=sys.stderr)
+            snapshot_issues.append("mini-1 unavailable: collector unreadable")
+            source = None
+        if source is not None:
+            label, remote_collection, remote_issues = remote_token_collection(host, source, start_ms, end_ms)
+            snapshot_issues.extend(remote_issues)
+            if remote_collection is not None:
+                collections.append((label, remote_collection))
+    snapshot = token_usage.merge_usage(collections, start_ms, end_ms)
+    if snapshot_issues:
+        snapshot["issues"] = [*snapshot_issues, *snapshot.get("issues", [])]
+    return snapshot
+
+
+def format_compact_tokens(tokens: int) -> str:
+    if tokens < 1000:
+        return str(tokens)
+    if tokens < 1_000_000:
+        value = tokens / 1000
+        text = f"{value:.1f}".rstrip("0").rstrip(".")
+        return f"{text}K"
+    if tokens < 1_000_000_000:
+        value = tokens / 1_000_000
+        text = f"{value:.1f}".rstrip("0").rstrip(".")
+        return f"{text}M"
+    value = tokens / 1_000_000_000
+    text = f"{value:.1f}".rstrip("0").rstrip(".")
+    return f"{text}B"
+
+
+def token_axis_max(maximum: int) -> int:
+    if maximum <= 0:
+        return 1
+    magnitude = 10 ** (len(str(maximum)) - 1)
+    for multiple in (1, 2, 5, 10):
+        ceiling = multiple * magnitude
+        if ceiling >= maximum:
+            return ceiling
+    return 10 * magnitude
+
+
+def format_price_label(provider: dict, incomplete: bool) -> str:
+    tokens = provider.get("tokens", 0)
+    cost = provider.get("estimated_usd", 0.0)
+    unpriced = provider.get("unpriced_records", 0)
+    prefix = "Known " if incomplete or unpriced else "Est. "
+    if unpriced and tokens > 0 and (not isinstance(cost, (int, float)) or cost <= 0):
+        return "Price unavailable"
+    if tokens <= 0:
+        return "$0.00"
+    if unpriced:
+        return f"{prefix}${cost:,.2f} + unpriced"
+    if cost > 0 and cost < 0.01:
+        return f"{prefix}<$0.01"
+    return f"{prefix}${cost:,.2f}"
+
+
+def split_provider_label(label: str) -> list[str]:
+    words = label.split()
+    if not words:
+        return [label]
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        if current and len(candidate) > 12:
+            lines.append(current)
+            current = word
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    if len(lines) > 3:
+        tail = " ".join(lines[2:])
+        lines = [*lines[:2], f"{tail[:11]}…"]
+    return [line if len(line) <= 16 else f"{line[:15]}…" for line in lines]
+
+
+
+def render_token_chart(snapshot: token_usage.TokenSnapshot) -> bytes:
+    providers = snapshot.get("providers", [])
+    if not providers:
+        raise UsageError("token chart has no providers", 2)
+    count = len(providers)
+    width = max(1272, 144 + 220 * count)
+    height = 820
+    if width % 2:
+        width += 1
+    if height % 2:
+        height += 1
+    left, right, top, baseline = 104, 40, 230, 620
+    plot_width = width - left - right
+    plot_height = baseline - top
+    maximum = max(int(provider.get("tokens", 0)) for provider in providers)
+    axis_max = token_axis_max(maximum)
+    slot = plot_width / count
+    bar_width = 100
+    ffmpeg = os.environ.get("FFMPEG_BIN", "ffmpeg")
+    font_path = os.environ.get("OMP_USAGE_FONT", DEFAULT_FONT_PATH)
+    start = datetime.fromtimestamp(snapshot["start_ms"] / 1000, tz=timezone.utc)
+    end = datetime.fromtimestamp(snapshot["end_ms"] / 1000, tz=timezone.utc)
+    updated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    sources_ok = snapshot.get("sources_ok", [])
+    issues = snapshot.get("issues", [])
+    incomplete = bool(issues)
+    try:
+        with tempfile.TemporaryDirectory(prefix="omp-tokens-") as directory:
+            drawboxes: list[str] = []
+            drawtexts: list[str] = []
+
+            def text_filter(text: str, x: object, y: object, size: int, color: str) -> str:
+                path = Path(directory) / f"token-{len(drawtexts):03d}.txt"
+                path.write_text(text, encoding="utf-8")
+                return (
+                    f"drawtext=fontfile={ffmpeg_filter_path(font_path)}:"
+                    f"textfile={ffmpeg_filter_path(str(path))}:"
+                    f"fontcolor={color}:fontsize={size}:"
+                    f"expansion=none:x={x}:y={y}"
+                )
+
+            drawtexts.append(text_filter("OMP token usage \u00b7 Last 12h", 48, 36, 34, IMAGE_TEXT_COLOR))
+            drawtexts.append(text_filter(f"{start.strftime('%Y-%m-%d %H:%M UTC')} to {end.strftime('%Y-%m-%d %H:%M UTC')}", 48, 84, 22, IMAGE_MUTED_COLOR))
+            if incomplete:
+                failed = []
+                for issue in issues:
+                    head = issue.split(":")[0]
+                    if head and head not in failed:
+                        failed.append(head)
+                available = " + ".join(sources_ok) if sources_ok else "no sources"
+                drawtexts.append(text_filter(f"INCOMPLETE \u00b7 {available}", 48, 118, 22, IMAGE_WARNING_COLOR))
+                failure_text = "; ".join(failed)
+                if len(failure_text) > 90:
+                    failure_text = f"{failure_text[:89]}…"
+                if failure_text:
+                    drawtexts.append(text_filter(failure_text, 48, 148, 20, IMAGE_WARNING_COLOR))
+            else:
+                drawtexts.append(text_filter(f"WSL + mini-1 \u00b7 Updated {updated}", 48, 118, 22, IMAGE_MUTED_COLOR))
+            for level in range(6):
+                value = axis_max * level // 5
+                y = baseline - round(plot_height * level / 5)
+                drawboxes.append(f"drawbox=x={left}:y={y}:w={plot_width}:h=1:c=0x3b3b58:t=fill")
+                drawtexts.append(text_filter(format_compact_tokens(value), 8, y - 12, 20, IMAGE_MUTED_COLOR))
+            drawboxes.append(f"drawbox=x={left}:y={baseline}:w={plot_width}:h=2:c=0x8b8ba3:t=fill")
+            for index, provider in enumerate(providers):
+                tokens = int(provider.get("tokens", 0))
+                color = token_provider_color(provider.get("provider", ""))
+                center = left + slot * index + slot / 2
+                bar_x = int(center - bar_width / 2)
+                bar_height = round(plot_height * tokens / axis_max) if axis_max else 0
+                bar_y = baseline - bar_height
+                if bar_height > 0:
+                    drawboxes.append(f"drawbox=x={bar_x}:y={bar_y}:w={bar_width}:h={bar_height}:c={color}:t=fill")
+                else:
+                    drawboxes.append(f"drawbox=x={bar_x}:y={baseline - 4}:w={bar_width}:h=4:c={color}:t=fill")
+                label_top = bar_y if bar_height > 0 else baseline
+                token_text = f"{tokens:,} tokens"
+                price_text = format_price_label(provider, incomplete)
+                size = 20
+                while size > 14 and (len(token_text) * size * 0.62 > slot - 8 or len(price_text) * size * 0.62 > slot - 8):
+                    size -= 1
+                value_y = max(top - 96, label_top - 56)
+                drawtexts.append(text_filter(token_text, f"({center})-tw/2", value_y, size, IMAGE_TEXT_COLOR))
+                drawtexts.append(text_filter(price_text, f"({center})-tw/2", value_y + size + 6, size, IMAGE_MUTED_COLOR))
+                for line_index, label_line in enumerate(split_provider_label(token_display_name(provider.get("provider", "")))):
+                    drawtexts.append(text_filter(label_line, f"({center})-tw/2", baseline + 18 + line_index * 28, 22, IMAGE_TEXT_COLOR))
+            total_tokens = sum(int(provider.get("tokens", 0)) for provider in providers)
+            total_cost = math.fsum(float(provider.get("estimated_usd", 0.0)) for provider in providers)
+            total_unpriced = sum(int(provider.get("unpriced_records", 0)) for provider in providers)
+            aggregate = "Observed total" if incomplete else "Total"
+            total_text = f"{aggregate}: {total_tokens:,} tokens \u00b7 {format_price_label({'tokens': total_tokens, 'estimated_usd': total_cost, 'unpriced_records': total_unpriced}, incomplete)}"
+            drawtexts.append(text_filter(total_text, 48, 724, 22, IMAGE_TEXT_COLOR))
+            drawtexts.append(text_filter("Reported OMP tokens \u00b7 Recorded USD estimates, not subscription charges", 48, 756, 20, IMAGE_MUTED_COLOR))
+            drawtexts.append(text_filter("Antigravity includes AGY CLI; unavailable prices are not counted as free.", 48, 784, 20, IMAGE_MUTED_COLOR))
+            if incomplete and not sources_ok:
+                drawtexts.append(text_filter("Usage unavailable", 48, 182, 26, IMAGE_WARNING_COLOR))
+            command = [
+                ffmpeg,
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                f"color=c=0x26263f:s={width}x{height}",
+                "-filter_complex",
+                f"[0:v]{','.join([*drawboxes, *drawtexts])}[out]",
+                "-map",
+                "[out]",
+                "-frames:v",
+                "1",
+                "-f",
+                "image2pipe",
+                "-vcodec",
+                "png",
+                "pipe:1",
+            ]
+            try:
+                completed = subprocess.run(
+                    command,
+                    capture_output=True,
+                    timeout=FFMPEG_TIMEOUT_SECONDS,
+                    check=False,
+                )
+            except FileNotFoundError:
+                raise UsageError(f"ffmpeg binary not found: {ffmpeg}", 1) from None
+            except subprocess.TimeoutExpired:
+                raise UsageError(f"ffmpeg token render timed out after {FFMPEG_TIMEOUT_SECONDS}s", 2) from None
+            except OSError as error:
+                raise UsageError(f"failed to render token chart: {error}", 2) from error
+            if completed.returncode != 0 or not completed.stdout:
+                raise UsageError(
+                    f"ffmpeg failed to render token chart (exit {completed.returncode})",
+                    2,
+                )
+            return completed.stdout
+    except UsageError:
+        raise
+    except OSError as error:
+        raise UsageError(f"failed to prepare token chart: {error}", 2) from error
+
+
+def build_token_image(now_ms: int | None = None) -> tuple[bytes, int]:
+    if now_ms is None:
+        now_ms = time.time_ns() // 1_000_000
+    snapshot = collect_token_snapshot(now_ms)
+    try:
+        image = render_token_chart(snapshot)
+    except UsageError:
+        raise
+    except (TypeError, ValueError, KeyError, AttributeError, OSError) as error:
+        raise UsageError(f"failed to render token chart: {error}", 2) from error
+    return image, 2 if snapshot.get("issues") else 0
+
+
+def publish_images(config: dict) -> int:
+    status = 0
+    try:
+        limits_image, limits_code = build_image()
+    except UsageError as error:
+        limits_image, limits_code = None, fail(error)
+    else:
+        if not update_pinned(config, limits_image, LIMITS_STATE_KEY):
+            print("codex-usage-check: failed to update the limits Telegram message", file=sys.stderr)
+            limits_code = 2
+    try:
+        token_image, token_code = build_token_image()
+    except UsageError as error:
+        token_image, token_code = None, fail(error)
+    else:
+        if not update_pinned(config, token_image, TOKENS_STATE_KEY):
+            print("codex-usage-check: failed to update the token Telegram message", file=sys.stderr)
+            token_code = 2
+    for code in (limits_code, token_code):
+        if code == 1:
+            return 1
+        if code == 2:
+            status = 2
+    return status
+
 
 def fail(error: Exception) -> int:
     print(f"codex-usage-check: {error}", file=sys.stderr)
@@ -776,14 +1230,7 @@ def run_telegram() -> int:
             file=sys.stderr,
         )
         return 1
-    try:
-        image, usage_code = build_image()
-    except UsageError as error:
-        return fail(error)
-    if not update_pinned(config, image):
-        print("codex-usage-check: failed to update the Telegram message", file=sys.stderr)
-        return 2
-    return usage_code
+    return publish_images(config)
 
 
 def setup_telegram() -> int:
@@ -809,15 +1256,9 @@ def setup_telegram() -> int:
     result = me.get("result")
     result = result if isinstance(result, dict) else {}
     bot_username = result.get("username") or "unknown"
-    try:
-        image, usage_code = build_image()
-    except UsageError as error:
-        return fail(error)
-    if not update_pinned(config, image):
-        print("codex-usage-check: failed to update the Telegram message", file=sys.stderr)
-        return 2
-    print(f"Telegram bot @{bot_username} verified; OMP provider usage pinned in the Claude chat.")
-    return usage_code
+    code = publish_images(config)
+    print(f"Telegram bot @{bot_username} verified; OMP provider usage and token chart pinned in the Claude chat.")
+    return code
 
 
 def main(argv: list[str]) -> int:
