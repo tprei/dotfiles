@@ -36,12 +36,25 @@ class ProviderTotal(TypedDict):
     unpriced_records: int
 
 
+class DayTotal(TypedDict):
+    start_ms: int
+    end_ms: int
+    providers: list[ProviderTotal]
+    tokens: int
+    estimated_usd: float
+    unpriced_records: int
+
+
 class TokenSnapshot(TypedDict):
     start_ms: int
     end_ms: int
     providers: list[ProviderTotal]
+    days: list[DayTotal]
     sources_ok: list[str]
     issues: list[str]
+
+
+DAY_MS = 86_400_000
 
 
 _BASELINE_PROVIDERS = ("openai-codex", "anthropic", "google-antigravity", "opencode-go", "zai")
@@ -531,7 +544,7 @@ def merge_usage(
             grouped.setdefault(key, []).append(record)
     token_conflicts = 0
     price_conflicts = 0
-    merged: list[tuple[str, int, float | None]] = []
+    merged: list[tuple[str, int, int, float | None]] = []
     for key in sorted(grouped):
         copies = grouped[key]
         token_values = {copy["tokens"] for copy in copies}
@@ -555,9 +568,9 @@ def merge_usage(
             estimated = 0.0
         else:
             estimated = None
-        merged.append((key[2], tokens, estimated))
+        merged.append((key[2], key[1], tokens, estimated))
     totals: dict[str, dict] = {}
-    for provider, tokens, estimated in merged:
+    for provider, _timestamp_ms, tokens, estimated in merged:
         display = _DISPLAY_PROVIDERS.get(provider, provider)
         slot = totals.setdefault(
             display, {"tokens": 0, "costs": [], "unpriced": 0, "raw": set()}
@@ -569,10 +582,44 @@ def merge_usage(
         else:
             slot["costs"].append(estimated)
     providers: list[ProviderTotal] = []
+    order: list[str] = []
     for name in _BASELINE_PROVIDERS:
         providers.append(_provider_total(name, totals.pop(name, None)))
+        order.append(name)
     for name in sorted(totals, key=lambda item: min(totals[item]["raw"])):
         providers.append(_provider_total(name, totals[name]))
+        order.append(name)
+    day_count = max(1, -(-(end_ms - start_ms) // DAY_MS))
+    days: list[DayTotal] = []
+    for index in range(day_count):
+        bin_start = start_ms + index * DAY_MS
+        bin_end = min(bin_start + DAY_MS, end_ms)
+        day_slots: dict[str, dict] = {}
+        for provider, timestamp_ms, tokens, estimated in merged:
+            if timestamp_ms < bin_start or timestamp_ms >= bin_end:
+                continue
+            display = _DISPLAY_PROVIDERS.get(provider, provider)
+            slot = day_slots.setdefault(
+                display, {"tokens": 0, "costs": [], "unpriced": 0}
+            )
+            slot["tokens"] += tokens
+            if estimated is None:
+                slot["unpriced"] += 1
+            else:
+                slot["costs"].append(estimated)
+        day_providers = [
+            _provider_total(name, day_slots.get(name)) for name in order
+        ]
+        days.append(
+            {
+                "start_ms": bin_start,
+                "end_ms": bin_end,
+                "providers": day_providers,
+                "tokens": sum(item["tokens"] for item in day_providers),
+                "estimated_usd": math.fsum(item["estimated_usd"] for item in day_providers),
+                "unpriced_records": sum(item["unpriced_records"] for item in day_providers),
+            }
+        )
     if token_conflicts:
         issues.append(
             f"excluded {_count_phrase(token_conflicts, 'disputed identity', 'disputed identities')} with conflicting tokens"
@@ -585,6 +632,7 @@ def merge_usage(
         "start_ms": start_ms,
         "end_ms": end_ms,
         "providers": providers,
+        "days": days,
         "sources_ok": sources_ok,
         "issues": issues,
     }

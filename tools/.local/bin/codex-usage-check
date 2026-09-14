@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OMP usage reporter: provider limits and 12-hour token usage for Telegram.
+"""OMP usage reporter: provider limits and seven-day token usage for Telegram.
 
 Modes:
   codex-usage-check                  print the validated OMP JSON payload
@@ -79,7 +79,8 @@ TOKEN_PROVIDER_COLORS = {
     "opencode-go": "0xc6a0f6",
     "zai": "0xeed49f",
 }
-TOKEN_WINDOW_MS = 43_200_000
+TOKEN_LOOKBACK_DAYS = 7
+TOKEN_DAY_MS = 86_400_000
 TOKEN_SSH_TIMEOUT_SECONDS = 60
 TOKEN_SSH_HOST_ENV = "OMP_TOKEN_SSH_HOST"
 TOKEN_SSH_PYTHON = "/usr/bin/python3"
@@ -933,7 +934,7 @@ def remote_token_collection(host: str, source: bytes, start_ms: int, end_ms: int
 def collect_token_snapshot(now_ms: int) -> token_usage.TokenSnapshot:
     require_token_usage()
     end_ms = now_ms
-    start_ms = end_ms - TOKEN_WINDOW_MS
+    start_ms = (end_ms // TOKEN_DAY_MS - TOKEN_LOOKBACK_DAYS + 1) * TOKEN_DAY_MS
     collections: list[tuple[str, dict]] = []
     snapshot_issues: list[str] = []
     label, local_collection, local_issues = local_token_collection(start_ms, end_ms)
@@ -1030,20 +1031,23 @@ def render_token_chart(snapshot: token_usage.TokenSnapshot) -> bytes:
     providers = snapshot.get("providers", [])
     if not providers:
         raise UsageError("token chart has no providers", 2)
-    count = len(providers)
-    width = max(1272, 144 + 220 * count)
-    height = 820
+    days = snapshot.get("days", [])
+    if not days:
+        raise UsageError("token chart has no days", 2)
+    count = len(days)
+    width = max(1400, 144 + 200 * count)
+    height = 960
     if width % 2:
         width += 1
     if height % 2:
         height += 1
-    left, right, top, baseline = 104, 40, 230, 620
+    left, right, top, baseline = 104, 40, 320, 700
     plot_width = width - left - right
     plot_height = baseline - top
-    maximum = max(int(provider.get("tokens", 0)) for provider in providers)
-    axis_max = token_axis_max(maximum)
+    day_totals = [int(day.get("tokens", 0)) for day in days]
+    axis_max = token_axis_max(max(day_totals) if day_totals else 0)
     slot = plot_width / count
-    bar_width = 100
+    bar_width = int(min(96, slot * 0.55))
     ffmpeg = os.environ.get("FFMPEG_BIN", "ffmpeg")
     font_path = os.environ.get("OMP_USAGE_FONT", DEFAULT_FONT_PATH)
     start = datetime.fromtimestamp(snapshot["start_ms"] / 1000, tz=timezone.utc)
@@ -1067,7 +1071,7 @@ def render_token_chart(snapshot: token_usage.TokenSnapshot) -> bytes:
                     f"expansion=none:x={x}:y={y}"
                 )
 
-            drawtexts.append(text_filter("OMP token usage \u00b7 Last 12h", 48, 36, 34, IMAGE_TEXT_COLOR))
+            drawtexts.append(text_filter("OMP token usage \u00b7 Last 7 days", 48, 36, 34, IMAGE_TEXT_COLOR))
             drawtexts.append(text_filter(f"{start.strftime('%Y-%m-%d %H:%M UTC')} to {end.strftime('%Y-%m-%d %H:%M UTC')}", 48, 84, 22, IMAGE_MUTED_COLOR))
             if incomplete:
                 failed = []
@@ -1079,49 +1083,77 @@ def render_token_chart(snapshot: token_usage.TokenSnapshot) -> bytes:
                 drawtexts.append(text_filter(f"INCOMPLETE \u00b7 {available}", 48, 118, 22, IMAGE_WARNING_COLOR))
                 failure_text = "; ".join(failed)
                 if len(failure_text) > 90:
-                    failure_text = f"{failure_text[:89]}…"
+                    failure_text = f"{failure_text[:89]}\u2026"
                 if failure_text:
                     drawtexts.append(text_filter(failure_text, 48, 148, 20, IMAGE_WARNING_COLOR))
             else:
                 drawtexts.append(text_filter(f"WSL + mini-1 \u00b7 Updated {updated}", 48, 118, 22, IMAGE_MUTED_COLOR))
+            per_row = 4 if len(providers) > 4 else len(providers)
+            for legend_index, provider in enumerate(providers):
+                row, col = divmod(legend_index, per_row)
+                legend_x = 48 + col * 360
+                legend_y = 190 + row * 36
+                color = token_provider_color(provider.get("provider", ""))
+                drawboxes.append(f"drawbox=x={legend_x}:y={legend_y + 4}:w=28:h=16:c={color}:t=fill")
+                drawtexts.append(text_filter(token_display_name(provider.get("provider", "")), legend_x + 38, legend_y, 20, IMAGE_TEXT_COLOR))
+            if incomplete and not sources_ok:
+                drawtexts.append(text_filter("Usage unavailable", 48, 262, 26, IMAGE_WARNING_COLOR))
             for level in range(6):
                 value = axis_max * level // 5
                 y = baseline - round(plot_height * level / 5)
                 drawboxes.append(f"drawbox=x={left}:y={y}:w={plot_width}:h=1:c=0x3b3b58:t=fill")
                 drawtexts.append(text_filter(format_compact_tokens(value), 8, y - 12, 20, IMAGE_MUTED_COLOR))
             drawboxes.append(f"drawbox=x={left}:y={baseline}:w={plot_width}:h=2:c=0x8b8ba3:t=fill")
-            for index, provider in enumerate(providers):
-                tokens = int(provider.get("tokens", 0))
-                color = token_provider_color(provider.get("provider", ""))
+            point_coords: list[tuple[int, int]] = []
+            for index, day in enumerate(days):
                 center = left + slot * index + slot / 2
                 bar_x = int(center - bar_width / 2)
-                bar_height = round(plot_height * tokens / axis_max) if axis_max else 0
-                bar_y = baseline - bar_height
-                if bar_height > 0:
-                    drawboxes.append(f"drawbox=x={bar_x}:y={bar_y}:w={bar_width}:h={bar_height}:c={color}:t=fill")
-                else:
-                    drawboxes.append(f"drawbox=x={bar_x}:y={baseline - 4}:w={bar_width}:h=4:c={color}:t=fill")
-                label_top = bar_y if bar_height > 0 else baseline
-                token_text = f"{tokens:,} tokens"
-                price_text = format_price_label(provider, incomplete)
-                size = 20
-                while size > 14 and (len(token_text) * size * 0.62 > slot - 8 or len(price_text) * size * 0.62 > slot - 8):
+                day_providers = day.get("providers", [])
+                totals_by_name = {str(item.get("provider", "")): int(item.get("tokens", 0)) for item in day_providers}
+                stacked = baseline
+                for provider in providers:
+                    name = str(provider.get("provider", ""))
+                    seg_tokens = max(0, totals_by_name.get(name, 0))
+                    seg_height = round(plot_height * seg_tokens / axis_max) if axis_max else 0
+                    if seg_height <= 0:
+                        continue
+                    seg_y = stacked - seg_height
+                    drawboxes.append(f"drawbox=x={bar_x}:y={seg_y}:w={bar_width}:h={seg_height}:c={token_provider_color(name)}:t=fill")
+                    stacked = seg_y
+                total = day_totals[index]
+                point_y = baseline - (round(plot_height * total / axis_max) if axis_max else 0)
+                point_x = int(center)
+                point_coords.append((point_x, point_y))
+                if total <= 0:
+                    drawboxes.append(f"drawbox=x={bar_x}:y={baseline - 4}:w={bar_width}:h=4:c=0x8b8ba3:t=fill")
+                token_text = f"{total:,} tokens"
+                price_text = format_price_label(day, incomplete)
+                size = 18
+                while size > 13 and (len(token_text) * size * 0.62 > slot - 8 or len(price_text) * size * 0.62 > slot - 8):
                     size -= 1
-                value_y = max(top - 96, label_top - 56)
+                value_y = max(296, point_y - 58)
                 drawtexts.append(text_filter(token_text, f"({center})-tw/2", value_y, size, IMAGE_TEXT_COLOR))
                 drawtexts.append(text_filter(price_text, f"({center})-tw/2", value_y + size + 6, size, IMAGE_MUTED_COLOR))
-                for line_index, label_line in enumerate(split_provider_label(token_display_name(provider.get("provider", "")))):
-                    drawtexts.append(text_filter(label_line, f"({center})-tw/2", baseline + 18 + line_index * 28, 22, IMAGE_TEXT_COLOR))
+                day_start = datetime.fromtimestamp(int(day.get("start_ms", snapshot["start_ms"])) / 1000, tz=timezone.utc)
+                drawtexts.append(text_filter(day_start.strftime("%b %d"), f"({center})-tw/2", baseline + 18, 20, IMAGE_TEXT_COLOR))
+            line_color = "0xffd166"
+            for first, second in zip(point_coords, point_coords[1:]):
+                steps = max(abs(second[0] - first[0]), abs(second[1] - first[1]), 1) // 3
+                for step in range(int(steps) + 1):
+                    fraction = step / steps if steps else 0
+                    line_x = round(first[0] + (second[0] - first[0]) * fraction) - 2
+                    line_y = round(first[1] + (second[1] - first[1]) * fraction) - 2
+                    drawboxes.append(f"drawbox=x={line_x}:y={line_y}:w=4:h=4:c={line_color}:t=fill")
+            for point_x, point_y in point_coords:
+                drawboxes.append(f"drawbox=x={point_x - 5}:y={point_y - 5}:w=10:h=10:c={line_color}:t=fill")
             total_tokens = sum(int(provider.get("tokens", 0)) for provider in providers)
             total_cost = math.fsum(float(provider.get("estimated_usd", 0.0)) for provider in providers)
             total_unpriced = sum(int(provider.get("unpriced_records", 0)) for provider in providers)
             aggregate = "Observed total" if incomplete else "Total"
             total_text = f"{aggregate}: {total_tokens:,} tokens \u00b7 {format_price_label({'tokens': total_tokens, 'estimated_usd': total_cost, 'unpriced_records': total_unpriced}, incomplete)}"
-            drawtexts.append(text_filter(total_text, 48, 724, 22, IMAGE_TEXT_COLOR))
-            drawtexts.append(text_filter("Reported OMP tokens \u00b7 Recorded USD estimates, not subscription charges", 48, 756, 20, IMAGE_MUTED_COLOR))
-            drawtexts.append(text_filter("Antigravity includes AGY CLI; unavailable prices are not counted as free.", 48, 784, 20, IMAGE_MUTED_COLOR))
-            if incomplete and not sources_ok:
-                drawtexts.append(text_filter("Usage unavailable", 48, 182, 26, IMAGE_WARNING_COLOR))
+            drawtexts.append(text_filter(total_text, 48, 820, 22, IMAGE_TEXT_COLOR))
+            drawtexts.append(text_filter("Reported OMP tokens \u00b7 Recorded USD estimates, not subscription charges", 48, 852, 20, IMAGE_MUTED_COLOR))
+            drawtexts.append(text_filter("Antigravity includes AGY CLI; unavailable prices are not counted as free.", 48, 880, 20, IMAGE_MUTED_COLOR))
             command = [
                 ffmpeg,
                 "-hide_banner",

@@ -36,8 +36,8 @@ def load_reporter():
 
 reporter = load_reporter()
 
-START_MS = 1_789_000_000_000
-END_MS = START_MS + 43_200_000
+START_MS = (1_789_000_000_000 // token_usage.DAY_MS) * token_usage.DAY_MS
+END_MS = START_MS + 7 * token_usage.DAY_MS
 BASELINE_PROVIDERS = ["openai-codex", "anthropic", "google-antigravity", "opencode-go", "zai"]
 RECORD_KEYS = {"entry_id", "timestamp_ms", "provider", "model", "api", "tokens", "estimated_usd"}
 
@@ -146,6 +146,17 @@ def merge_collections(collections):
 
 def provider_total(snapshot, name):
     for total in snapshot["providers"]:
+        if total["provider"] == name:
+            return total
+    return None
+
+
+def day_total(snapshot, index):
+    return snapshot["days"][index]
+
+
+def day_provider_total(day, name):
+    for total in day["providers"]:
         if total["provider"] == name:
             return total
     return None
@@ -541,7 +552,7 @@ class MergeUsageTests(unittest.TestCase):
         snapshot = merge_collections(
             [("WSL", merge_collection([])), ("mini-1", merge_collection([]))]
         )
-        self.assertEqual(set(snapshot), {"start_ms", "end_ms", "providers", "sources_ok", "issues"})
+        self.assertEqual(set(snapshot), {"start_ms", "end_ms", "providers", "days", "sources_ok", "issues"})
         self.assertEqual(snapshot["start_ms"], START_MS)
         self.assertEqual(snapshot["end_ms"], END_MS)
         self.assertEqual([total["provider"] for total in snapshot["providers"]], BASELINE_PROVIDERS)
@@ -550,6 +561,20 @@ class MergeUsageTests(unittest.TestCase):
             self.assertEqual(total["tokens"], 0)
             self.assertEqual(total["estimated_usd"], 0.0)
             self.assertEqual(total["unpriced_records"], 0)
+        self.assertEqual(len(snapshot["days"]), 7)
+        for index, day in enumerate(snapshot["days"]):
+            self.assertEqual(set(day), {"start_ms", "end_ms", "providers", "tokens", "estimated_usd", "unpriced_records"})
+            self.assertEqual(day["start_ms"], START_MS + index * token_usage.DAY_MS)
+            self.assertEqual(day["end_ms"], START_MS + (index + 1) * token_usage.DAY_MS)
+            self.assertEqual([total["provider"] for total in day["providers"]], BASELINE_PROVIDERS)
+            for total in day["providers"]:
+                self.assertEqual(set(total), {"provider", "tokens", "estimated_usd", "unpriced_records"})
+                self.assertEqual(total["tokens"], 0)
+                self.assertEqual(total["estimated_usd"], 0.0)
+                self.assertEqual(total["unpriced_records"], 0)
+            self.assertEqual(day["tokens"], 0)
+            self.assertEqual(day["estimated_usd"], 0.0)
+            self.assertEqual(day["unpriced_records"], 0)
         self.assertEqual(sorted(snapshot["sources_ok"]), ["WSL", "mini-1"])
         self.assertEqual(snapshot["issues"], [])
 
@@ -563,6 +588,12 @@ class MergeUsageTests(unittest.TestCase):
             [total["provider"] for total in snapshot["providers"]],
             BASELINE_PROVIDERS + ["azure-openai", "mistral"],
         )
+        self.assertEqual(
+            [total["provider"] for total in snapshot["days"][0]["providers"]],
+            BASELINE_PROVIDERS + ["azure-openai", "mistral"],
+        )
+        self.assertEqual(day_provider_total(snapshot["days"][0], "mistral")["tokens"], 100)
+        self.assertEqual(day_provider_total(snapshot["days"][0], "azure-openai")["tokens"], 100)
 
     def test_fork_duplicate_with_reset_price_counts_once_with_positive_price(self):
         local = merge_collection([merge_record("r1", tokens=100, estimated_usd=0.25)])
@@ -678,6 +709,99 @@ class MergeUsageTests(unittest.TestCase):
         ]
         snapshot = merge_collections([("WSL", merge_collection(records))])
         self.assertEqual(provider_total(snapshot, "openai-codex")["estimated_usd"], 1.0)
+
+    def test_records_in_two_day_bins_split_daily_and_aggregate_totals(self):
+        day_ms = token_usage.DAY_MS
+        records = [
+            merge_record("day0-priced", timestamp_ms=START_MS + 1_000, tokens=100, estimated_usd=0.25),
+            merge_record("day0-unpriced", timestamp_ms=START_MS + 2_000, tokens=40, estimated_usd=None),
+            merge_record(
+                "day3-priced",
+                timestamp_ms=START_MS + 3 * day_ms + 1_000,
+                provider="anthropic",
+                model="claude-opus",
+                api="anthropic-messages",
+                tokens=70,
+                estimated_usd=0.10,
+            ),
+            merge_record(
+                "day3-unpriced",
+                timestamp_ms=START_MS + 3 * day_ms + 2_000,
+                provider="anthropic",
+                model="claude-opus",
+                api="anthropic-messages",
+                tokens=30,
+                estimated_usd=None,
+            ),
+        ]
+        snapshot = merge_collections([("WSL", merge_collection(records))])
+        self.assertEqual(len(snapshot["days"]), 7)
+        first = day_total(snapshot, 0)
+        fourth = day_total(snapshot, 3)
+        self.assertEqual(day_provider_total(first, "openai-codex")["tokens"], 140)
+        self.assertAlmostEqual(day_provider_total(first, "openai-codex")["estimated_usd"], 0.25, places=9)
+        self.assertEqual(day_provider_total(first, "openai-codex")["unpriced_records"], 1)
+        self.assertEqual(first["tokens"], 140)
+        self.assertAlmostEqual(first["estimated_usd"], 0.25, places=9)
+        self.assertEqual(first["unpriced_records"], 1)
+        self.assertEqual(day_provider_total(fourth, "anthropic")["tokens"], 100)
+        self.assertAlmostEqual(day_provider_total(fourth, "anthropic")["estimated_usd"], 0.10, places=9)
+        self.assertEqual(day_provider_total(fourth, "anthropic")["unpriced_records"], 1)
+        self.assertEqual(fourth["tokens"], 100)
+        self.assertAlmostEqual(fourth["estimated_usd"], 0.10, places=9)
+        self.assertEqual(fourth["unpriced_records"], 1)
+        for index in (1, 2, 4, 5, 6):
+            self.assertEqual(day_total(snapshot, index)["tokens"], 0)
+            self.assertEqual(day_total(snapshot, index)["unpriced_records"], 0)
+        self.assertEqual(provider_total(snapshot, "openai-codex")["tokens"], 140)
+        self.assertAlmostEqual(provider_total(snapshot, "openai-codex")["estimated_usd"], 0.25, places=9)
+        self.assertEqual(provider_total(snapshot, "openai-codex")["unpriced_records"], 1)
+        self.assertEqual(provider_total(snapshot, "anthropic")["tokens"], 100)
+        self.assertAlmostEqual(provider_total(snapshot, "anthropic")["estimated_usd"], 0.10, places=9)
+        self.assertEqual(provider_total(snapshot, "anthropic")["unpriced_records"], 1)
+
+
+class CollectTokenSnapshotWindowTests(unittest.TestCase):
+    def test_passes_seven_day_utc_midnight_window_to_local_and_remote(self):
+        day_ms = reporter.TOKEN_DAY_MS
+        lookback = reporter.TOKEN_LOOKBACK_DAYS
+        now_ms = START_MS + (lookback - 1) * day_ms + 12_345_678
+        expected_end_ms = now_ms
+        expected_start_ms = (expected_end_ms // day_ms - lookback + 1) * day_ms
+        self.assertEqual(expected_start_ms % day_ms, 0)
+        self.assertEqual(expected_start_ms, START_MS)
+        self.assertEqual(expected_end_ms // day_ms - expected_start_ms // day_ms + 1, lookback)
+        local_collection = {"start_ms": expected_start_ms, "end_ms": expected_end_ms, "records": [], "issues": []}
+        remote_collection = {"start_ms": expected_start_ms, "end_ms": expected_end_ms, "records": [], "issues": []}
+        merged = {
+            "start_ms": expected_start_ms,
+            "end_ms": expected_end_ms,
+            "providers": [],
+            "days": [],
+            "sources_ok": ["WSL", "mini-1"],
+            "issues": [],
+        }
+        with mock.patch.object(
+            reporter, "local_token_collection", return_value=("WSL", local_collection, [])
+        ) as local, mock.patch.object(
+            reporter, "check_ssh_host", return_value="mini-1"
+        ), mock.patch.object(
+            reporter, "remote_token_collection_source", return_value=b"collector-source"
+        ), mock.patch.object(
+            reporter, "remote_token_collection", return_value=("mini-1", remote_collection, [])
+        ) as remote, mock.patch.object(
+            token_usage, "merge_usage", return_value=dict(merged)
+        ) as merge:
+            snapshot = reporter.collect_token_snapshot(now_ms)
+        local.assert_called_once_with(expected_start_ms, expected_end_ms)
+        remote.assert_called_once_with("mini-1", b"collector-source", expected_start_ms, expected_end_ms)
+        merge.assert_called_once()
+        merge_collections_arg = merge.call_args.args[0] if merge.call_args.args else merge.call_args.kwargs.get("collections")
+        self.assertEqual(merge_collections_arg, [("WSL", local_collection), ("mini-1", remote_collection)])
+        self.assertEqual(call_arg(merge.call_args, 1, "start_ms"), expected_start_ms)
+        self.assertEqual(call_arg(merge.call_args, 2, "end_ms"), expected_end_ms)
+        self.assertEqual(snapshot["start_ms"], expected_start_ms)
+        self.assertEqual(snapshot["end_ms"], expected_end_ms)
 
 
 class ReporterTelegramStateTests(unittest.TestCase):
