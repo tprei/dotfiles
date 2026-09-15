@@ -7,10 +7,9 @@ Local history.
 Baseline commit message: Upstream OMP v18.1.22 baseline 23a5b9a
 Baseline SHA: 23a5b9ae38864d3f785dc6cbc96eb6d674a1d32d
 Runtime commit message: Prevent main sessions from using disabled providers
-Runtime SHA: df104c3eed1c7b54d2edfe6a6a210102fa25ef82
+Patch file: 0001-Prevent-main-sessions-from-using-disabled-providers.patch
 Runtime commit message: Retry transient z.ai authentication blips
-Runtime SHA: fb1d6f5cf9f8ee9114707bffbcb589af457db866
-Reapply source: /home/mbn/src/oh-my-pi, branch main-driver-no-agy
+Patch file: 0002-Retry-transient-zai-authentication-blips.patch
 
 Live locations on this machine, kept out of this repo.
 Source checkout: /home/mbn/src/oh-my-pi, branch main-driver-no-agy

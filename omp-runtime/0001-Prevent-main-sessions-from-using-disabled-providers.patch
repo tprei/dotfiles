@@ -1,4 +1,4 @@
-From f9fd9395825a7c2da136fcf5b9fc62185c69d434 Mon Sep 17 00:00:00 2001
+From df104c3eed1c7b54d2edfe6a6a210102fa25ef82 Mon Sep 17 00:00:00 2001
 From: tprei <37089330+tprei@users.noreply.github.com>
 Date: Mon, 14 Sep 2026 22:09:29 +0100
 Subject: [PATCH] Prevent main sessions from using disabled providers
@@ -17,10 +17,10 @@ Subject: [PATCH] Prevent main sessions from using disabled providers
  create mode 100644 packages/coding-agent/src/session/main-agent-model-policy.ts
 
 diff --git a/packages/coding-agent/src/config/settings-schema.ts b/packages/coding-agent/src/config/settings-schema.ts
-index c5a6911..a7297f5 100644
+index d306d04..8203673 100644
 --- a/packages/coding-agent/src/config/settings-schema.ts
 +++ b/packages/coding-agent/src/config/settings-schema.ts
-@@ -626,6 +626,7 @@ export const SETTINGS_SCHEMA = {
+@@ -628,6 +628,7 @@ export const SETTINGS_SCHEMA = {
  	enabledProviders: { type: "array", default: EMPTY_STRING_ARRAY },
  
  	disabledProviders: { type: "array", default: EMPTY_STRING_ARRAY },
@@ -29,7 +29,7 @@ index c5a6911..a7297f5 100644
  	"providers.maxInFlightRequests": {
  		type: "record",
 diff --git a/packages/coding-agent/src/session/agent-session.ts b/packages/coding-agent/src/session/agent-session.ts
-index 865f957..7581911 100644
+index f1b4586..708407d 100644
 --- a/packages/coding-agent/src/session/agent-session.ts
 +++ b/packages/coding-agent/src/session/agent-session.ts
 @@ -306,6 +306,7 @@ import {
@@ -40,7 +40,7 @@ index 865f957..7581911 100644
  import {
  	type BashExecutionMessage,
  	buildReplanTitleContext,
-@@ -1240,6 +1241,18 @@ export class AgentSession {
+@@ -1251,6 +1252,18 @@ export class AgentSession {
  		this.#codeModeState = config.codeModeState ?? {};
  		this.sessionManager = config.sessionManager;
  		this.settings = config.settings;
@@ -59,7 +59,7 @@ index 865f957..7581911 100644
  		this.#modelRegistry = config.modelRegistry;
  		this.#extensionRoots =
  			config.extensionRoots ??
-@@ -1341,6 +1354,7 @@ export class AgentSession {
+@@ -1352,6 +1365,7 @@ export class AgentSession {
  			sessionManager: this.sessionManager,
  			providerSessionState: this.#providerSessionState,
  			model: () => this.model,
@@ -67,7 +67,7 @@ index 865f957..7581911 100644
  			sessionId: () => this.sessionId,
  			promptGeneration: () => this.#promptGeneration,
  			resolveActiveEditMode: () => this.#tools.resolveActiveEditMode(),
-@@ -1373,6 +1387,7 @@ export class AgentSession {
+@@ -1384,6 +1398,7 @@ export class AgentSession {
  			modelRegistry: this.#modelRegistry,
  			configWarnings: this.configWarnings,
  			model: () => this.model,
@@ -75,7 +75,7 @@ index 865f957..7581911 100644
  			contextFitsModel: (model, excludedMessage) => this.#maintenance.contextFitsModel(model, excludedMessage),
  			textOutputCommitted: () => this.#textOutputCommitted,
  			thinkingLevel: () => this.thinkingLevel,
-@@ -1671,7 +1686,6 @@ export class AgentSession {
+@@ -1682,7 +1697,6 @@ export class AgentSession {
  		this.#streamingEditGuard = new StreamingEditGuard(streamGuardsHost);
  		this.#loopGuards = new LoopGuards(streamGuardsHost);
  		this.#agentId = config.agentId;
@@ -83,7 +83,7 @@ index 865f957..7581911 100644
  		this.#scoutAllowedBySpawnPolicy = config.scoutAllowedBySpawnPolicy ?? true;
  		this.#providerSessionId = config.providerSessionId;
  		this.#inheritedProviderPromptCacheKey =
-@@ -8500,6 +8514,7 @@ export class AgentSession {
+@@ -8541,6 +8555,7 @@ export class AgentSession {
  	}
  
  	async #setModelWithProviderSessionReset(model: Model): Promise<void> {
@@ -91,7 +91,7 @@ index 865f957..7581911 100644
  		const currentModel = this.model;
  		const isChanging = !currentModel || !modelsAreEqual(currentModel, model);
  		if (currentModel) {
-@@ -9173,6 +9188,7 @@ export class AgentSession {
+@@ -9224,6 +9239,7 @@ export class AgentSession {
  					if (match) break;
  				}
  				if (match) {
