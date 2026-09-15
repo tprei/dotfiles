@@ -1,16 +1,18 @@
 Upstream OMP release this customization builds on.
-Release: v18.1.18
-Upstream commit: 00085d4e7dfdcfbf302c122fa2682b410a0f43d1
-Tarball: https://codeload.github.com/can1357/oh-my-pi/tar.gz/00085d4e7dfdcfbf302c122fa2682b410a0f43d1
+Release: v18.1.22
+Upstream commit: 23a5b9ae38864d3f785dc6cbc96eb6d674a1d32d
+Tarball: https://codeload.github.com/can1357/oh-my-pi/tar.gz/23a5b9ae38864d3f785dc6cbc96eb6d674a1d32d
 
 Local history.
-Baseline commit message: Upstream OMP v18.1.18 baseline 00085d4
-Baseline SHA: 21f7a6fd897bbc563fb5bb278f898eabe4149c1c
+Baseline commit message: Upstream OMP v18.1.22 baseline 23a5b9a
+Baseline SHA: 23a5b9ae38864d3f785dc6cbc96eb6d674a1d32d
 Runtime commit message: Prevent main sessions from using disabled providers
-Runtime SHA: f9fd9395825a7c2da136fcf5b9fc62185c69d434
-Patch file: 0001-Prevent-main-sessions-from-using-disabled-providers.patch
+Runtime SHA: df104c3eed1c7b54d2edfe6a6a210102fa25ef82
+Runtime commit message: Retry transient z.ai authentication blips
+Runtime SHA: fb1d6f5cf9f8ee9114707bffbcb589af457db866
+Reapply source: /home/mbn/src/oh-my-pi, branch main-driver-no-agy
 
 Live locations on this machine, kept out of this repo.
-Source checkout: /home/mbn/src/oh-my-pi, branch upstream-v18.1.18
+Source checkout: /home/mbn/src/oh-my-pi, branch main-driver-no-agy
 Worktree: /home/mbn/.worktrees/oh-my-pi-main-driver-no-agy, branch main-driver-no-agy
 Launcher: /home/mbn/.bun/bin/omp -> .../packages/coding-agent/scripts/omp
