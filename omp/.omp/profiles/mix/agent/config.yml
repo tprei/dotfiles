@@ -50,7 +50,7 @@ edit:
 retry:
   modelFallback: true
   fallbackRevertPolicy: cooldown-expiry
-  maxDelayMs: 0
+  maxDelayMs: 300000
   fallbackChains:
     default:
       - zai/glm-5.3-flash:high

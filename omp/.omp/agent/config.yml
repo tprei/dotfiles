@@ -50,7 +50,7 @@ dev:
 retry:
   modelFallback: true
   fallbackRevertPolicy: cooldown-expiry
-  maxDelayMs: 0
+  maxDelayMs: 300000
   fallbackChains:
     default:
       - zai/glm-5.3-flash:high
@@ -80,7 +80,7 @@ retry:
     opencode-go/*:
       - antigravity-cli/gemini-3.8-flash:high
       - zai/glm-5.3-flash:high
-hideThinkingBlock: false
+hideThinkingBlock: true
 composer:
   shape: box
 codexResets:
