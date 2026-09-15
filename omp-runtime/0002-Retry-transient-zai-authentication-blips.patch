@@ -1,7 +1,7 @@
-From fb1d6f5cf9f8ee9114707bffbcb589af457db866 Mon Sep 17 00:00:00 2001
+From 4f9e32ff974bf2a8408ccb176a872b1ebeefe1c8 Mon Sep 17 00:00:00 2001
 From: tprei <37089330+tprei@users.noreply.github.com>
 Date: Tue, 15 Sep 2026 15:10:07 +0100
-Subject: [PATCH] Retry transient z.ai authentication blips
+Subject: [PATCH 2/2] Retry transient z.ai authentication blips
 
 ---
  packages/ai/src/auth-storage.ts               | 59 ++++++++++---------
@@ -14,7 +14,7 @@ Subject: [PATCH] Retry transient z.ai authentication blips
  7 files changed, 214 insertions(+), 30 deletions(-)
 
 diff --git a/packages/ai/src/auth-storage.ts b/packages/ai/src/auth-storage.ts
-index 8ca4f07..1a94b97 100644
+index 8ca4f07cc0..1a94b97b72 100644
 --- a/packages/ai/src/auth-storage.ts
 +++ b/packages/ai/src/auth-storage.ts
 @@ -6935,40 +6935,45 @@ export class AuthStorage {
@@ -91,7 +91,7 @@ index 8ca4f07..1a94b97 100644
  
  		return hasSibling;
 diff --git a/packages/ai/src/error/auth-classify.ts b/packages/ai/src/error/auth-classify.ts
-index c13461b..036be45 100644
+index c13461b62b..036be45f96 100644
 --- a/packages/ai/src/error/auth-classify.ts
 +++ b/packages/ai/src/error/auth-classify.ts
 @@ -1,5 +1,11 @@
@@ -133,7 +133,7 @@ index c13461b..036be45 100644
 +	return isZaiTransientAuthBlipMessage(message);
 +}
 diff --git a/packages/ai/src/error/flags.ts b/packages/ai/src/error/flags.ts
-index 63ad80a..356fa1c 100644
+index 63ad80a5b2..356fa1c8bb 100644
 --- a/packages/ai/src/error/flags.ts
 +++ b/packages/ai/src/error/flags.ts
 @@ -167,6 +167,13 @@ export const TRANSIENT_TRANSPORT_PATTERN =
@@ -166,7 +166,7 @@ index 63ad80a..356fa1c 100644
  		const isOpaque = isOpaqueStatusBody(cleanMessage);
  
 diff --git a/packages/ai/test/auth-retry.test.ts b/packages/ai/test/auth-retry.test.ts
-index cd9f12d..e36bd70 100644
+index cd9f12db5d..e36bd70a20 100644
 --- a/packages/ai/test/auth-retry.test.ts
 +++ b/packages/ai/test/auth-retry.test.ts
 @@ -8,7 +8,8 @@ import {
@@ -224,7 +224,7 @@ index cd9f12d..e36bd70 100644
  	it("runs a single attempt for a static string key (no retry)", async () => {
  		const keys: Array<string | undefined> = [];
 diff --git a/packages/ai/test/auth-storage-zai-api-key-selection.test.ts b/packages/ai/test/auth-storage-zai-api-key-selection.test.ts
-index d04811a..6101e00 100644
+index d04811a92f..6101e0000f 100644
 --- a/packages/ai/test/auth-storage-zai-api-key-selection.test.ts
 +++ b/packages/ai/test/auth-storage-zai-api-key-selection.test.ts
 @@ -280,4 +280,41 @@ describe("AuthStorage Z.AI API-key usage ranking", () => {
@@ -270,10 +270,10 @@ index d04811a..6101e00 100644
 +	});
  });
 diff --git a/packages/coding-agent/src/session/turn-recovery.ts b/packages/coding-agent/src/session/turn-recovery.ts
-index f37faf8..39a994d 100644
+index 784f2fbe1f..43aca2212c 100644
 --- a/packages/coding-agent/src/session/turn-recovery.ts
 +++ b/packages/coding-agent/src/session/turn-recovery.ts
-@@ -75,6 +75,8 @@ const UNEXPECTED_STOP_TIMEOUT_MS = 4000;
+@@ -74,6 +74,8 @@ const UNEXPECTED_STOP_TIMEOUT_MS = 4000;
  const EMPTY_STOP_MAX_RETRIES = 3;
  const MALFORMED_FUNCTION_CALL_MAX_RETRIES = 3;
  const SIBLING_UNBLOCK_BUFFER_MS = 1_000;
@@ -282,7 +282,7 @@ index f37faf8..39a994d 100644
  const NON_WHITESPACE_RE = /\S/;
  const USAGE_PREFLIGHT_BLOCKED_PREFIX = "Usage preflight blocked:";
  const STREAM_STALL_ERROR_RE = /stream stall/i;
-@@ -2350,6 +2352,23 @@ export class TurnRecovery {
+@@ -2349,6 +2351,23 @@ export class TurnRecovery {
  				delayMs = parsedRetryAfterMs;
  			}
  		}
@@ -307,7 +307,7 @@ index f37faf8..39a994d 100644
  		if (retryBudgetExhausted) {
  			if (!switchedModel && !switchedCredential) {
 diff --git a/packages/coding-agent/test/agent-session-retry-fallback.test.ts b/packages/coding-agent/test/agent-session-retry-fallback.test.ts
-index ae3a95b..3825e8a 100644
+index ae3a95b613..3825e8a5c6 100644
 --- a/packages/coding-agent/test/agent-session-retry-fallback.test.ts
 +++ b/packages/coding-agent/test/agent-session-retry-fallback.test.ts
 @@ -3585,6 +3585,53 @@ describe("AgentSession retry fallback", () => {

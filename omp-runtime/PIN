@@ -1,11 +1,11 @@
 Upstream OMP release this customization builds on.
-Release: v18.1.22
-Upstream commit: 23a5b9ae38864d3f785dc6cbc96eb6d674a1d32d
-Tarball: https://codeload.github.com/can1357/oh-my-pi/tar.gz/23a5b9ae38864d3f785dc6cbc96eb6d674a1d32d
+Release: v18.2.0
+Upstream commit: 6f2c14b3e4cc065139789da893e4f86f3d72958c
+Tarball: https://codeload.github.com/can1357/oh-my-pi/tar.gz/6f2c14b3e4cc065139789da893e4f86f3d72958c
 
 Local history.
-Baseline commit message: Upstream OMP v18.1.22 baseline 23a5b9a
-Baseline SHA: 23a5b9ae38864d3f785dc6cbc96eb6d674a1d32d
+Baseline commit message: Upstream OMP v18.2.0 baseline 6f2c14b
+Baseline SHA: 6f2c14b3e4cc065139789da893e4f86f3d72958c
 Runtime commit message: Prevent main sessions from using disabled providers
 Patch file: 0001-Prevent-main-sessions-from-using-disabled-providers.patch
 Runtime commit message: Retry transient z.ai authentication blips

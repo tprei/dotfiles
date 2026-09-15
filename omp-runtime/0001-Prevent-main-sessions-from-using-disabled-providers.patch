@@ -1,7 +1,7 @@
-From df104c3eed1c7b54d2edfe6a6a210102fa25ef82 Mon Sep 17 00:00:00 2001
+From eb8545afceaac7d4cf17404066110544808da35f Mon Sep 17 00:00:00 2001
 From: tprei <37089330+tprei@users.noreply.github.com>
 Date: Mon, 14 Sep 2026 22:09:29 +0100
-Subject: [PATCH] Prevent main sessions from using disabled providers
+Subject: [PATCH 1/2] Prevent main sessions from using disabled providers
 
 ---
  .../src/config/settings-schema.ts             |   1 +
@@ -17,7 +17,7 @@ Subject: [PATCH] Prevent main sessions from using disabled providers
  create mode 100644 packages/coding-agent/src/session/main-agent-model-policy.ts
 
 diff --git a/packages/coding-agent/src/config/settings-schema.ts b/packages/coding-agent/src/config/settings-schema.ts
-index d306d04..8203673 100644
+index 739a8cea03..eb4c59852e 100644
 --- a/packages/coding-agent/src/config/settings-schema.ts
 +++ b/packages/coding-agent/src/config/settings-schema.ts
 @@ -628,6 +628,7 @@ export const SETTINGS_SCHEMA = {
@@ -29,7 +29,7 @@ index d306d04..8203673 100644
  	"providers.maxInFlightRequests": {
  		type: "record",
 diff --git a/packages/coding-agent/src/session/agent-session.ts b/packages/coding-agent/src/session/agent-session.ts
-index f1b4586..708407d 100644
+index 45bb8a83dc..596635ac64 100644
 --- a/packages/coding-agent/src/session/agent-session.ts
 +++ b/packages/coding-agent/src/session/agent-session.ts
 @@ -306,6 +306,7 @@ import {
@@ -40,7 +40,7 @@ index f1b4586..708407d 100644
  import {
  	type BashExecutionMessage,
  	buildReplanTitleContext,
-@@ -1251,6 +1252,18 @@ export class AgentSession {
+@@ -1257,6 +1258,18 @@ export class AgentSession {
  		this.#codeModeState = config.codeModeState ?? {};
  		this.sessionManager = config.sessionManager;
  		this.settings = config.settings;
@@ -59,7 +59,7 @@ index f1b4586..708407d 100644
  		this.#modelRegistry = config.modelRegistry;
  		this.#extensionRoots =
  			config.extensionRoots ??
-@@ -1352,6 +1365,7 @@ export class AgentSession {
+@@ -1358,6 +1371,7 @@ export class AgentSession {
  			sessionManager: this.sessionManager,
  			providerSessionState: this.#providerSessionState,
  			model: () => this.model,
@@ -67,7 +67,7 @@ index f1b4586..708407d 100644
  			sessionId: () => this.sessionId,
  			promptGeneration: () => this.#promptGeneration,
  			resolveActiveEditMode: () => this.#tools.resolveActiveEditMode(),
-@@ -1384,6 +1398,7 @@ export class AgentSession {
+@@ -1390,6 +1404,7 @@ export class AgentSession {
  			modelRegistry: this.#modelRegistry,
  			configWarnings: this.configWarnings,
  			model: () => this.model,
@@ -75,7 +75,7 @@ index f1b4586..708407d 100644
  			contextFitsModel: (model, excludedMessage) => this.#maintenance.contextFitsModel(model, excludedMessage),
  			textOutputCommitted: () => this.#textOutputCommitted,
  			thinkingLevel: () => this.thinkingLevel,
-@@ -1682,7 +1697,6 @@ export class AgentSession {
+@@ -1688,7 +1703,6 @@ export class AgentSession {
  		this.#streamingEditGuard = new StreamingEditGuard(streamGuardsHost);
  		this.#loopGuards = new LoopGuards(streamGuardsHost);
  		this.#agentId = config.agentId;
@@ -83,7 +83,7 @@ index f1b4586..708407d 100644
  		this.#scoutAllowedBySpawnPolicy = config.scoutAllowedBySpawnPolicy ?? true;
  		this.#providerSessionId = config.providerSessionId;
  		this.#inheritedProviderPromptCacheKey =
-@@ -8541,6 +8555,7 @@ export class AgentSession {
+@@ -8547,6 +8561,7 @@ export class AgentSession {
  	}
  
  	async #setModelWithProviderSessionReset(model: Model): Promise<void> {
@@ -91,7 +91,7 @@ index f1b4586..708407d 100644
  		const currentModel = this.model;
  		const isChanging = !currentModel || !modelsAreEqual(currentModel, model);
  		if (currentModel) {
-@@ -9224,6 +9239,7 @@ export class AgentSession {
+@@ -9230,6 +9245,7 @@ export class AgentSession {
  					if (match) break;
  				}
  				if (match) {
@@ -101,7 +101,7 @@ index f1b4586..708407d 100644
  						switchingToDifferentSession ||
 diff --git a/packages/coding-agent/src/session/main-agent-model-policy.ts b/packages/coding-agent/src/session/main-agent-model-policy.ts
 new file mode 100644
-index 0000000..5dd2213
+index 0000000000..5dd221312d
 --- /dev/null
 +++ b/packages/coding-agent/src/session/main-agent-model-policy.ts
 @@ -0,0 +1,16 @@
@@ -122,7 +122,7 @@ index 0000000..5dd2213
 +	}
 +}
 diff --git a/packages/coding-agent/src/session/model-controls.ts b/packages/coding-agent/src/session/model-controls.ts
-index 4ed785e..81ab90e 100644
+index 4ed785ec1f..81ab90e2e2 100644
 --- a/packages/coding-agent/src/session/model-controls.ts
 +++ b/packages/coding-agent/src/session/model-controls.ts
 @@ -37,12 +37,14 @@ import {
@@ -196,10 +196,10 @@ index 4ed785e..81ab90e 100644
  		if (!patterns || patterns.length === 0) return all;
  		return filterAvailableModelsByEnabledPatterns(all, patterns, this.#host.settings);
 diff --git a/packages/coding-agent/src/session/turn-recovery.ts b/packages/coding-agent/src/session/turn-recovery.ts
-index 37489c2..f37faf8 100644
+index e13f87b9b2..784f2fbe1f 100644
 --- a/packages/coding-agent/src/session/turn-recovery.ts
 +++ b/packages/coding-agent/src/session/turn-recovery.ts
-@@ -28,6 +28,7 @@ import type { ModelRegistry } from "../config/model-registry";
+@@ -27,6 +27,7 @@ import type { ModelRegistry } from "../config/model-registry";
  import { formatModelStringWithRouting, resolveModelOverride } from "../config/model-resolver";
  
  import type { Settings } from "../config/settings";
@@ -207,7 +207,7 @@ index 37489c2..f37faf8 100644
  import type { RetryErrorUpdate } from "../extensibility/shared-events";
  import emptyStopRetryTemplate from "../prompts/system/empty-stop-retry.md" with { type: "text" };
  import malformedFunctionCallRetryTemplate from "../prompts/system/malformed-function-call-retry.md" with { type: "text" };
-@@ -175,6 +176,7 @@ export interface TurnRecoveryHost {
+@@ -174,6 +175,7 @@ export interface TurnRecoveryHost {
  	settings: Settings;
  	modelRegistry: ModelRegistry;
  	configWarnings: string[];
@@ -215,7 +215,7 @@ index 37489c2..f37faf8 100644
  	model(): Model | undefined;
  	/**
  	 * Whether the live context fits `model`'s usable window. `excludedMessage`
-@@ -343,6 +345,11 @@ export class TurnRecovery {
+@@ -342,6 +344,11 @@ export class TurnRecovery {
  		this.#fallbackRoutedFor = this.#host.sessionManager.getSessionId();
  	}
  
@@ -227,7 +227,7 @@ index 37489c2..f37faf8 100644
  	/**
  	 * Model this session's produced work is attributed to.
  	 *
-@@ -1681,7 +1688,9 @@ export class TurnRecovery {
+@@ -1680,7 +1687,9 @@ export class TurnRecovery {
  				if (this.isRetryFallbackSelectorSuppressed(candidate)) continue;
  				const resolved = resolveModelOverride([candidate.raw], this.#host.modelRegistry, this.#host.settings);
  				const candidateModel = resolved.model ?? this.#host.modelRegistry.find(candidate.provider, candidate.id);
@@ -238,7 +238,7 @@ index 37489c2..f37faf8 100644
  				if (ceiling !== undefined && !modelSupportsEffortCeiling(candidateModel, ceiling)) continue;
  				// A usage fallback must also fit: skip a candidate whose window cannot
  				// hold the live context so we never switch onto an oversized request
-@@ -1792,6 +1801,7 @@ export class TurnRecovery {
+@@ -1791,6 +1800,7 @@ export class TurnRecovery {
  		if (!candidate) {
  			throw new Error(`Retry fallback model not found: ${selector.raw}`);
  		}
@@ -246,7 +246,7 @@ index 37489c2..f37faf8 100644
  		const apiKey =
  			options?.apiKey ??
  			(await this.#host.modelRegistry.getApiKey(candidate, this.#host.sessionId(), { signal: options?.signal }));
-@@ -1882,6 +1892,7 @@ export class TurnRecovery {
+@@ -1881,6 +1891,7 @@ export class TurnRecovery {
  				const resolved = resolveModelOverride([selector.raw], this.#host.modelRegistry, this.#host.settings);
  				const candidate = resolved.model ?? this.#host.modelRegistry.find(selector.provider, selector.id);
  				if (!candidate) continue;
@@ -254,7 +254,7 @@ index 37489c2..f37faf8 100644
  				if (options?.excludeProvider === candidate.provider) continue;
  				// Anthropic signatures and redacted blocks are model-bound, while the
  				// latest assistant response must remain byte-identical. A same-provider
-@@ -1991,8 +2002,13 @@ export class TurnRecovery {
+@@ -1990,8 +2001,13 @@ export class TurnRecovery {
  		}
  		if (this.#hasReplayUnsafeOutput(message)) return false;
  		const currentSelector = formatRetryFallbackSelector(model, this.#host.thinkingLevel());
@@ -270,7 +270,7 @@ index 37489c2..f37faf8 100644
  		);
  	}
  
-@@ -2007,6 +2023,7 @@ export class TurnRecovery {
+@@ -2006,6 +2022,7 @@ export class TurnRecovery {
  		if (!model) return false;
  		const baseModel = this.#host.modelRegistry.find("fireworks", toFireworksBaseModelId(model.id));
  		if (!baseModel) return false;
@@ -278,7 +278,7 @@ index 37489c2..f37faf8 100644
  		const apiKey = await this.#host.modelRegistry.getApiKey(baseModel, this.#host.sessionId());
  		if (!apiKey) return false;
  		const baseSelector = formatModelStringWithRouting(baseModel);
-@@ -2065,6 +2082,7 @@ export class TurnRecovery {
+@@ -2064,6 +2081,7 @@ export class TurnRecovery {
  		const primaryModel =
  			resolvedPrimary.model ?? this.#host.modelRegistry.find(originalSelector.provider, originalSelector.id);
  		if (!primaryModel) return false;
@@ -287,7 +287,7 @@ index 37489c2..f37faf8 100644
  		if (!apiKey) return false;
  
 diff --git a/packages/coding-agent/test/agent-session-model-switch-auth.test.ts b/packages/coding-agent/test/agent-session-model-switch-auth.test.ts
-index 2dcf69b..acc149b 100644
+index 2dcf69b572..acc149bbca 100644
 --- a/packages/coding-agent/test/agent-session-model-switch-auth.test.ts
 +++ b/packages/coding-agent/test/agent-session-model-switch-auth.test.ts
 @@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, spyOn } from "bun
@@ -407,7 +407,7 @@ index 2dcf69b..acc149b 100644
 +	});
  });
 diff --git a/packages/coding-agent/test/agent-session-retry-fallback.test.ts b/packages/coding-agent/test/agent-session-retry-fallback.test.ts
-index 9a847c0..ae3a95b 100644
+index 9a847c0ea4..ae3a95b613 100644
 --- a/packages/coding-agent/test/agent-session-retry-fallback.test.ts
 +++ b/packages/coding-agent/test/agent-session-retry-fallback.test.ts
 @@ -6194,4 +6194,165 @@ describe("AgentSession retry fallback", () => {
@@ -577,7 +577,7 @@ index 9a847c0..ae3a95b 100644
 +	});
  });
 diff --git a/packages/coding-agent/test/issue-2750-subagent-runtime-fallback.test.ts b/packages/coding-agent/test/issue-2750-subagent-runtime-fallback.test.ts
-index dee88a6..378fdf5 100644
+index dee88a688f..378fdf5149 100644
 --- a/packages/coding-agent/test/issue-2750-subagent-runtime-fallback.test.ts
 +++ b/packages/coding-agent/test/issue-2750-subagent-runtime-fallback.test.ts
 @@ -108,6 +108,7 @@ describe("subagent runtime model resolution", () => {
@@ -589,7 +589,7 @@ index dee88a6..378fdf5 100644
  					thinkingLevel: () => activeLevel,
  					sessionManager: { getSessionId: () => "literal-model" },
 diff --git a/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts b/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
-index 5a6e154..e5f8a0c 100644
+index 5a6e1542ae..e5f8a0c644 100644
 --- a/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
 +++ b/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
 @@ -60,6 +60,7 @@ function createHost(
