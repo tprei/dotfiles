@@ -13,11 +13,11 @@ modelRoles:
   slow: anthropic/claude-opus-5:high
   plan: openai-codex/gpt-6-astra:medium
   advisor: antigravity-cli/gemini-3.8-flash:high
-  task: zai/glm-5.3-flash:high
-  vision: zai/glm-5.3:high
+  task: zai/glm-5.3-flash:max
+  vision: zai/glm-5.3:max
   commit: antigravity-cli/gemini-3.8-flash:medium
-  smol: zai/glm-5.3:low
-  tiny: zai/glm-5.3:low
+  smol: zai/glm-5.3:max
+  tiny: zai/glm-5.3:max
 defaultThinkingLevel: auto
 advisor:
   enabled: true
@@ -33,16 +33,16 @@ task:
     technical-architect: openai-codex/gpt-6-astra:medium
     strategist: zai/glm-5.3:max
     surveyor: antigravity-cli/gemini-3.8-flash:high
-    explorer: zai/glm-5.3-flash:high
-    librarian: zai/glm-5.3-flash:high
-    scout: zai/glm-5.3-flash:high
+    explorer: zai/glm-5.3-flash:max
+    librarian: zai/glm-5.3-flash:max
+    scout: zai/glm-5.3-flash:max
     reviewer: openai-codex/gpt-5.6-sol:high
     adversary: antigravity-cli/gemini-3.8-flash:high
     enemy: anthropic/claude-opus-5:high
     security-reviewer: zai/glm-5.3:max
-    triage: zai/glm-5.3:low
+    triage: zai/glm-5.3:max
     git-commit-specialist: antigravity-cli/gemini-3.8-flash:medium
-    task: zai/glm-5.3-flash:high
+    task: zai/glm-5.3-flash:max
 dev:
   autoqaConsent: granted
 edit:
@@ -53,7 +53,7 @@ retry:
   maxDelayMs: 300000
   fallbackChains:
     default:
-      - zai/glm-5.3-flash:high
+      - zai/glm-5.3-flash:max
     anthropic/claude-opus-5:
       - anthropic/claude-fable-5-1:high
       - zai/glm-5.3:max
@@ -69,7 +69,7 @@ retry:
     openai-codex/gpt-5.6-luna:
       - antigravity-cli/gemini-3.8-flash:high
       - openrouter/meta/muse-spark-1.3-contributor:max
-      - zai/glm-5.3-flash:high
+      - zai/glm-5.3-flash:max
     zai/glm-5.3:
       - openrouter/meta/muse-spark-1.3-contributor:max
       - opencode-go/muse-spark-1.3-contributor:high
@@ -78,10 +78,10 @@ retry:
       - openrouter/meta/muse-spark-1.3-contributor:max
       - opencode-go/muse-spark-1.3-contributor:medium
     antigravity-cli/*:
-      - zai/glm-5.3:high
+      - zai/glm-5.3:max
     opencode-go/*:
       - antigravity-cli/gemini-3.8-flash:high
-      - zai/glm-5.3-flash:high
+      - zai/glm-5.3-flash:max
 composer:
   shape: box
 codexResets:
