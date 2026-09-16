@@ -1,7 +1,7 @@
-model = "gpt-5.6-terra"
+model = "gpt-6-astra"
 model_context_window = 1000000
 model_auto_compact_token_limit = 900000
-model_reasoning_effort = "max"
+model_reasoning_effort = "low"
 personality = "pragmatic"
 approvals_reviewer = "user"
 
@@ -12,6 +12,7 @@ theme = "gruvbox-dark"
 
 [tui.model_availability_nux]
 "gpt-5.6-sol" = 4
+gpt-6-astra = 2
 
 [tools]
 web_search = true
