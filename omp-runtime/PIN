@@ -10,6 +10,8 @@ Runtime commit message: Prevent main sessions from using disabled providers
 Patch file: 0001-Prevent-main-sessions-from-using-disabled-providers.patch
 Runtime commit message: Retry transient transport failures after committed text
 Patch file: 0002-Retry-transient-transport-failures-after-committed-text.patch
+Runtime commit message: Stop the legacy pi shim from resolving canonical specifiers
+Patch file: 0003-Stop-the-legacy-pi-shim-from-resolving-canonical-specifiers.patch
 
 Live locations, kept out of this repo. Override the checkout with OMP_SRC.
 Source checkout: ~/src/oh-my-pi, branch main-driver-no-agy, baseline tagged omp-baseline

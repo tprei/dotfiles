@@ -1,7 +1,7 @@
 From b0d7f33de6f0e82227c88d90ecbbbec38518f9f0 Mon Sep 17 00:00:00 2001
 From: tprei <37089330+tprei@users.noreply.github.com>
 Date: Wed, 16 Sep 2026 09:58:35 +0100
-Subject: [PATCH 2/2] Retry transient transport failures after committed text
+Subject: [PATCH 2/3] Retry transient transport failures after committed text
 
 A dropped socket mid-answer left the turn dead: the replay veto treats any
 committed text as unsafe, so a z.ai/glm stream that died after emitting
