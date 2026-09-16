@@ -1,0 +1,141 @@
+From ff17a239e98ad7dea603d729f998b8cd41b6c0b1 Mon Sep 17 00:00:00 2001
+From: tprei <37089330+tprei@users.noreply.github.com>
+Date: Wed, 16 Sep 2026 09:58:35 +0100
+Subject: [PATCH] Retry transient transport failures after committed text
+
+A dropped socket mid-answer left the turn dead: the replay veto treats any
+committed text as unsafe, so a z.ai/glm stream that died after emitting
+text surfaced the error instead of retrying. Text and thinking carry no
+side effect and the failed message leaves the context before the retry, so
+allow replay when a transient transport error is the only failure.
+---
+ .../coding-agent/src/session/turn-recovery.ts | 41 ++++++++++++++++++-
+ .../test/turn-recovery-replay-unsafe.test.ts  | 31 ++++++++++++--
+ 2 files changed, 67 insertions(+), 5 deletions(-)
+
+diff --git a/packages/coding-agent/src/session/turn-recovery.ts b/packages/coding-agent/src/session/turn-recovery.ts
+index 784f2fbe1f..2f732babba 100644
+--- a/packages/coding-agent/src/session/turn-recovery.ts
++++ b/packages/coding-agent/src/session/turn-recovery.ts
+@@ -1267,11 +1267,50 @@ export class TurnRecovery {
+ 				AIError.is(id, AIError.Flag.MalformedFunctionCall) ||
+ 				AIError.retriable(id)) &&
+ 			this.#unexecutedToolCallsReplaySafe(message);
+-		if (this.#hasReplayUnsafeOutput(message) && !replaySafeUnexecutedTools) return false;
++		// Text and thinking carry no side effect, and the failed assistant
++		// message leaves the context before the retry, so a dead transport can
++		// replay without the provider ever seeing the partial answer. Quota
++		// wording ("429", "rate limit") co-flags Transient and must not replay
++		// a cap after visible text. Refusals and malformed calls own their
++		// corrective-continuation recovery instead.
++		const replaySafeCommittedText =
++			AIError.is(id, AIError.Flag.Transient) &&
++			!AIError.is(id, AIError.Flag.UsageLimit) &&
++			!AIError.is(id, AIError.Flag.MalformedFunctionCall) &&
++			!this.isClassifierRefusal(message) &&
++			this.#committedTextOnlyOutput(message);
++		if (this.#hasReplayUnsafeOutput(message) && !replaySafeUnexecutedTools && !replaySafeCommittedText) {
++			return false;
++		}
+ 		if (AIError.is(id, AIError.Flag.AccountPolicy) || this.isClassifierRefusal(message)) return true;
+ 		return AIError.retriable(id);
+ 	}
+ 
++	/**
++	 * True when the turn's only replay-unsafe output is committed text — no
++	 * tool call, image, or Anthropic server tool ran. Thinking blocks are
++	 * always replay-safe and a text-free turn is already covered by
++	 * {@link TurnRecovery.isRetryableError}'s plain path, so this demands at
++	 * least one committed text block.
++	 */
++	#committedTextOnlyOutput(message: AssistantMessage): boolean {
++		let committedText = false;
++		for (const block of message.content) {
++			switch (block.type) {
++				case "text":
++					if (this.#host.textOutputCommitted() && hasNonWhitespace(block.text)) committedText = true;
++					continue;
++				case "thinking":
++				case "redactedThinking":
++				case "fallback":
++					continue;
++				default:
++					return false;
++			}
++		}
++		return committedText;
++	}
++
+ 	/**
+ 	 * True when every emitted tool call provably never executed and no other
+ 	 * replay-unsafe output exists. The caller restricts this exception to
+diff --git a/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts b/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
+index e5f8a0c644..69ca44106f 100644
+--- a/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
++++ b/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
+@@ -265,9 +265,18 @@ describe("TurnRecovery replay-unsafe output classification", () => {
+ 		expect(modelChanges).toEqual([`${fallback.provider}/${fallback.id}`]);
+ 	});
+ 
+-	it("treats a failed turn with partial non-whitespace text as NOT retriable", () => {
++	it("replays a transient transport failure after partial non-whitespace text", () => {
+ 		const recovery = new TurnRecovery(createHost(model, modelRegistry));
+ 		const message = makeMessage([{ type: "text", text: "Here is the first part of my answer" }], model);
++		message.errorMessage =
++			"The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()";
++		expect(recovery.isRetryableError(message)).toBe(true);
++	});
++
++	it("keeps a non-transient failure after partial text unretriable", () => {
++		const recovery = new TurnRecovery(createHost(model, modelRegistry));
++		const message = makeMessage([{ type: "text", text: "Here is the first part of my answer" }], model);
++		message.errorMessage = "400 invalid_request_error: bad tool schema";
+ 		expect(recovery.isRetryableError(message)).toBe(false);
+ 	});
+ 
+@@ -410,7 +419,7 @@ describe("TurnRecovery replay-unsafe output classification", () => {
+ 		expect(recovery.isRetryableError(message)).toBe(true);
+ 	});
+ 
+-	it("treats a mix of thinking and text as replay-unsafe (text wins)", () => {
++	it("replays a mix of thinking and text on a transient transport failure", () => {
+ 		const recovery = new TurnRecovery(createHost(model, modelRegistry));
+ 		const message = makeMessage(
+ 			[
+@@ -419,6 +428,20 @@ describe("TurnRecovery replay-unsafe output classification", () => {
+ 			],
+ 			model,
+ 		);
++		message.errorMessage = "The socket connection was closed unexpectedly";
++		expect(recovery.isRetryableError(message)).toBe(true);
++	});
++
++	it("keeps visible text replay-unsafe once a tool call joins a transient failure", () => {
++		const recovery = new TurnRecovery(createHost(model, modelRegistry));
++		const message = makeMessage(
++			[
++				{ type: "text", text: "The answer is 42." },
++				{ type: "toolCall", id: "call-1", name: "bash", arguments: { command: "rm -rf /tmp/x" } },
++			],
++			model,
++		);
++		message.errorMessage = "The socket connection was closed unexpectedly";
+ 		expect(recovery.isRetryableError(message)).toBe(false);
+ 	});
+ 
+@@ -789,10 +812,10 @@ describe("TurnRecovery replay-unsafe output classification", () => {
+ 				"Codex error event: peer closed connection without sending complete message body (incomplete chunked read) (code=api_error)",
+ 			],
+ 		])("%s recovery", (_label, errorMessage) => {
+-			it("preserves the replay veto with committed text", () => {
++			it("replays committed text without a preserved-turn handoff", () => {
+ 				const message = pythonResetMessage([{ type: "text", text: "Partial answer." }], errorMessage);
+ 				const recovery = recoveryForReset(message, []);
+-				expect(recovery.isRetryableError(message)).toBe(false);
++				expect(recovery.isRetryableError(message)).toBe(true);
+ 				expect(recovery.classifyResolvedInterruptedToolTurn(message)).toBeUndefined();
+ 			});
+ 
+-- 
+2.43.0
+
