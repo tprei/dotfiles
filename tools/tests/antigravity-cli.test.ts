@@ -34,7 +34,10 @@ process.stdin.on("end", () => {
 			{ event: "result", result: { status: "SUCCESS", response: "" } },
 		],
 		denied: [
-			{ event: "result", result: { status: "SUCCESS", response: "done", denied_actions: [{ action: "run_command", reason: "not approved" }] } },
+			{ event: "result", result: { status: "SUCCESS", conversation_id: "conv-denied", response: "done", denied_actions: [{ action: "run_command", reason: "not approved" }] } },
+		],
+		"denied-empty": [
+			{ event: "result", result: { status: "SUCCESS", conversation_id: "conv-denied-empty", response: "", denied_actions: [{ action: "run_command", reason: "not approved" }] } },
 		],
 		"error-event": [
 			{ event: "error", error: { message: "gemini quota exceeded" } },
@@ -184,8 +187,15 @@ test("falls back to streamed deltas when the result response is empty", async ()
 	expect(args[args.indexOf("--agent") + 1]).toBe("omp-provider");
 });
 
-test("rejects a successful result with denied actions", async () => {
+test("keeps the response when the CLI denied a native tool action", async () => {
 	process.env.AGY_TEST_SCENARIO = "denied";
+	const result = await runAgyTurn({ prompt: "denied", modelId: "gemini-3.8-flash", cwd: directory });
+	expect(result.response).toBe("done");
+	expect(result.conversationId).toBe("conv-denied");
+});
+
+test("rejects a denied result that carries no response text", async () => {
+	process.env.AGY_TEST_SCENARIO = "denied-empty";
 	const failure = await runAgyTurn({ prompt: "denied", modelId: "gemini-3.8-flash", cwd: directory }).then(
 		() => {
 			throw new Error("AGY turn unexpectedly succeeded");

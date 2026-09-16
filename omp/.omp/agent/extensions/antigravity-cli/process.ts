@@ -129,6 +129,7 @@ export async function runAgyTurn(request: AgyTurnRequest): Promise<AgyTurnResult
 		let resultUsage: AgyUsageFields | undefined;
 		let durationMs: number | undefined;
 		let resultSeen = false;
+		let denialDetail: string | undefined;
 		let stderr = "";
 
 		const lines = createInterface({ input: child.stdout });
@@ -221,7 +222,7 @@ export async function runAgyTurn(request: AgyTurnRequest): Promise<AgyTurnResult
 						}
 						const deniedActions = event.result.denied_actions;
 						if (Array.isArray(deniedActions) && deniedActions.length > 0) {
-							throw errorWithStderr(`AGY CLI denied ${deniedActions.length} action(s): ${JSON.stringify(deniedActions).slice(0, 2_000)}`, stderr);
+							denialDetail = `AGY CLI denied ${deniedActions.length} action(s): ${JSON.stringify(deniedActions).slice(0, 2_000)}`;
 						}
 						const resultConversationId = readString(event.result, "conversation_id")?.trim();
 						if (resultConversationId) conversationId = resultConversationId;
@@ -263,9 +264,14 @@ export async function runAgyTurn(request: AgyTurnRequest): Promise<AgyTurnResult
 				settleReject(errorWithStderr("AGY CLI completed without a conversation id.", stderr));
 				return;
 			}
+			const response = responseFromResult ?? responseFromDeltas;
+			if (response.length === 0 && denialDetail !== undefined) {
+				settleReject(errorWithStderr(denialDetail, stderr));
+				return;
+			}
 			settleResolve({
 				conversationId,
-				response: responseFromResult ?? responseFromDeltas,
+				response,
 				...resultUsage,
 				durationMs,
 			});
