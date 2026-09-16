@@ -61,7 +61,13 @@ omp-config-check:
     echo "extensions compile"
     # Level-less `zai/glm-5.3:` keys under retry.fallbackChains name a failing
     # route, so only a populated non-max level is drift.
-    if grep -rPn 'zai/glm-5\.3(-flash)?:(low|medium|high)' omp/; then
+    drift=0
+    grep -rPn 'zai/glm-5\.3(-flash)?:(low|medium|high)' omp/ && drift=1
+    for agent in shared/agents/*/*.md; do
+        grep -q '^model: zai/glm-5\.3' "$agent" || continue
+        grep -qx 'thinking: max' "$agent" || { grep -Hn '^thinking:' "$agent"; drift=1; }
+    done
+    if [ "$drift" -ne 0 ]; then
         echo "GLM thinking level drifted off max" >&2
         exit 1
     fi

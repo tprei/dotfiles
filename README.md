@@ -92,7 +92,7 @@ just omp-verify         # dry-run stow, resolve config.yml, list every managed l
 just omp-config-check   # yaml parse, extension build, GLM thinking-level drift
 ```
 
-`omp-verify` fails when `~/.omp/agent/config.yml` resolves outside this repository, which is the signal that OMP wrote its own defaults. `omp-config-check` fails when any `zai/glm-5.3` or `zai/glm-5.3-flash` selector carries a level other than `max`; level-less keys under `retry.fallbackChains` name a failing route and stay level-less on purpose.
+`omp-verify` fails when `~/.omp/agent/config.yml` resolves outside this repository, which is the signal that OMP wrote its own defaults. `omp-config-check` fails when any `zai/glm-5.3` or `zai/glm-5.3-flash` selector carries a level other than `max`, and when a `shared/agents/*/*.md` definition pinned to `model: zai/glm-5.3` declares anything but `thinking: max`. Level-less keys under `retry.fallbackChains` name a failing route and stay level-less on purpose.
 
 Edit configs in this repository, never in `~/.omp`. Anything under `~/.omp` that is a real file is drift; reconcile it into the repo and re-stow. The rest of `~/.omp` (`agent.db`, `history.db`, `models.db`, `sessions/`, `logs/`, `cache/`) is runtime state and stays untracked.
 

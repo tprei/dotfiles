@@ -3,7 +3,7 @@ name: surveyor
 description: USE PROACTIVELY for GLM-5.3-powered code exploration. Same role as explorer but runs on GLM-5.3 to provide a second perspective alongside the GPT-powered explorer. Read-only.
 tools: Bash(git ls-files:*), Bash(rg:*), Glob, Grep, Read, WebFetch, WebSearch
 model: zai/glm-5.3
-thinking: high
+thinking: max
 color: teal
 ---
 
