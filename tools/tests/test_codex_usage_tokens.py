@@ -1621,6 +1621,93 @@ def forecast_snapshot(
         "issues": [],
     }
 
+class HistorySeriesTests(unittest.TestCase):
+    NOW_MS = 1_789_000_000_000
+
+    def snapshot(self, samples):
+        return {
+            "start_ms": self.NOW_MS - 7 * 86_400_000,
+            "end_ms": self.NOW_MS,
+            "samples": samples,
+            "sources_ok": ["WSL", "mini-1"],
+            "issues": [],
+        }
+
+    def sample(self, recorded_at_ms, used_fraction, account_key="acct"):
+        return {
+            "recorded_at_ms": recorded_at_ms,
+            "provider": "openai-codex",
+            "account_key": account_key,
+            "limit_id": "openai-codex:primary",
+            "used_fraction": used_fraction,
+        }
+
+    def test_samples_from_every_account_key_join_one_series(self):
+        snapshot = self.snapshot(
+            [
+                self.sample(self.NOW_MS - 3 * 3_600_000, 0.10, "oauth|account:a"),
+                self.sample(self.NOW_MS - 2 * 3_600_000, 0.20, "oauth|account:a|email:x"),
+                self.sample(self.NOW_MS - 1 * 3_600_000, 0.30, "oauth|account:a|email:x|org:y"),
+            ]
+        )
+        series = reporter.history_series(snapshot, "openai-codex", "openai-codex:primary")
+        self.assertEqual(
+            series,
+            [
+                (self.NOW_MS - 3 * 3_600_000, 0.10),
+                (self.NOW_MS - 2 * 3_600_000, 0.20),
+                (self.NOW_MS - 1 * 3_600_000, 0.30),
+            ],
+        )
+
+    def test_shared_quota_reported_twice_collapses_to_the_higher_fraction(self):
+        snapshot = self.snapshot(
+            [
+                self.sample(self.NOW_MS - 3_600_000, 0.61, "api_key|secret:one"),
+                self.sample(self.NOW_MS - 3_600_000, 0.64, "api_key|secret:two"),
+            ]
+        )
+        series = reporter.history_series(snapshot, "openai-codex", "openai-codex:primary")
+        self.assertEqual(series, [(self.NOW_MS - 3_600_000, 0.64)])
+
+    def test_burn_rate_uses_the_full_cross_account_series(self):
+        series = reporter.history_series(
+            self.snapshot(
+                [
+                    self.sample(self.NOW_MS - 24 * 3_600_000, 0.0, "oauth|account:a"),
+                    self.sample(self.NOW_MS - 12 * 3_600_000, 0.12, "oauth|account:a|email:x"),
+                ]
+            ),
+            "openai-codex",
+            "openai-codex:primary",
+        )
+        rate = reporter.burn_rate(series, self.NOW_MS, 0.24, 24 * 3_600_000)
+        self.assertAlmostEqual(rate, 0.01, places=4)
+
+    def test_other_providers_and_limits_are_excluded(self):
+        snapshot = self.snapshot(
+            [
+                self.sample(self.NOW_MS - 3_600_000, 0.10),
+                {
+                    "recorded_at_ms": self.NOW_MS - 3_600_000,
+                    "provider": "anthropic",
+                    "account_key": "acct",
+                    "limit_id": "openai-codex:primary",
+                    "used_fraction": 0.99,
+                },
+                {
+                    "recorded_at_ms": self.NOW_MS - 3_600_000,
+                    "provider": "openai-codex",
+                    "account_key": "acct",
+                    "limit_id": "openai-codex:spark:primary",
+                    "used_fraction": 0.88,
+                },
+            ]
+        )
+        series = reporter.history_series(snapshot, "openai-codex", "openai-codex:primary")
+        self.assertEqual(series, [(self.NOW_MS - 3_600_000, 0.10)])
+
+
 def forecast_shape(
     verdict="NO DATA",
     used=None,

@@ -4,7 +4,7 @@
 Modes:
   codex-usage-check                  print the validated OMP JSON payload
   codex-usage-check --telegram       update the pinned limits, token, and forecast images
-  codex-usage-check --setup-telegram verify the Telegram config and pin both images
+  codex-usage-check --setup-telegram verify the Telegram config and pin all three images
 
 The Telegram bot token and chat come from ~/.config/claude-usage/config only;
 delivery state lives in ~/.config/codex-usage/state.json with separate image IDs.
@@ -427,27 +427,23 @@ def history_series(snapshot: dict, provider: str, limit_id: str) -> list[tuple[i
     samples = snapshot.get("samples")
     if not isinstance(samples, list):
         return []
-    by_account: dict[str, list[dict]] = {}
+    highest: dict[int, float] = {}
     for sample in samples:
         if not isinstance(sample, dict):
             continue
-        if sample.get("provider") == provider and sample.get("limit_id") == limit_id:
-            account_key = str(sample.get("account_key", ""))
-            by_account.setdefault(account_key, []).append(sample)
-    if not by_account:
-        return []
-    newest_account = max(
-        by_account.keys(),
-        key=lambda acc: max((int(s.get("recorded_at_ms") or 0) for s in by_account[acc]), default=0),
-    )
-    points: list[tuple[int, float]] = []
-    for s in by_account[newest_account]:
-        recorded_at = s.get("recorded_at_ms")
-        used_fraction = s.get("used_fraction")
-        if isinstance(recorded_at, int) and isinstance(used_fraction, (int, float)):
-            points.append((recorded_at, float(used_fraction)))
-    points.sort(key=lambda item: item[0])
-    return points
+        if sample.get("provider") != provider or sample.get("limit_id") != limit_id:
+            continue
+        recorded_at = sample.get("recorded_at_ms")
+        used_fraction = sample.get("used_fraction")
+        if not isinstance(recorded_at, int) or isinstance(recorded_at, bool):
+            continue
+        if not isinstance(used_fraction, (int, float)) or isinstance(used_fraction, bool):
+            continue
+        fraction = float(used_fraction)
+        previous = highest.get(recorded_at)
+        if previous is None or fraction > previous:
+            highest[recorded_at] = fraction
+    return sorted(highest.items())
 
 
 def burn_rate(series: list[tuple[int, float]], now_ms: int, used: float, lookback_ms: int) -> float | None:
