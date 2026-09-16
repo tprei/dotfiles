@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -16,12 +17,14 @@ from unittest import mock
 TOOLS = Path(__file__).resolve().parents[1]
 SHARE_DIR = TOOLS / ".local" / "share" / "codex-usage"
 COLLECTOR_PATH = SHARE_DIR / "token_usage.py"
+HISTORY_PATH = SHARE_DIR / "usage_history.py"
 REPORTER_PATH = TOOLS / ".local" / "bin" / "codex-usage-check"
 
 if str(SHARE_DIR) not in sys.path:
     sys.path.insert(0, str(SHARE_DIR))
 
 import token_usage
+import usage_history
 
 
 def load_reporter():
@@ -38,6 +41,8 @@ reporter = load_reporter()
 
 START_MS = (1_789_000_000_000 // token_usage.DAY_MS) * token_usage.DAY_MS
 END_MS = START_MS + 7 * token_usage.DAY_MS
+HISTORY_START_MS = (1_789_000_000_000 // token_usage.DAY_MS) * token_usage.DAY_MS
+HISTORY_END_MS = HISTORY_START_MS + 7 * token_usage.DAY_MS
 BASELINE_PROVIDERS = ["openai-codex", "anthropic", "google-antigravity", "opencode-go", "zai"]
 RECORD_KEYS = {"entry_id", "timestamp_ms", "provider", "model", "api", "tokens", "estimated_usd"}
 
@@ -546,6 +551,184 @@ class CollectorCliTests(TempRootMixin):
                 self.assertEqual(result.returncode, 2)
                 self.assertEqual(result.stdout.strip(), "")
 
+def write_history_db(path: Path, rows: list[tuple]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE usage_history ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "recorded_at INTEGER NOT NULL, "
+            "provider TEXT NOT NULL, "
+            "account_key TEXT NOT NULL, "
+            "email TEXT, "
+            "account_id TEXT, "
+            "limit_id TEXT NOT NULL, "
+            "label TEXT NOT NULL, "
+            "window_label TEXT, "
+            "used_fraction REAL, "
+            "status TEXT, "
+            "resets_at INTEGER"
+            ")"
+        )
+        conn.executemany(
+            "INSERT INTO usage_history "
+            "(recorded_at, provider, account_key, limit_id, label, used_fraction) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            rows,
+        )
+
+
+class UsageHistoryCollectorTests(TempRootMixin, unittest.TestCase):
+    def collect_history(self, root=None):
+        return usage_history.collect_history(
+            self.root if root is None else root, START_MS, END_MS
+        )
+
+    def test_merges_rows_from_root_and_profile_databases(self):
+        write_history_db(
+            self.root / "agent" / "agent.db",
+            [(START_MS + 1_000, "openai-codex", "acct1", "limit1", "label1", 0.25)],
+        )
+        write_history_db(
+            self.root / "profiles" / "mix" / "agent" / "agent.db",
+            [(START_MS + 2_000, "anthropic", "acct2", "limit2", "label2", 0.50)],
+        )
+        collection = self.collect_history()
+        self.assertEqual(collection["issues"], [])
+        self.assertEqual(collection["start_ms"], START_MS)
+        self.assertEqual(collection["end_ms"], END_MS)
+        self.assertEqual(
+            collection["samples"],
+            [
+                {
+                    "recorded_at_ms": START_MS + 1_000,
+                    "provider": "openai-codex",
+                    "account_key": "acct1",
+                    "limit_id": "limit1",
+                    "used_fraction": 0.25,
+                },
+                {
+                    "recorded_at_ms": START_MS + 2_000,
+                    "provider": "anthropic",
+                    "account_key": "acct2",
+                    "limit_id": "limit2",
+                    "used_fraction": 0.50,
+                },
+            ],
+        )
+
+    def test_excludes_out_of_window_rows(self):
+        rows = [
+            (START_MS - 1, "openai-codex", "acct", "limit1", "label1", 0.1),
+            (START_MS, "openai-codex", "acct", "limit1", "label1", 0.2),
+            (END_MS - 1, "openai-codex", "acct", "limit1", "label1", 0.3),
+            (END_MS, "openai-codex", "acct", "limit1", "label1", 0.4),
+        ]
+        write_history_db(self.root / "agent" / "agent.db", rows)
+        collection = self.collect_history()
+        self.assertEqual(collection["issues"], [])
+        self.assertEqual(
+            [s["recorded_at_ms"] for s in collection["samples"]],
+            [START_MS, END_MS - 1],
+        )
+
+    def test_excludes_null_used_fraction_without_counting_as_invalid(self):
+        rows = [
+            (START_MS + 1_000, "openai-codex", "acct", "limit1", "label1", None),
+            (START_MS + 2_000, "openai-codex", "acct", "limit1", "label1", 0.5),
+        ]
+        write_history_db(self.root / "agent" / "agent.db", rows)
+        collection = self.collect_history()
+        self.assertEqual(collection["issues"], [])
+        self.assertEqual(len(collection["samples"]), 1)
+        self.assertEqual(collection["samples"][0]["used_fraction"], 0.5)
+
+    def test_invalid_row_with_empty_provider_is_skipped_with_issue(self):
+        rows = [
+            (START_MS + 1_000, "", "acct", "limit1", "label1", 0.5),
+            (START_MS + 2_000, "openai-codex", "acct", "limit1", "label1", 0.5),
+        ]
+        write_history_db(self.root / "agent" / "agent.db", rows)
+        collection = self.collect_history()
+        self.assertEqual(collection["issues"], ["agent.db: skipped 1 invalid rows"])
+        self.assertEqual(len(collection["samples"]), 1)
+        self.assertEqual(collection["samples"][0]["provider"], "openai-codex")
+
+    def test_clamps_used_fraction_bounds(self):
+        rows = [
+            (START_MS + 1_000, "openai-codex", "acct", "limit1", "label1", 1.4),
+            (START_MS + 2_000, "anthropic", "acct", "limit2", "label2", -0.2),
+        ]
+        write_history_db(self.root / "agent" / "agent.db", rows)
+        collection = self.collect_history()
+        self.assertEqual(collection["issues"], [])
+        self.assertEqual([s["used_fraction"] for s in collection["samples"]], [1.0, 0.0])
+
+    def test_root_without_databases_returns_empty_samples_and_no_issues(self):
+        collection = self.collect_history()
+        self.assertEqual(collection["samples"], [])
+        self.assertEqual(collection["issues"], [])
+
+    def test_unreadable_database_records_issue_and_keeps_valid_database(self):
+        corrupt_path = self.root / "agent" / "agent.db"
+        corrupt_path.parent.mkdir(parents=True, exist_ok=True)
+        corrupt_path.write_text("not-a-sqlite-database", encoding="utf-8")
+        write_history_db(
+            self.root / "profiles" / "mix" / "agent" / "agent.db",
+            [(START_MS + 1_000, "anthropic", "acct", "limit1", "label1", 0.5)],
+        )
+        collection = self.collect_history()
+        self.assertEqual(len(collection["samples"]), 1)
+        self.assertEqual(collection["samples"][0]["provider"], "anthropic")
+        self.assertEqual(len(collection["issues"]), 1)
+        self.assertIn("unreadable history", collection["issues"][0])
+
+
+class UsageHistoryCliTests(TempRootMixin, unittest.TestCase):
+    def run_cli(self, *arguments):
+        return subprocess.run(
+            [sys.executable, str(HISTORY_PATH), *arguments],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+
+    def cli_arguments(self, root=None):
+        return [
+            "--start-ms", str(START_MS),
+            "--end-ms", str(END_MS),
+            "--root", str(self.root if root is None else root),
+        ]
+
+    def test_clean_root_exits_zero_and_emits_json_samples(self):
+        write_history_db(
+            self.root / "agent" / "agent.db",
+            [(START_MS + 1_000, "openai-codex", "acct", "limit1", "label1", 0.25)],
+        )
+        result = self.run_cli(*self.cli_arguments())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+        payload = json.loads(result.stdout)
+        self.assertEqual(set(payload), {"start_ms", "end_ms", "samples", "issues"})
+        self.assertEqual(len(payload["samples"]), 1)
+        self.assertEqual(payload["issues"], [])
+
+    def test_corrupt_database_exits_two_with_issue(self):
+        corrupt = self.root / "agent" / "agent.db"
+        corrupt.parent.mkdir(parents=True, exist_ok=True)
+        corrupt.write_text("corrupt-data", encoding="utf-8")
+        result = self.run_cli(*self.cli_arguments())
+        self.assertEqual(result.returncode, 2)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["samples"], [])
+        self.assertTrue(payload["issues"])
+        self.assertIn("unreadable history", payload["issues"][0])
+
+    def test_invalid_range_exits_two_with_stderr(self):
+        result = self.run_cli("--start-ms", "5", "--end-ms", "5", "--root", str(self.root))
+        self.assertEqual(result.returncode, 2)
+        self.assertNotEqual(result.stderr.strip(), "")
 
 class MergeUsageTests(unittest.TestCase):
     def test_snapshot_schema_and_baseline_providers_on_empty_sources(self):
@@ -818,6 +1001,108 @@ class MergeUsageTests(unittest.TestCase):
         self.assertEqual(day_ga["unpriced_tokens"], 2_000_000)
         self.assertAlmostEqual(day_ga["unpriced_estimated_usd"], 0.2484, places=9)
 
+def history_sample(
+    recorded_at_ms=None,
+    provider="openai-codex",
+    account_key="acct",
+    limit_id="openai-codex:primary",
+    used_fraction=0.5,
+):
+    return {
+        "recorded_at_ms": HISTORY_START_MS + 1_000 if recorded_at_ms is None else recorded_at_ms,
+        "provider": provider,
+        "account_key": account_key,
+        "limit_id": limit_id,
+        "used_fraction": used_fraction,
+    }
+
+
+def history_collection(samples, issues=None):
+    return {
+        "start_ms": HISTORY_START_MS,
+        "end_ms": HISTORY_END_MS,
+        "samples": samples,
+        "issues": issues or [],
+    }
+
+
+class MergeHistoryTests(unittest.TestCase):
+    def test_identical_sample_across_sources_collapses_to_one(self):
+        sample = history_sample(recorded_at_ms=HISTORY_START_MS + 1_000)
+        local = history_collection([sample])
+        remote = history_collection([dict(sample)])
+        snapshot = usage_history.merge_history(
+            [("WSL", local), ("mini-1", remote)], HISTORY_START_MS, HISTORY_END_MS
+        )
+        self.assertEqual(snapshot["samples"], [sample])
+        self.assertEqual(snapshot["sources_ok"], ["WSL", "mini-1"])
+        self.assertEqual(snapshot["issues"], [])
+
+    def test_distinct_account_keys_both_survive(self):
+        sample_wsl = history_sample(account_key="acct-wsl")
+        sample_mini = history_sample(account_key="acct-mini")
+        snapshot = usage_history.merge_history(
+            [("WSL", history_collection([sample_wsl])), ("mini-1", history_collection([sample_mini]))],
+            HISTORY_START_MS,
+            HISTORY_END_MS,
+        )
+        self.assertEqual(len(snapshot["samples"]), 2)
+        self.assertEqual({s["account_key"] for s in snapshot["samples"]}, {"acct-wsl", "acct-mini"})
+
+    def test_start_ms_mismatch_yields_invalid_collection_issue_and_excludes_source(self):
+        skewed = history_collection([history_sample()])
+        skewed["start_ms"] = HISTORY_START_MS + 1
+        snapshot = usage_history.merge_history(
+            [("WSL", history_collection([history_sample()])), ("mini-1", skewed)],
+            HISTORY_START_MS,
+            HISTORY_END_MS,
+        )
+        self.assertEqual(snapshot["sources_ok"], ["WSL"])
+        self.assertIn("mini-1: invalid collection", snapshot["issues"])
+
+    def test_sample_with_fraction_above_one_rejects_collection_wholesale(self):
+        bad = history_collection([history_sample(used_fraction=1.5)])
+        valid = history_collection([history_sample(used_fraction=0.5)])
+        snapshot = usage_history.merge_history(
+            [("WSL", valid), ("mini-1", bad)],
+            HISTORY_START_MS,
+            HISTORY_END_MS,
+        )
+        self.assertEqual(snapshot["sources_ok"], ["WSL"])
+        self.assertIn("mini-1: invalid collection", snapshot["issues"])
+        self.assertEqual(len(snapshot["samples"]), 1)
+
+    def test_source_issues_are_prefixed_with_label(self):
+        local = history_collection([history_sample()], issues=["agent.db: skipped 1 invalid rows"])
+        snapshot = usage_history.merge_history(
+            [("WSL", local)],
+            HISTORY_START_MS,
+            HISTORY_END_MS,
+        )
+        self.assertIn("WSL: agent.db: skipped 1 invalid rows", snapshot["issues"])
+
+    def test_sources_ok_preserves_input_order(self):
+        c1 = history_collection([])
+        c2 = history_collection([])
+        snapshot = usage_history.merge_history(
+            [("mini-1", c1), ("WSL", c2)],
+            HISTORY_START_MS,
+            HISTORY_END_MS,
+        )
+        self.assertEqual(snapshot["sources_ok"], ["mini-1", "WSL"])
+
+    def test_output_samples_are_sorted(self):
+        s1 = history_sample(provider="zai", recorded_at_ms=HISTORY_START_MS + 2_000)
+        s2 = history_sample(provider="anthropic", recorded_at_ms=HISTORY_START_MS + 1_000)
+        snapshot = usage_history.merge_history(
+            [("WSL", history_collection([s1, s2]))],
+            HISTORY_START_MS,
+            HISTORY_END_MS,
+        )
+        self.assertEqual(
+            [s["provider"] for s in snapshot["samples"]],
+            ["anthropic", "zai"],
+        )
 
 class CollectTokenSnapshotWindowTests(unittest.TestCase):
     def test_collects_thirty_utc_dates_with_partial_today(self):
@@ -839,9 +1124,9 @@ class CollectTokenSnapshotWindowTests(unittest.TestCase):
         with mock.patch.object(reporter, "local_token_collection", side_effect=local_collection), mock.patch.object(
             reporter, "check_ssh_host", return_value="mini-1"
         ), mock.patch.object(
-            reporter, "remote_token_collection_source", return_value=b"collector-source"
+            reporter, "collector_source", return_value=b"collector-source"
         ), mock.patch.object(
-            reporter, "remote_token_collection", side_effect=remote_collection
+            reporter, "remote_collection", side_effect=remote_collection
         ):
             snapshot = reporter.collect_token_snapshot(now_ms)
 
@@ -868,6 +1153,133 @@ class CollectTokenSnapshotWindowTests(unittest.TestCase):
         self.assertEqual(total["unpriced_records"], 1)
         self.assertEqual(sorted(snapshot["sources_ok"]), ["WSL", "mini-1"])
         self.assertEqual(snapshot["issues"], [])
+
+class CollectHistorySnapshotTests(unittest.TestCase):
+    def test_history_window_covers_seven_days_ending_now(self):
+        now_ms = 1_789_000_000_000
+        start_ms = now_ms - 7 * 86_400_000
+        requested_windows = []
+        wsl_sample = history_sample(recorded_at_ms=start_ms + 1_000, used_fraction=0.1)
+        mini_sample = history_sample(
+            recorded_at_ms=start_ms + 2_000,
+            provider="zai",
+            limit_id="zai:tokens:5h",
+            used_fraction=0.2,
+        )
+
+        def local_history(requested_start, requested_end):
+            requested_windows.append(("WSL", requested_start, requested_end))
+            collection = {
+                "start_ms": requested_start,
+                "end_ms": requested_end,
+                "samples": [dict(wsl_sample)],
+                "issues": [],
+            }
+            return "WSL", collection, []
+
+        def remote_history(host, source, requested_start, requested_end):
+            requested_windows.append(("mini-1", requested_start, requested_end))
+            collection = {
+                "start_ms": requested_start,
+                "end_ms": requested_end,
+                "samples": [dict(mini_sample)],
+                "issues": [],
+            }
+            return "mini-1", collection, []
+
+        with mock.patch.object(reporter, "local_history_collection", side_effect=local_history), mock.patch.object(
+            reporter, "check_ssh_host", return_value="mini-1"
+        ), mock.patch.object(
+            reporter, "collector_source", return_value=b"collector-source"
+        ), mock.patch.object(
+            reporter, "remote_collection", side_effect=remote_history
+        ):
+            snapshot = reporter.collect_history_snapshot(now_ms)
+
+        self.assertEqual(requested_windows, [("WSL", start_ms, now_ms), ("mini-1", start_ms, now_ms)])
+        self.assertEqual(snapshot["start_ms"], start_ms)
+        self.assertEqual(snapshot["end_ms"], now_ms)
+        self.assertEqual(snapshot["sources_ok"], ["WSL", "mini-1"])
+        self.assertEqual(snapshot["samples"], [wsl_sample, mini_sample])
+        self.assertEqual(snapshot["issues"], [])
+
+    def test_unconfigured_ssh_host_yields_issue_and_keeps_local_samples(self):
+        now_ms = 1_789_000_000_000
+        start_ms = now_ms - 7 * 86_400_000
+        wsl_sample = history_sample(recorded_at_ms=start_ms + 1_000, used_fraction=0.1)
+
+        def local_history(requested_start, requested_end):
+            collection = {
+                "start_ms": requested_start,
+                "end_ms": requested_end,
+                "samples": [dict(wsl_sample)],
+                "issues": [],
+            }
+            return "WSL", collection, []
+
+        with mock.patch.object(reporter, "local_history_collection", side_effect=local_history), mock.patch.object(
+            reporter, "check_ssh_host", return_value=None
+        ), mock.patch.object(reporter, "collector_source") as collector, mock.patch.object(
+            reporter, "remote_collection"
+        ) as remote:
+            snapshot = reporter.collect_history_snapshot(now_ms)
+
+        collector.assert_not_called()
+        remote.assert_not_called()
+        self.assertEqual(snapshot["issues"], ["mini-1 unconfigured"])
+        self.assertEqual(snapshot["sources_ok"], ["WSL"])
+        self.assertEqual(snapshot["samples"], [wsl_sample])
+
+    def test_remote_failure_issue_precedes_merge_issues(self):
+        now_ms = 1_789_000_000_000
+        start_ms = now_ms - 7 * 86_400_000
+        wsl_sample = history_sample(recorded_at_ms=start_ms + 1_000, used_fraction=0.1)
+
+        def local_history(requested_start, requested_end):
+            collection = {
+                "start_ms": requested_start,
+                "end_ms": requested_end,
+                "samples": [dict(wsl_sample)],
+                "issues": ["agent.db: skipped 1 invalid rows"],
+            }
+            return "WSL", collection, []
+
+        def remote_history(host, source, requested_start, requested_end):
+            return "mini-1", None, ["mini-1 unavailable: ssh timed out"]
+
+        with mock.patch.object(reporter, "local_history_collection", side_effect=local_history), mock.patch.object(
+            reporter, "check_ssh_host", return_value="mini-1"
+        ), mock.patch.object(
+            reporter, "collector_source", return_value=b"collector-source"
+        ), mock.patch.object(
+            reporter, "remote_collection", side_effect=remote_history
+        ):
+            snapshot = reporter.collect_history_snapshot(now_ms)
+
+        self.assertEqual(snapshot["sources_ok"], ["WSL"])
+        self.assertEqual(
+            snapshot["issues"],
+            ["mini-1 unavailable: ssh timed out", "WSL: agent.db: skipped 1 invalid rows"],
+        )
+
+
+class GatherCollectionsTests(unittest.TestCase):
+    def test_collector_source_failure_reports_unavailable_and_returns_local_collection(self):
+        local = history_collection([history_sample()])
+
+        def local_history(requested_start, requested_end):
+            return "WSL", local, []
+
+        with mock.patch.object(reporter, "check_ssh_host", return_value="mini-1"), mock.patch.object(
+            reporter, "collector_source", side_effect=reporter.UsageError("collector unreadable: x", 1)
+        ), mock.patch.object(reporter, "remote_collection") as remote:
+            collections, issues = reporter.gather_collections(
+                HISTORY_PATH, local_history, HISTORY_START_MS, HISTORY_END_MS
+            )
+
+        remote.assert_not_called()
+        self.assertEqual(collections, [("WSL", local)])
+        self.assertEqual(issues, ["mini-1 unavailable: collector unreadable"])
 
 
 class ReporterTelegramStateTests(unittest.TestCase):
@@ -1018,16 +1430,26 @@ class PublishImagesTests(unittest.TestCase):
         self.config = {"bot_token": "unit-test-token", "chat_id": "42"}
         limits_patcher = mock.patch.object(reporter, "build_image", return_value=(b"limits-image", 0))
         token_patcher = mock.patch.object(reporter, "build_token_image", return_value=(b"token-image", 0))
+        forecast_patcher = mock.patch.object(
+            reporter, "build_forecast_image", return_value=(b"forecast-image", 0)
+        )
+        usage_patcher = mock.patch.object(
+            reporter, "run_omp_usage", return_value={"reports": [{"provider": "zai", "limits": []}]}
+        )
         update_patcher = mock.patch.object(reporter, "update_pinned", return_value=True)
         failure_patcher = mock.patch.object(
             reporter, "fail", side_effect=lambda error: getattr(error, "exit_code", 2)
         )
         self.build_limits = limits_patcher.start()
         self.build_tokens = token_patcher.start()
+        self.build_forecast = forecast_patcher.start()
+        self.run_usage = usage_patcher.start()
         self.update = update_patcher.start()
         self.failure = failure_patcher.start()
         self.addCleanup(limits_patcher.stop)
         self.addCleanup(token_patcher.stop)
+        self.addCleanup(forecast_patcher.stop)
+        self.addCleanup(usage_patcher.stop)
         self.addCleanup(update_patcher.stop)
         self.addCleanup(failure_patcher.stop)
 
@@ -1037,16 +1459,26 @@ class PublishImagesTests(unittest.TestCase):
             for call in self.update.call_args_list
         )
 
-    def test_publishes_both_images_with_independent_state_keys(self):
+    def published_in_order(self):
+        return [
+            (call_arg(call, 1, "image"), call_arg(call, 2, "state_key"))
+            for call in self.update.call_args_list
+        ]
+
+    def test_publishes_every_image_in_order_with_independent_state_keys(self):
         self.assertEqual(reporter.publish_images(self.config), 0)
         self.assertEqual(
-            self.published(),
-            [(b"limits-image", "message_id"), (b"token-image", "tokens_message_id")],
+            self.published_in_order(),
+            [
+                (b"limits-image", "message_id"),
+                (b"token-image", "tokens_message_id"),
+                (b"forecast-image", "forecast_message_id"),
+            ],
         )
         self.failure.assert_not_called()
 
     def test_quota_failure_still_publishes_token_chart(self):
-        self.build_limits.side_effect = reporter.UsageError("omp usage unavailable", 2)
+        self.run_usage.side_effect = reporter.UsageError("omp usage unavailable", 2)
         self.assertEqual(reporter.publish_images(self.config), 2)
         self.assertEqual(self.published(), [(b"token-image", "tokens_message_id")])
         self.failure.assert_called_once()
@@ -1054,7 +1486,10 @@ class PublishImagesTests(unittest.TestCase):
     def test_token_collection_failure_still_publishes_limits(self):
         self.build_tokens.side_effect = reporter.UsageError("mini-1 unavailable", 2)
         self.assertEqual(reporter.publish_images(self.config), 2)
-        self.assertEqual(self.published(), [(b"limits-image", "message_id")])
+        self.assertEqual(
+            self.published(),
+            [(b"forecast-image", "forecast_message_id"), (b"limits-image", "message_id")],
+        )
         self.failure.assert_called_once()
 
     def test_incomplete_token_snapshot_publishes_with_warning_exit(self):
@@ -1062,22 +1497,48 @@ class PublishImagesTests(unittest.TestCase):
         self.assertEqual(reporter.publish_images(self.config), 2)
         self.assertEqual(
             self.published(),
-            [(b"limits-image", "message_id"), (b"token-image", "tokens_message_id")],
+            [
+                (b"forecast-image", "forecast_message_id"),
+                (b"limits-image", "message_id"),
+                (b"token-image", "tokens_message_id"),
+            ],
         )
 
     def test_unrecovered_tool_error_exits_one(self):
         self.build_limits.side_effect = reporter.UsageError("no provider reports", 1)
         self.assertEqual(reporter.publish_images(self.config), 1)
-        self.assertEqual(self.published(), [(b"token-image", "tokens_message_id")])
+        self.assertEqual(
+            self.published(),
+            [(b"forecast-image", "forecast_message_id"), (b"token-image", "tokens_message_id")],
+        )
 
-    def test_failed_publication_exits_two_and_attempts_both_images(self):
+    def test_failed_publication_exits_two_and_attempts_every_image(self):
         self.update.side_effect = lambda config, image, state_key: state_key == "message_id"
         self.assertEqual(reporter.publish_images(self.config), 2)
-        self.assertEqual(len(self.update.call_args_list), 2)
+        self.assertEqual(len(self.update.call_args_list), 3)
+        self.assertEqual(
+            self.published(),
+            [
+                (b"forecast-image", "forecast_message_id"),
+                (b"limits-image", "message_id"),
+                (b"token-image", "tokens_message_id"),
+            ],
+        )
+
+    def test_forecast_failure_still_publishes_limits_and_tokens(self):
+        self.build_forecast.side_effect = reporter.UsageError("history unavailable", 2)
+        self.assertEqual(reporter.publish_images(self.config), 2)
         self.assertEqual(
             self.published(),
             [(b"limits-image", "message_id"), (b"token-image", "tokens_message_id")],
         )
+        self.failure.assert_called_once()
+
+    def test_payload_failure_skips_limits_and_forecast(self):
+        self.run_usage.side_effect = reporter.UsageError("omp usage unavailable", 2)
+        reporter.publish_images(self.config)
+        self.build_limits.assert_not_called()
+        self.build_forecast.assert_not_called()
 
     def test_run_json_prints_quota_payload_unchanged(self):
         payload = {"reports": [{"provider": "zai", "limits": []}]}
@@ -1109,6 +1570,334 @@ class PublishImagesTests(unittest.TestCase):
         self.assertEqual(call_arg(get_me.call_args, 1, "method"), "getMe")
         publish.assert_called_once_with(self.config)
 
+def forecast_limit(
+    used_fraction=0.24,
+    resets_at_ms=None,
+    duration_ms=None,
+    status="ok",
+    limit_id="openai-codex:primary",
+    label="7 days",
+):
+    limit = {
+        "id": limit_id,
+        "label": label,
+        "status": status,
+        "window": {
+            "label": label,
+            "resetsAt": resets_at_ms,
+        },
+        "scope": {"tier": "default"},
+        "amount": {
+            "unit": "percent",
+            "usedFraction": used_fraction,
+        },
+    }
+    if duration_ms is not None:
+        limit["window"]["durationMs"] = duration_ms
+    return limit
+
+
+def forecast_snapshot(
+    series,
+    provider="openai-codex",
+    limit_id="openai-codex:primary",
+    account_key="acct",
+):
+    samples = [
+        {
+            "recorded_at_ms": t,
+            "provider": provider,
+            "account_key": account_key,
+            "limit_id": limit_id,
+            "used_fraction": frac,
+        }
+        for t, frac in series
+    ]
+    return {
+        "start_ms": series[0][0] if series else 0,
+        "end_ms": series[-1][0] if series else 0,
+        "samples": samples,
+        "sources_ok": ["WSL"],
+        "issues": [],
+    }
+
+def forecast_shape(
+    verdict="NO DATA",
+    used=None,
+    resets_at_ms=None,
+    projected=None,
+    exhaust_in_ms=None,
+):
+    return {
+        "provider": "openai-codex",
+        "limit_id": "openai-codex:primary",
+        "label": "7 days",
+        "used": used,
+        "resets_at_ms": resets_at_ms,
+        "window_ms": 7 * 24 * 3_600_000,
+        "rate_per_hour": None,
+        "projected": projected,
+        "exhaust_in_ms": exhaust_in_ms,
+        "verdict": verdict,
+        "spark": [],
+    }
+
+
+class ForecastModelTests(unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        self.now_ms = 1_789_000_000_000
+
+    def test_linear_usage_over_twenty_four_hours_projects_run_out(self):
+        duration_ms = 7 * 24 * 3_600_000
+        resets_at_ms = self.now_ms + 6 * 24 * 3_600_000
+        series = [(self.now_ms - 24 * 3_600_000, 0.0)]
+        limit = forecast_limit(
+            used_fraction=0.24,
+            resets_at_ms=resets_at_ms,
+            duration_ms=duration_ms,
+        )
+        snapshot = forecast_snapshot(series)
+        f = reporter.build_forecast(limit, "openai-codex", snapshot, self.now_ms)
+        self.assertAlmostEqual(f["rate_per_hour"], 0.01, places=4)
+        self.assertEqual(f["projected"], 1.0)
+        self.assertEqual(f["verdict"], "RUN OUT")
+        self.assertIsNotNone(f["exhaust_in_ms"])
+        self.assertAlmostEqual(f["exhaust_in_ms"], 76 * 3_600_000, delta=60_000)
+        self.assertEqual(len(f["spark"]), 48)
+        self.assertIsNone(f["spark"][0])
+        self.assertTrue(any(v is not None for v in f["spark"]))
+
+    def test_flat_history_verdict_is_spare(self):
+        series = [(self.now_ms - 24 * 3_600_000, 0.15)]
+        limit = forecast_limit(
+            used_fraction=0.15,
+            resets_at_ms=self.now_ms + 24 * 3_600_000,
+            duration_ms=7 * 24 * 3_600_000,
+        )
+        snapshot = forecast_snapshot(series)
+        f = reporter.build_forecast(limit, "openai-codex", snapshot, self.now_ms)
+        self.assertEqual(f["rate_per_hour"], 0.0)
+        self.assertEqual(f["projected"], 0.15)
+        self.assertIsNone(f["exhaust_in_ms"])
+        self.assertEqual(f["verdict"], "SPARE")
+
+    def test_reset_inside_lookback_uses_only_post_drop_samples(self):
+        series = [
+            (self.now_ms - 20 * 3_600_000, 0.90),
+            (self.now_ms - 10 * 3_600_000, 0.05),
+        ]
+        limit = forecast_limit(
+            used_fraction=0.15,
+            resets_at_ms=self.now_ms + 48 * 3_600_000,
+            duration_ms=7 * 24 * 3_600_000,
+        )
+        snapshot = forecast_snapshot(series)
+        f = reporter.build_forecast(limit, "openai-codex", snapshot, self.now_ms)
+        self.assertAlmostEqual(f["rate_per_hour"], 0.01, places=4)
+
+    def test_used_at_one_is_exhausted(self):
+        limit = forecast_limit(
+            used_fraction=1.0,
+            resets_at_ms=self.now_ms + 10 * 3_600_000,
+        )
+        f = reporter.build_forecast(limit, "openai-codex", forecast_snapshot([]), self.now_ms)
+        self.assertEqual(f["verdict"], "EXHAUSTED")
+
+    def test_history_span_under_one_hour_is_no_data(self):
+        series = [(self.now_ms - 30 * 60 * 1_000, 0.10)]
+        limit = forecast_limit(
+            used_fraction=0.12,
+            resets_at_ms=self.now_ms + 10 * 3_600_000,
+        )
+        f = reporter.build_forecast(limit, "openai-codex", forecast_snapshot(series), self.now_ms)
+        self.assertIsNone(f["rate_per_hour"])
+        self.assertEqual(f["verdict"], "NO DATA")
+
+    def test_missing_used_fraction_is_no_data(self):
+        limit = forecast_limit(
+            used_fraction=None,
+            resets_at_ms=self.now_ms + 10 * 3_600_000,
+        )
+        f = reporter.build_forecast(limit, "openai-codex", forecast_snapshot([]), self.now_ms)
+        self.assertIsNone(f["used"])
+        self.assertEqual(f["verdict"], "NO DATA")
+
+    def test_short_window_duration_selects_short_lookback(self):
+        duration_ms = 5 * 3_600_000
+        series = [
+            (self.now_ms - 10 * 3_600_000, 0.0),
+            (self.now_ms - 2 * 3_600_000, 0.10),
+        ]
+        limit = forecast_limit(
+            used_fraction=0.20,
+            resets_at_ms=self.now_ms + 3 * 3_600_000,
+            duration_ms=duration_ms,
+        )
+        snapshot = forecast_snapshot(series)
+        f = reporter.build_forecast(limit, "openai-codex", snapshot, self.now_ms)
+        self.assertAlmostEqual(f["rate_per_hour"], 0.05, places=4)
+        rate_text = reporter.fmt_rate(f)
+        self.assertEqual(rate_text, "+5.0%/h")
+        self.assertTrue(rate_text.endswith("%/h"))
+
+    def test_projected_between_eighty_five_and_one_hundred_is_hot(self):
+        series = [(self.now_ms - 24 * 3_600_000, 0.0)]
+        limit = forecast_limit(
+            used_fraction=0.30,
+            resets_at_ms=self.now_ms + 48 * 3_600_000,
+            duration_ms=7 * 24 * 3_600_000,
+        )
+        f = reporter.build_forecast(limit, "openai-codex", forecast_snapshot(series), self.now_ms)
+        self.assertEqual(f["verdict"], "HOT")
+        self.assertAlmostEqual(f["projected"], 0.9, places=3)
+
+    def test_projected_between_fifty_and_eighty_five_is_on_pace(self):
+        series = [(self.now_ms - 24 * 3_600_000, 0.0)]
+        limit = forecast_limit(
+            used_fraction=0.20,
+            resets_at_ms=self.now_ms + 48 * 3_600_000,
+            duration_ms=7 * 24 * 3_600_000,
+        )
+        f = reporter.build_forecast(limit, "openai-codex", forecast_snapshot(series), self.now_ms)
+        self.assertEqual(f["verdict"], "ON PACE")
+        self.assertAlmostEqual(f["projected"], 0.6, places=3)
+
+
+class ForecastRowsTests(unittest.TestCase):
+    def test_forecast_rows_filters_orders_and_sorts_limits(self):
+        now_ms = 1_789_000_000_000
+        payload = {
+            "reports": [
+                {
+                    "provider": "google-antigravity",
+                    "limits": [
+                        forecast_limit(limit_id="ga:daily", label="Daily", resets_at_ms=now_ms + 1_000),
+                    ],
+                },
+                {
+                    "provider": "anthropic",
+                    "limits": [],
+                },
+                {
+                    "provider": "zai",
+                    "limits": [
+                        forecast_limit(limit_id="zai:late", label="Late", resets_at_ms=now_ms + 10_000_000),
+                        forecast_limit(limit_id="zai:early", label="Early", resets_at_ms=now_ms + 1_000_000),
+                    ],
+                },
+                {
+                    "provider": "openai-codex",
+                    "limits": [
+                        forecast_limit(limit_id="codex:primary", label="Primary", resets_at_ms=now_ms + 5_000_000),
+                    ],
+                },
+            ]
+        }
+        snapshot = forecast_snapshot([])
+        rows = reporter.forecast_rows(payload, snapshot, now_ms)
+        self.assertEqual([provider for provider, _ in rows], ["openai-codex", "zai"])
+        zai_limits = [f["limit_id"] for f in rows[1][1]]
+        self.assertEqual(zai_limits, ["zai:early", "zai:late"])
+
+class FmtDurationTests(unittest.TestCase):
+    def test_zero_and_negative_durations_read_as_now(self):
+        self.assertEqual(reporter.fmt_duration(0), "~now")
+        self.assertEqual(reporter.fmt_duration(-1), "~now")
+        self.assertEqual(reporter.fmt_duration(-3_600_000), "~now")
+
+    def test_minute_boundaries_round_up_to_singular_and_plural(self):
+        self.assertEqual(reporter.fmt_duration(60_000), "~in 1 minute")
+        self.assertEqual(reporter.fmt_duration(120_000), "~in 2 minutes")
+        self.assertEqual(reporter.fmt_duration(3_599_000), "~in 60 minutes")
+
+    def test_hour_boundaries_round_up_to_singular_and_plural(self):
+        self.assertEqual(reporter.fmt_duration(3_600_000), "~in 1 hour")
+        self.assertEqual(reporter.fmt_duration(7_200_000), "~in 2 hours")
+
+    def test_day_boundaries_round_up_to_singular_and_plural(self):
+        self.assertEqual(reporter.fmt_duration(86_400_000), "~in 1 day")
+        self.assertEqual(reporter.fmt_duration(172_800_000), "~in 2 days")
+
+    def test_reset_estimate_three_hours_out_matches_duration_text(self):
+        resets_at_ms = int(datetime.now(timezone.utc).timestamp() * 1000) + 3 * 3_600_000
+        self.assertEqual(reporter.fmt_reset_estimate(resets_at_ms), "~in 3 hours")
+        self.assertEqual(reporter.fmt_reset_estimate(resets_at_ms), reporter.fmt_duration(3 * 3_600_000))
+
+
+class ForecastAdviceTests(unittest.TestCase):
+    NOW_MS = 1_789_000_000_000
+
+    def test_run_out_advice_counts_exhaustion_and_gap_before_reset(self):
+        shape = forecast_shape(
+            verdict="RUN OUT",
+            used=0.5,
+            resets_at_ms=self.NOW_MS + 7 * 24 * 3_600_000,
+            projected=1.0,
+            exhaust_in_ms=5 * 24 * 3_600_000,
+        )
+        self.assertEqual(
+            reporter.forecast_advice(shape, self.NOW_MS),
+            "tone it down \u00b7 hits 100% ~in 5 days, ~in 2 days before reset",
+        )
+
+    def test_run_out_advice_clamps_gap_before_reset_at_now(self):
+        shape = forecast_shape(
+            verdict="RUN OUT",
+            used=0.5,
+            resets_at_ms=self.NOW_MS + 2 * 24 * 3_600_000,
+            projected=1.0,
+            exhaust_in_ms=5 * 24 * 3_600_000,
+        )
+        self.assertEqual(
+            reporter.forecast_advice(shape, self.NOW_MS),
+            "tone it down \u00b7 hits 100% ~in 5 days, ~now before reset",
+        )
+
+    def test_advice_uses_passed_now_not_wall_clock(self):
+        now_ms = 1_600_000_000_000
+        shape = forecast_shape(
+            verdict="RUN OUT",
+            used=0.5,
+            resets_at_ms=now_ms + 7 * 24 * 3_600_000,
+            projected=1.0,
+            exhaust_in_ms=5 * 24 * 3_600_000,
+        )
+        self.assertEqual(
+            reporter.forecast_advice(shape, now_ms),
+            "tone it down \u00b7 hits 100% ~in 5 days, ~in 2 days before reset",
+        )
+
+    def test_exhausted_advice_names_reset_three_days_out(self):
+        resets_at_ms = int(datetime.now(timezone.utc).timestamp() * 1000) + 3 * 86_400_000
+        shape = forecast_shape(verdict="EXHAUSTED", used=1.0, resets_at_ms=resets_at_ms)
+        self.assertEqual(
+            reporter.forecast_advice(shape, self.NOW_MS),
+            "exhausted \u00b7 wait, resets ~in 3 days",
+        )
+
+    def test_exhausted_advice_without_reset_time_is_bare_wait(self):
+        shape = forecast_shape(verdict="EXHAUSTED", used=1.0, resets_at_ms=None)
+        self.assertEqual(reporter.forecast_advice(shape, self.NOW_MS), "exhausted \u00b7 wait")
+
+    def test_hot_advice_reports_projected_percent(self):
+        shape = forecast_shape(verdict="HOT", used=0.7, projected=0.92)
+        self.assertEqual(reporter.forecast_advice(shape, self.NOW_MS), "ease off \u00b7 ~92% by reset")
+
+    def test_on_pace_advice_reports_projected_percent(self):
+        shape = forecast_shape(verdict="ON PACE", used=0.5, projected=0.69)
+        self.assertEqual(reporter.forecast_advice(shape, self.NOW_MS), "keep going \u00b7 ~69% by reset")
+
+    def test_spare_advice_reports_spare_percent(self):
+        shape = forecast_shape(verdict="SPARE", used=0.24, projected=0.24)
+        self.assertEqual(reporter.forecast_advice(shape, self.NOW_MS), "crank it up \u00b7 ~76% spare by reset")
+
+    def test_no_data_without_usage_reports_no_usage(self):
+        self.assertEqual(reporter.forecast_advice(forecast_shape(), self.NOW_MS), "no usage reported")
+
+    def test_no_data_with_usage_reports_insufficient_history(self):
+        shape = forecast_shape(used=0.3)
+        self.assertEqual(reporter.forecast_advice(shape, self.NOW_MS), "not enough history yet")
 
 if __name__ == "__main__":
     unittest.main()
