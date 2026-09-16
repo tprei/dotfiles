@@ -7,7 +7,7 @@ ExecStart=/home/prei/.local/bin/codex-usage-check --telegram
 Environment=OMP_BIN=/home/prei/.local/bin/omp
 Environment=OMP_PROFILE=mix
 Environment=OMP_TOKEN_SSH_HOST=mbn@mini-1
-Environment=PATH=/home/prei/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=/home/prei/.local/bin:/home/prei/.bun/bin:/usr/local/bin:/usr/bin:/bin
 Restart=on-failure
 RestartPreventExitStatus=1 2
 RestartSec=60
