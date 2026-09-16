@@ -1,4 +1,4 @@
-From eb8545afceaac7d4cf17404066110544808da35f Mon Sep 17 00:00:00 2001
+From f990821282c3ca031e598bf658ffb836d4bf85f1 Mon Sep 17 00:00:00 2001
 From: tprei <37089330+tprei@users.noreply.github.com>
 Date: Mon, 14 Sep 2026 22:09:29 +0100
 Subject: [PATCH 1/2] Prevent main sessions from using disabled providers
@@ -17,7 +17,7 @@ Subject: [PATCH 1/2] Prevent main sessions from using disabled providers
  create mode 100644 packages/coding-agent/src/session/main-agent-model-policy.ts
 
 diff --git a/packages/coding-agent/src/config/settings-schema.ts b/packages/coding-agent/src/config/settings-schema.ts
-index 739a8cea03..eb4c59852e 100644
+index 739a8ce..eb4c598 100644
 --- a/packages/coding-agent/src/config/settings-schema.ts
 +++ b/packages/coding-agent/src/config/settings-schema.ts
 @@ -628,6 +628,7 @@ export const SETTINGS_SCHEMA = {
@@ -29,7 +29,7 @@ index 739a8cea03..eb4c59852e 100644
  	"providers.maxInFlightRequests": {
  		type: "record",
 diff --git a/packages/coding-agent/src/session/agent-session.ts b/packages/coding-agent/src/session/agent-session.ts
-index 45bb8a83dc..596635ac64 100644
+index 45bb8a8..596635a 100644
 --- a/packages/coding-agent/src/session/agent-session.ts
 +++ b/packages/coding-agent/src/session/agent-session.ts
 @@ -306,6 +306,7 @@ import {
@@ -101,7 +101,7 @@ index 45bb8a83dc..596635ac64 100644
  						switchingToDifferentSession ||
 diff --git a/packages/coding-agent/src/session/main-agent-model-policy.ts b/packages/coding-agent/src/session/main-agent-model-policy.ts
 new file mode 100644
-index 0000000000..5dd221312d
+index 0000000..5dd2213
 --- /dev/null
 +++ b/packages/coding-agent/src/session/main-agent-model-policy.ts
 @@ -0,0 +1,16 @@
@@ -122,7 +122,7 @@ index 0000000000..5dd221312d
 +	}
 +}
 diff --git a/packages/coding-agent/src/session/model-controls.ts b/packages/coding-agent/src/session/model-controls.ts
-index 4ed785ec1f..81ab90e2e2 100644
+index 4ed785e..81ab90e 100644
 --- a/packages/coding-agent/src/session/model-controls.ts
 +++ b/packages/coding-agent/src/session/model-controls.ts
 @@ -37,12 +37,14 @@ import {
@@ -196,7 +196,7 @@ index 4ed785ec1f..81ab90e2e2 100644
  		if (!patterns || patterns.length === 0) return all;
  		return filterAvailableModelsByEnabledPatterns(all, patterns, this.#host.settings);
 diff --git a/packages/coding-agent/src/session/turn-recovery.ts b/packages/coding-agent/src/session/turn-recovery.ts
-index e13f87b9b2..784f2fbe1f 100644
+index e13f87b..784f2fb 100644
 --- a/packages/coding-agent/src/session/turn-recovery.ts
 +++ b/packages/coding-agent/src/session/turn-recovery.ts
 @@ -27,6 +27,7 @@ import type { ModelRegistry } from "../config/model-registry";
@@ -287,7 +287,7 @@ index e13f87b9b2..784f2fbe1f 100644
  		if (!apiKey) return false;
  
 diff --git a/packages/coding-agent/test/agent-session-model-switch-auth.test.ts b/packages/coding-agent/test/agent-session-model-switch-auth.test.ts
-index 2dcf69b572..acc149bbca 100644
+index 2dcf69b..acc149b 100644
 --- a/packages/coding-agent/test/agent-session-model-switch-auth.test.ts
 +++ b/packages/coding-agent/test/agent-session-model-switch-auth.test.ts
 @@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, spyOn } from "bun
@@ -407,7 +407,7 @@ index 2dcf69b572..acc149bbca 100644
 +	});
  });
 diff --git a/packages/coding-agent/test/agent-session-retry-fallback.test.ts b/packages/coding-agent/test/agent-session-retry-fallback.test.ts
-index 9a847c0ea4..ae3a95b613 100644
+index 9a847c0..ae3a95b 100644
 --- a/packages/coding-agent/test/agent-session-retry-fallback.test.ts
 +++ b/packages/coding-agent/test/agent-session-retry-fallback.test.ts
 @@ -6194,4 +6194,165 @@ describe("AgentSession retry fallback", () => {
@@ -577,7 +577,7 @@ index 9a847c0ea4..ae3a95b613 100644
 +	});
  });
 diff --git a/packages/coding-agent/test/issue-2750-subagent-runtime-fallback.test.ts b/packages/coding-agent/test/issue-2750-subagent-runtime-fallback.test.ts
-index dee88a688f..378fdf5149 100644
+index dee88a6..378fdf5 100644
 --- a/packages/coding-agent/test/issue-2750-subagent-runtime-fallback.test.ts
 +++ b/packages/coding-agent/test/issue-2750-subagent-runtime-fallback.test.ts
 @@ -108,6 +108,7 @@ describe("subagent runtime model resolution", () => {
@@ -589,7 +589,7 @@ index dee88a688f..378fdf5149 100644
  					thinkingLevel: () => activeLevel,
  					sessionManager: { getSessionId: () => "literal-model" },
 diff --git a/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts b/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
-index 5a6e1542ae..e5f8a0c644 100644
+index 5a6e154..e5f8a0c 100644
 --- a/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
 +++ b/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
 @@ -60,6 +60,7 @@ function createHost(
@@ -600,6 +600,3 @@ index 5a6e1542ae..e5f8a0c644 100644
  		agent: { state: { messages: options.messages ?? [] } } as never,
  		sessionManager: {
  			getLastModelChangeRole: () => options.lastModelChangeRole,
--- 
-2.43.0
-

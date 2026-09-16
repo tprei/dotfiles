@@ -1,4 +1,4 @@
-From ff17a239e98ad7dea603d729f998b8cd41b6c0b1 Mon Sep 17 00:00:00 2001
+From b0d7f33de6f0e82227c88d90ecbbbec38518f9f0 Mon Sep 17 00:00:00 2001
 From: tprei <37089330+tprei@users.noreply.github.com>
 Date: Wed, 16 Sep 2026 09:58:35 +0100
 Subject: [PATCH 2/2] Retry transient transport failures after committed text
@@ -14,7 +14,7 @@ allow replay when a transient transport error is the only failure.
  2 files changed, 67 insertions(+), 5 deletions(-)
 
 diff --git a/packages/coding-agent/src/session/turn-recovery.ts b/packages/coding-agent/src/session/turn-recovery.ts
-index 784f2fbe1f..2f732babba 100644
+index 784f2fb..2f732ba 100644
 --- a/packages/coding-agent/src/session/turn-recovery.ts
 +++ b/packages/coding-agent/src/session/turn-recovery.ts
 @@ -1267,11 +1267,50 @@ export class TurnRecovery {
@@ -70,7 +70,7 @@ index 784f2fbe1f..2f732babba 100644
  	 * True when every emitted tool call provably never executed and no other
  	 * replay-unsafe output exists. The caller restricts this exception to
 diff --git a/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts b/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
-index e5f8a0c644..69ca44106f 100644
+index e5f8a0c..69ca441 100644
 --- a/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
 +++ b/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
 @@ -265,9 +265,18 @@ describe("TurnRecovery replay-unsafe output classification", () => {
@@ -136,6 +136,3 @@ index e5f8a0c644..69ca44106f 100644
  				expect(recovery.classifyResolvedInterruptedToolTurn(message)).toBeUndefined();
  			});
  
--- 
-2.43.0
-

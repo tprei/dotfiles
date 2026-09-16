@@ -12,13 +12,13 @@ just stow-check omp       # dry-run one package (omit the name for all of them)
 just stow omp             # link it
 just omp-verify           # prove the omp package is live in $HOME
 just omp-config-check     # parse configs, compile extensions, check GLM thinking levels
-just omp-rebuild          # rebuild and relink the patched omp runtime
-just omp-runtime-export   # regenerate omp-runtime/*.patch from the worktree
-just omp-runtime-check    # fail on patch drift against the worktree and PIN
+just omp-rebuild          # bootstrap the pinned source, apply patches, rebuild, relink
+just omp-runtime-export   # regenerate omp-runtime/*.patch from the source checkout
+just omp-runtime-check    # fail on patch drift against the source checkout and PIN
 just usage                # provider usage report
 ```
 
-Install it with `cargo binstall just`, `brew install just`, or the prebuilt binary from the [releases page](https://github.com/casey/just/releases). Recipes assume this repository is the working directory; `OMP_SRC` and `OMP_WORKTREE` override the runtime paths.
+Install it with `cargo binstall just`, `brew install just`, or the prebuilt binary from the [releases page](https://github.com/casey/just/releases). Recipes assume this repository is the working directory; `OMP_SRC` overrides the runtime source path.
 
 ## Shell
 
@@ -135,11 +135,11 @@ readlink -f ~/.omp/profiles/mix/agent/extensions/antigravity-cli.ts
 
 - `PIN` — upstream release, baseline commit, tarball URL, and the ordered patch inventory.
 - `0001-*.patch`, `0002-*.patch` — `git format-patch` output for every commit above the baseline.
-- `reapply.sh` — rebuilds the worktree from scratch on a new machine or after a global OMP update wipes the link: fetch the pinned tarball, `git am` the patches, build, relink.
+- `just omp-rebuild` is the single entry point on any machine, fresh or not: it bootstraps `~/src/oh-my-pi` from the pinned tarball, applies the patches, builds, and relinks every launcher that already holds an `omp`.
 
 `0001` stops main sessions from selecting disabled providers. `0002` retries a transient transport failure (a dropped socket mid-answer) when the turn's only committed output is text, which upstream treats as replay-unsafe and drops.
 
-After committing in the worktree, `just omp-runtime-export` refreshes the patch files and `just omp-rebuild` rebuilds the binary. `just omp-runtime-check` is the drift gate: it fails when a patch file does not match the worktree commit, when a patch is not listed in `PIN`, and when `PIN` names a file that no longer exists. Running it after an upstream bump catches a stale `PIN` before the next machine rebuild trusts it.
+After committing in the source checkout, `just omp-runtime-export` refreshes the patch files and `just omp-rebuild` rebuilds the runtime. `just omp-runtime-check` is the drift gate: it fails when a patch file does not match the source commit (everything but the commit sha line, which a fresh bootstrap legitimately changes), when a patch is not listed in `PIN`, and when `PIN` names a file that no longer exists. Running it after an upstream bump catches a stale `PIN` before the next machine rebuild trusts it.
 
 ## Tools
 

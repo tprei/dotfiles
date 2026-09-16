@@ -2,8 +2,6 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 home := env_var("HOME")
 omp_src := env_var_or_default("OMP_SRC", home / "src/oh-my-pi")
-omp_worktree := env_var_or_default("OMP_WORKTREE", home / ".worktrees/oh-my-pi-main-driver-no-agy")
-omp_launcher := home / ".bun/bin/omp"
 packages := "aerospace alacritty borders claude codex ghostty herdr karabiner nvim omp pi starship tmux tools vim zsh"
 
 _default:
@@ -73,42 +71,79 @@ omp-config-check:
     fi
     echo "GLM thinking levels pinned to max"
 
-# Rebuild the patched omp runtime from the worktree and relink the launcher.
+# Bootstrap the pinned omp source when missing, apply the patches, rebuild, and relink every omp launcher.
 omp-rebuild:
     #!/usr/bin/env bash
     set -euo pipefail
-    git -C "{{ omp_worktree }}" log --oneline -1
-    bun --cwd="{{ omp_worktree }}" install --frozen-lockfile
-    bun --cwd="{{ omp_worktree }}" run build:native
-    bun --cwd="{{ omp_worktree }}/packages/coding-agent" link
-    sh "{{ omp_worktree }}/scripts/link-omp.sh"
-    realpath "{{ omp_launcher }}"
-    "{{ omp_launcher }}" --version
+    cd "{{ justfile_directory() }}"
+    src="{{ omp_src }}"
+    if [ -d "$src" ] && [ -n "$(ls -A "$src")" ] && [ ! -d "$src/.git" ]; then
+        echo "refusing to bootstrap into nonempty $src without a .git dir" >&2
+        exit 1
+    fi
+    if [ ! -d "$src/.git" ]; then
+        tarball=$(sed -n 's/^Tarball: //p' omp-runtime/PIN)
+        message=$(sed -n 's/^Baseline commit message: //p' omp-runtime/PIN)
+        mkdir -p "$src"
+        curl --fail --location "$tarball" | tar -xz -C "$src" --strip-components=1
+        git -C "$src" init -b main-driver-no-agy >/dev/null
+        git -C "$src" add -A
+        git -C "$src" commit -q -m "$message"
+        git -C "$src" tag omp-baseline
+        echo "bootstrapped $src from $(sed -n 's/^Release: //p' omp-runtime/PIN)"
+    fi
+    if [ "$(git -C "$src" rev-parse omp-baseline)" = "$(git -C "$src" rev-parse HEAD)" ]; then
+        git -C "$src" am "$PWD"/omp-runtime/[0-9][0-9][0-9][0-9]-*.patch
+    fi
+    git -C "$src" log --oneline -1
+    bun --cwd="$src" install --frozen-lockfile
+    bun --cwd="$src" run build:native
+    bun --cwd="$src/packages/coding-agent" link
+    sh "$src/scripts/link-omp.sh"
+    wrapper=$(readlink -f "$src/packages/coding-agent/scripts/omp")
+    for bin in "$HOME/.bun/bin" "$HOME/.local/bin"; do
+        if [ -e "$bin/omp" ] && [ "$(readlink -f "$bin/omp")" != "$wrapper" ]; then
+            ln -sfn "$wrapper" "$bin/omp"
+            echo "linked $bin/omp -> $wrapper"
+        fi
+    done
+    live=$(command -v omp)
+    resolved=$(readlink -f "$live")
+    case "$resolved" in
+        "$src"/*) echo "omp ($live) -> $resolved" ;;
+        *) echo "drift: $live resolves to $resolved, expected under $src" >&2; exit 1 ;;
+    esac
+    "$live" --version
     echo "restart open omp sessions to load the rebuilt runtime"
 
-# Regenerate omp-runtime/*.patch from the worktree commits above the pinned baseline.
+# Regenerate omp-runtime/*.patch from the source commits above the omp-baseline tag.
 omp-runtime-export:
     #!/usr/bin/env bash
     set -euo pipefail
     cd "{{ justfile_directory() }}"
-    baseline=$(awk '/^Baseline SHA: /{print $3}' omp-runtime/PIN)
     rm -f omp-runtime/[0-9][0-9][0-9][0-9]-*.patch
-    git -C "{{ omp_worktree }}" format-patch --filename-max-length=100 "$baseline"..HEAD \
+    git -C "{{ omp_src }}" format-patch --no-signature --filename-max-length=100 omp-baseline..HEAD \
         -o "{{ justfile_directory() }}/omp-runtime"
     {{ just_executable() }} omp-runtime-check
 
-# Fail when the versioned patches drift from the worktree or from PIN.
+# Fail when the versioned patches drift from the source checkout or from PIN.
 omp-runtime-check:
     #!/usr/bin/env bash
     set -euo pipefail
     cd "{{ justfile_directory() }}"
-    baseline=$(awk '/^Baseline SHA: /{print $3}' omp-runtime/PIN)
+    [ -d "{{ omp_src }}/.git" ] || { echo "no omp source at {{ omp_src }}; run: just omp-rebuild" >&2; exit 1; }
+    git -C "{{ omp_src }}" rev-parse omp-baseline >/dev/null 2>&1 || {
+        echo "no omp-baseline tag in {{ omp_src }}; run: just omp-rebuild" >&2
+        exit 1
+    }
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
-    git -C "{{ omp_worktree }}" format-patch --filename-max-length=100 "$baseline"..HEAD -o "$tmp" >/dev/null
+    git -C "{{ omp_src }}" format-patch --no-signature --filename-max-length=100 omp-baseline..HEAD -o "$tmp" >/dev/null
+    strip_sha() { sed 's/^From [0-9a-f]\{40\} Mon Sep 17 00:00:00 2001$/From <commit>/' "$1"; }
     for generated in "$tmp"/*.patch; do
         name=$(basename "$generated")
-        diff -u "omp-runtime/$name" "$generated"
+        test -f "omp-runtime/$name" || { echo "untracked patch file: $name" >&2; exit 1; }
+        diff -u <(strip_sha "omp-runtime/$name") <(strip_sha "$generated")
     done
     for patch in omp-runtime/[0-9][0-9][0-9][0-9]-*.patch; do
         name=$(basename "$patch")
@@ -118,7 +153,7 @@ omp-runtime-check:
     while read -r name; do
         test -f "omp-runtime/$name" || { echo "PIN lists missing patch: $name" >&2; exit 1; }
     done < <(awk '/^Patch file: /{print $3}' omp-runtime/PIN)
-    echo "patches match worktree and PIN"
+    echo "patches match source and PIN"
 
 # Provider usage report across every authenticated backend.
 usage:

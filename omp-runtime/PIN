@@ -11,7 +11,6 @@ Patch file: 0001-Prevent-main-sessions-from-using-disabled-providers.patch
 Runtime commit message: Retry transient transport failures after committed text
 Patch file: 0002-Retry-transient-transport-failures-after-committed-text.patch
 
-Live locations on this machine, kept out of this repo.
-Source checkout: /home/mbn/src/oh-my-pi, branch main-driver-no-agy
-Worktree: /home/mbn/.worktrees/oh-my-pi-main-driver-no-agy, branch main-driver-no-agy
-Launcher: /home/mbn/.bun/bin/omp -> .../packages/coding-agent/scripts/omp
+Live locations, kept out of this repo. Override the checkout with OMP_SRC.
+Source checkout: ~/src/oh-my-pi, branch main-driver-no-agy, baseline tagged omp-baseline
+Launchers: ~/.bun/bin/omp and ~/.local/bin/omp -> .../packages/coding-agent/scripts/omp
