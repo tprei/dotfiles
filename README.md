@@ -2,6 +2,24 @@
 
 Personal WSL/Linux and MacBook config for shell, tmux, nvim, terminals, keyboard, and agents.
 
+## Tasks
+
+`justfile` holds the repeatable procedures. `just` lists them:
+
+```sh
+just                      # every recipe with its one-line description
+just stow-check omp       # dry-run one package (omit the name for all of them)
+just stow omp             # link it
+just omp-verify           # prove the omp package is live in $HOME
+just omp-config-check     # parse configs, compile extensions, check GLM thinking levels
+just omp-rebuild          # rebuild and relink the patched omp runtime
+just omp-runtime-export   # regenerate omp-runtime/*.patch from the worktree
+just omp-runtime-check    # fail on patch drift against the worktree and PIN
+just usage                # provider usage report
+```
+
+Install it with `cargo binstall just`, `brew install just`, or the prebuilt binary from the [releases page](https://github.com/casey/just/releases). Recipes assume this repository is the working directory; `OMP_SRC` and `OMP_WORKTREE` override the runtime paths.
+
 ## Shell
 
 `zsh/.zshrc` uses Oh My Zsh with `git`, `z`, autosuggestions, and `fzf`. It sets nvim as the editor, loads nvm, brew, bun, pnpm, local secrets, Claude wrappers, and clipboard helpers.
@@ -53,9 +71,8 @@ Each agent tool has its own stow package — `claude`, `codex`, `omp`, `pi` — 
 OMP config is stow-managed. The `omp` package must be symlinked into `$HOME`, otherwise OMP writes its own defaults into `~/.omp/agent/config.yml` and silently ignores everything in this repo — the visible symptom is the default model role falling back to OMP's built-in model instead of `modelRoles.default`.
 
 ```sh
-cd ~/dotfiles
-stow -n -v -t ~ omp   # dry run, must report no conflicts
-stow -v -t ~ omp
+just stow-check omp   # must report no conflicts
+just stow omp
 ```
 
 `stow` refuses to link over real files. If the dry run reports `existing target is neither a link nor a directory`, move those files aside (back them up, don't delete) and re-run. OMP recreates `config.yml` as a plain file on first launch, so this conflict is expected on a fresh machine.
@@ -68,11 +85,14 @@ Layout:
 - `omp/.omp/profiles/{mix,claude,china}/agent/` — per-profile overrides, each with its own `config.yml`, `agents/`, and optional `rules/`, `APPEND_SYSTEM.md`, `WATCHDOG.md`.
 - `omp/.gemini/config/agents/omp-provider/agent.md` — isolated AGY transport agent installed by the same Stow package.
 
-Verification, in order:
+Verification:
 
-1. `stow -n -v -t ~ omp` prints nothing but the simulation warning.
-2. `readlink -f ~/.omp/agent/config.yml` resolves into `~/dotfiles/omp/`.
-3. `find ~/.omp -maxdepth 4 -type l` lists every managed path, including `agent/rules`, `agent/extensions`, and the profile directories.
+```sh
+just omp-verify         # dry-run stow, resolve config.yml, list every managed link
+just omp-config-check   # yaml parse, extension build, GLM thinking-level drift
+```
+
+`omp-verify` fails when `~/.omp/agent/config.yml` resolves outside this repository, which is the signal that OMP wrote its own defaults. `omp-config-check` fails when any `zai/glm-5.3` or `zai/glm-5.3-flash` selector carries a level other than `max`; level-less keys under `retry.fallbackChains` name a failing route and stay level-less on purpose.
 
 Edit configs in this repository, never in `~/.omp`. Anything under `~/.omp` that is a real file is drift; reconcile it into the repo and re-stow. The rest of `~/.omp` (`agent.db`, `history.db`, `models.db`, `sessions/`, `logs/`, `cache/`) is runtime state and stays untracked.
 
@@ -108,6 +128,18 @@ Profile clients inherit the shared extension through `~/.omp/profiles/*/agent/ex
 readlink -f ~/.omp/agent/extensions/antigravity-cli.ts
 readlink -f ~/.omp/profiles/mix/agent/extensions/antigravity-cli.ts
 ```
+
+### Patched OMP runtime
+
+`omp/` tracks configuration. `omp-runtime/` tracks the source patches this machine's `omp` binary is built from, because the OMP checkout itself lives outside the repository and has no fork to push to.
+
+- `PIN` — upstream release, baseline commit, tarball URL, and the ordered patch inventory.
+- `0001-*.patch`, `0002-*.patch` — `git format-patch` output for every commit above the baseline.
+- `reapply.sh` — rebuilds the worktree from scratch on a new machine or after a global OMP update wipes the link: fetch the pinned tarball, `git am` the patches, build, relink.
+
+`0001` stops main sessions from selecting disabled providers. `0002` retries a transient transport failure (a dropped socket mid-answer) when the turn's only committed output is text, which upstream treats as replay-unsafe and drops.
+
+After committing in the worktree, `just omp-runtime-export` refreshes the patch files and `just omp-rebuild` rebuilds the binary. `just omp-runtime-check` is the drift gate: it fails when a patch file does not match the worktree commit, when a patch is not listed in `PIN`, and when `PIN` names a file that no longer exists. Running it after an upstream bump catches a stale `PIN` before the next machine rebuild trusts it.
 
 ## Tools
 

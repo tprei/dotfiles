@@ -1,6 +1,7 @@
 .env
 venv
 nvim.log
+.nvimlog
 omp/.omp/agent/config.yml.lock
 pi/.pi/agent/auth.json
 pi/.pi/agent/codex-rate-history.jsonl
@@ -10,3 +11,6 @@ pi/.pi/agent/trust.json
 __pycache__/
 *.pyc
 omp/.omp/node_modules/
+omp-session-*.html
+todo.txt
+done.txt
