@@ -13,6 +13,7 @@ delivery state lives in ~/.config/codex-usage/state.json with separate image IDs
 from __future__ import annotations
 
 import colorsys
+import fcntl
 import hashlib
 import json
 import math
@@ -28,7 +29,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from html import escape, unescape
 from pathlib import Path
-from typing import TypedDict
+from typing import IO, TypedDict
 from uuid import uuid4
 
 CLAUDE_CONFIG_PATH = Path.home() / ".config" / "claude-usage" / "config"
@@ -102,6 +103,7 @@ TOKEN_SSH_HOST_ENV = "OMP_TOKEN_SSH_HOST"
 TOKEN_SSH_PYTHON = "/usr/bin/python3"
 TOKEN_SSH_BINARY = "/usr/bin/ssh"
 LIMITS_STATE_KEY = "message_id"
+LOCK_PATH = CODEX_STATE_PATH.parent / "update.lock"
 TOKENS_STATE_KEY = "tokens_message_id"
 FORECAST_STATE_KEY = "forecast_message_id"
 
@@ -963,6 +965,17 @@ def tg_pin(config: dict, message_id: int) -> None:
     )
 
 
+def tg_delete(config: dict, message_id: int) -> None:
+    try:
+        tg_call(
+            config["bot_token"],
+            "deleteMessage",
+            {"chat_id": config["chat_id"], "message_id": message_id},
+        )
+    except (urllib.error.HTTPError, OSError, TimeoutError, TelegramError) as error:
+        print(f"codex-usage-check: failed to delete superseded message {message_id}: {error}", file=sys.stderr)
+
+
 def edit_failure_action(description: str) -> str:
     lowered = description.casefold()
     if "message is not modified" in lowered:
@@ -1015,6 +1028,8 @@ def update_pinned(config: dict, image: bytes, state_key: str) -> bool:
         tg_pin(config, new_message_id)
     except (urllib.error.HTTPError, OSError, TimeoutError, TelegramError):
         return False
+    if isinstance(message_id, int):
+        tg_delete(config, message_id)
     return True
 
 
@@ -1728,6 +1743,24 @@ def fail(error: Exception) -> int:
     return getattr(error, "exit_code", 2)
 
 
+def acquire_update_lock() -> IO[str] | None:
+    try:
+        LOCK_PATH.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        descriptor = os.open(LOCK_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        handle = os.fdopen(descriptor, "w")
+    except OSError as error:
+        raise UsageError(f"failed to open update lock: {error}", 2) from error
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        handle.close()
+        return None
+    except OSError as error:
+        handle.close()
+        raise UsageError(f"failed to lock {LOCK_PATH}: {error}", 2) from error
+    return handle
+
+
 def run_json() -> int:
     try:
         payload = run_omp_usage()
@@ -1785,10 +1818,15 @@ def main(argv: list[str]) -> int:
     if len(selected) > 1:
         print("codex-usage-check: choose either --setup-telegram or --telegram", file=sys.stderr)
         return 1
-    if "--setup-telegram" in selected:
-        return setup_telegram()
-    if "--telegram" in selected:
-        return run_telegram()
+    if "--setup-telegram" in selected or "--telegram" in selected:
+        lock = acquire_update_lock()
+        if lock is None:
+            print("codex-usage-check: another telegram update is in progress, skipping", file=sys.stderr)
+            return 0
+        with lock:
+            if "--setup-telegram" in selected:
+                return setup_telegram()
+            return run_telegram()
     return run_json()
 
 

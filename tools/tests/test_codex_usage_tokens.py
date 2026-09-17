@@ -1346,12 +1346,15 @@ class ReporterTelegramStateTests(unittest.TestCase):
                     "tg_edit_photo",
                     side_effect=[self.telegram_http_error("Bad Request: message to edit not found")],
                 ) as edit, \
-                mock.patch.object(reporter, "tg_pin") as pin:
+                mock.patch.object(reporter, "tg_pin") as pin, \
+                mock.patch.object(reporter, "tg_delete") as delete:
             self.assertTrue(reporter.update_pinned(self.config, self.token_image, "tokens_message_id"))
         send.assert_called_once()
         edit.assert_called_once()
         pin.assert_called_once()
         self.assertEqual(call_arg(pin.call_args, 1, "message_id"), 555)
+        delete.assert_called_once()
+        self.assertEqual(call_arg(delete.call_args, 1, "message_id"), 42)
         self.assertEqual(
             self.read_state(),
             {"message_id": 111, "note": "keep", "tokens_message_id": 555},
@@ -1405,10 +1408,12 @@ class ReporterTelegramStateTests(unittest.TestCase):
                     reporter,
                     "tg_pin",
                     side_effect=[reporter.TelegramError("Telegram pinChatMessage failed: no rights")],
-                ):
+                ), \
+                mock.patch.object(reporter, "tg_delete") as delete:
             self.assertFalse(reporter.update_pinned(self.config, self.token_image, "tokens_message_id"))
         edit.assert_not_called()
         send.assert_called_once()
+        delete.assert_not_called()
         self.assertEqual(self.read_state(), {"message_id": 111, "tokens_message_id": 555})
 
     def test_state_keys_stay_independent_per_image(self):
