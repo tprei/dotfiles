@@ -1731,7 +1731,11 @@ def forecast_shape(
         "projected": projected,
         "exhaust_in_ms": exhaust_in_ms,
         "verdict": verdict,
-        "spark": [],
+        "coupled_limit_id": None,
+        "coupled_window_ms": None,
+        "coupled_ratio": None,
+        "coupled_burn": None,
+        "coupled_room": None,
     }
 
 
@@ -1892,6 +1896,332 @@ class ForecastRowsTests(unittest.TestCase):
         zai_limits = [f["limit_id"] for f in rows[1][1]]
         self.assertEqual(zai_limits, ["zai:early", "zai:late"])
 
+
+class WindowCouplingTests(unittest.TestCase):
+    NOW_MS = 1_789_000_000_000
+    HOUR_MS = 3_600_000
+
+    def coupled_snapshot(self, short_series, long_series, provider="anthropic", long_id="anthropic:7d"):
+        samples = [
+            {
+                "recorded_at_ms": t,
+                "provider": provider,
+                "account_key": "acct",
+                "limit_id": "anthropic:5h",
+                "used_fraction": frac,
+            }
+            for t, frac in short_series
+        ] + [
+            {
+                "recorded_at_ms": t,
+                "provider": provider,
+                "account_key": "acct",
+                "limit_id": long_id,
+                "used_fraction": frac,
+            }
+            for t, frac in long_series
+        ]
+        return {
+            "start_ms": self.NOW_MS - 7 * 86_400_000,
+            "end_ms": self.NOW_MS,
+            "samples": samples,
+            "sources_ok": ["WSL"],
+            "issues": [],
+        }
+
+    def test_coupled_gain_ratio_pools_rising_intervals(self):
+        short = [
+            (self.NOW_MS - 2 * self.HOUR_MS, 0.10),
+            (self.NOW_MS - self.HOUR_MS, 0.45),
+            (self.NOW_MS, 0.76),
+        ]
+        long = [
+            (self.NOW_MS - 2 * self.HOUR_MS, 0.20),
+            (self.NOW_MS - self.HOUR_MS, 0.235),
+            (self.NOW_MS, 0.266),
+        ]
+        ratio, support = reporter.coupled_gain_ratio(short, long, 5 * self.HOUR_MS)
+        self.assertAlmostEqual(ratio, 0.1, places=3)
+        self.assertAlmostEqual(support, 0.66, places=3)
+
+    def test_coupled_gain_ratio_pairs_samples_within_tolerance(self):
+        short = [
+            (self.NOW_MS - 2 * self.HOUR_MS, 0.00),
+            (self.NOW_MS - self.HOUR_MS, 0.30),
+            (self.NOW_MS, 0.60),
+        ]
+        long = [
+            (self.NOW_MS - 2 * self.HOUR_MS + 60_000, 0.10),
+            (self.NOW_MS - self.HOUR_MS - 60_000, 0.16),
+            (self.NOW_MS + 60_000, 0.22),
+        ]
+        ratio, support = reporter.coupled_gain_ratio(short, long, 5 * self.HOUR_MS)
+        self.assertAlmostEqual(ratio, 0.2, places=3)
+        self.assertAlmostEqual(support, 0.60, places=3)
+
+    def test_coupled_gain_ratio_skips_reset_intervals(self):
+        short = [
+            (self.NOW_MS - 2 * self.HOUR_MS, 0.00),
+            (self.NOW_MS - self.HOUR_MS, 0.40),
+            (self.NOW_MS, 0.80),
+        ]
+        long = [
+            (self.NOW_MS - 2 * self.HOUR_MS, 0.20),
+            (self.NOW_MS - self.HOUR_MS, 0.10),
+            (self.NOW_MS, 0.24),
+        ]
+        ratio, support = reporter.coupled_gain_ratio(short, long, 5 * self.HOUR_MS)
+        self.assertAlmostEqual(ratio, 0.35, places=3)
+        self.assertAlmostEqual(support, 0.40, places=3)
+
+    def test_coupled_gain_ratio_requires_minimum_support(self):
+        short = [(self.NOW_MS - self.HOUR_MS, 0.10), (self.NOW_MS, 0.20)]
+        long = [(self.NOW_MS - self.HOUR_MS, 0.10), (self.NOW_MS, 0.12)]
+        ratio, support = reporter.coupled_gain_ratio(short, long, 5 * self.HOUR_MS)
+        self.assertIsNone(ratio)
+        self.assertAlmostEqual(support, 0.10, places=3)
+
+    def test_coupled_gain_ratio_rejects_ratio_above_one(self):
+        short = [(self.NOW_MS - self.HOUR_MS, 0.00), (self.NOW_MS, 0.50)]
+        long = [(self.NOW_MS - self.HOUR_MS, 0.10), (self.NOW_MS, 0.85)]
+        ratio, _ = reporter.coupled_gain_ratio(short, long, 5 * self.HOUR_MS)
+        self.assertIsNone(ratio)
+
+    def test_coupled_gain_ratio_rejects_flat_long_window(self):
+        short = [
+            (self.NOW_MS - self.HOUR_MS, 0.10),
+            (self.NOW_MS, 0.60),
+        ]
+        long = [
+            (self.NOW_MS - self.HOUR_MS, 0.01),
+            (self.NOW_MS, 0.01),
+        ]
+        ratio, _ = reporter.coupled_gain_ratio(short, long, 5 * self.HOUR_MS)
+        self.assertIsNone(ratio)
+
+    def test_pair_series_pairs_nearest_timestamp_within_tolerance(self):
+        pairs = reporter.pair_series([(100, 0.5)], [(75, 0.05), (110, 0.9)], 30)
+        self.assertEqual(pairs, [(100, 0.5, 0.9)])
+
+    def test_coupled_gain_ratio_accepts_ratio_of_one(self):
+        short = [(self.NOW_MS - self.HOUR_MS, 0.0), (self.NOW_MS, 0.3)]
+        long = [(self.NOW_MS - self.HOUR_MS, 0.1), (self.NOW_MS, 0.4)]
+        ratio, _ = reporter.coupled_gain_ratio(short, long, 5 * self.HOUR_MS)
+        self.assertIsNotNone(ratio)
+        self.assertAlmostEqual(ratio, 1.0, places=6)
+
+    def test_coupled_gain_ratio_skips_interval_with_hidden_dip(self):
+        short = [
+            (self.NOW_MS - 2 * self.HOUR_MS, 0.10),
+            (self.NOW_MS - self.HOUR_MS, 0.02),
+            (self.NOW_MS, 0.50),
+        ]
+        long = [
+            (self.NOW_MS - 2 * self.HOUR_MS, 0.20),
+            (self.NOW_MS, 0.26),
+        ]
+        ratio, support = reporter.coupled_gain_ratio(short, long, 5 * self.HOUR_MS)
+        self.assertIsNone(ratio)
+        self.assertAlmostEqual(support, 0.0, places=3)
+
+    def test_coupled_gain_ratio_skips_interval_longer_than_short_window(self):
+        short = [(self.NOW_MS - 7 * self.HOUR_MS, 0.00), (self.NOW_MS, 0.50)]
+        long = [(self.NOW_MS - 7 * self.HOUR_MS, 0.10), (self.NOW_MS, 0.20)]
+        ratio, support = reporter.coupled_gain_ratio(short, long, 5 * self.HOUR_MS)
+        self.assertIsNone(ratio)
+        self.assertAlmostEqual(support, 0.0, places=3)
+
+    def short_forecast(self, verdict="SPARE", used=0.24, **extra):
+        f = forecast_shape(verdict=verdict, used=used, projected=used)
+        f["provider"] = "anthropic"
+        f["limit_id"] = "anthropic:5h"
+        f["window_ms"] = 5 * self.HOUR_MS
+        f.update(extra)
+        return f
+
+    def long_forecast(self, used=0.50, limit_id="anthropic:7d", projected=None):
+        f = forecast_shape(verdict="ON PACE", used=used, projected=projected)
+        f["provider"] = "anthropic"
+        f["limit_id"] = limit_id
+        f["window_ms"] = 7 * 24 * self.HOUR_MS
+        return f
+
+    def test_apply_window_coupling_prices_burn_and_keeps_spare_when_room_covers_it(self):
+        short = self.short_forecast(used=0.24)
+        long = self.long_forecast(used=0.50)
+        snapshot = self.coupled_snapshot(
+            [(self.NOW_MS - self.HOUR_MS, 0.00), (self.NOW_MS, 0.50)],
+            [(self.NOW_MS - self.HOUR_MS, 0.10), (self.NOW_MS, 0.20)],
+        )
+        result = reporter.apply_window_coupling([short, long], snapshot)
+        self.assertEqual(result[0]["coupled_limit_id"], "anthropic:7d")
+        self.assertAlmostEqual(result[0]["coupled_ratio"], 0.2, places=3)
+        self.assertAlmostEqual(result[0]["coupled_burn"], 0.2 * 0.76, places=3)
+        self.assertAlmostEqual(result[0]["coupled_room"], 0.5, places=3)
+        self.assertEqual(result[0]["verdict"], "SPARE")
+
+    def test_apply_window_coupling_gates_when_burn_exceeds_room(self):
+        short = self.short_forecast(used=0.24)
+        long = self.long_forecast(used=0.90, projected=0.95)
+        snapshot = self.coupled_snapshot(
+            [(self.NOW_MS - self.HOUR_MS, 0.00), (self.NOW_MS, 0.50)],
+            [(self.NOW_MS - self.HOUR_MS, 0.10), (self.NOW_MS, 0.20)],
+        )
+        result = reporter.apply_window_coupling([short, long], snapshot)
+        self.assertEqual(result[0]["verdict"], "GATED")
+        self.assertAlmostEqual(result[0]["coupled_burn"], 0.152, places=3)
+        self.assertAlmostEqual(result[0]["coupled_room"], 0.05, places=3)
+
+    def test_apply_window_coupling_prices_the_binding_long_window(self):
+        def snapshot_with_two_longs():
+            samples = []
+            for limit_id, fractions in (
+                ("anthropic:5h", (0.00, 0.50)),
+                ("anthropic:7d", (0.10, 0.20)),
+                ("anthropic:7d:fable", (0.10, 0.30)),
+            ):
+                samples.extend(
+                    {
+                        "recorded_at_ms": self.NOW_MS - self.HOUR_MS if index == 0 else self.NOW_MS,
+                        "provider": "anthropic",
+                        "account_key": "acct",
+                        "limit_id": limit_id,
+                        "used_fraction": fraction,
+                    }
+                    for index, fraction in enumerate(fractions)
+                )
+            return {
+                "start_ms": self.NOW_MS - 7 * 86_400_000,
+                "end_ms": self.NOW_MS,
+                "samples": samples,
+                "sources_ok": ["WSL"],
+                "issues": [],
+            }
+
+        short = self.short_forecast(used=0.24)
+        roomy = self.long_forecast(used=0.10, limit_id="anthropic:7d")
+        tight = self.long_forecast(used=0.80, limit_id="anthropic:7d:fable")
+        snapshot = snapshot_with_two_longs()
+        for order in ([short, roomy, tight], [short, tight, roomy]):
+            result = reporter.apply_window_coupling(list(order), snapshot)
+            self.assertEqual(result[0]["coupled_limit_id"], "anthropic:7d:fable")
+            self.assertAlmostEqual(result[0]["coupled_ratio"], 0.4, places=3)
+            self.assertAlmostEqual(result[0]["coupled_burn"], 0.4 * 0.76, places=3)
+            self.assertAlmostEqual(result[0]["coupled_room"], 0.2, places=3)
+            self.assertEqual(result[0]["verdict"], "GATED")
+
+    def test_apply_window_coupling_prefers_the_comoving_long_window(self):
+        short = self.short_forecast(used=0.24)
+        exhausted = self.long_forecast(used=1.0, limit_id="openai-codex:primary")
+        comoving = self.long_forecast(used=0.40, limit_id="openai-codex:spark:secondary")
+        samples = [
+            {
+                "recorded_at_ms": self.NOW_MS - self.HOUR_MS,
+                "provider": "anthropic",
+                "account_key": "acct",
+                "limit_id": "anthropic:5h",
+                "used_fraction": 0.00,
+            },
+            {
+                "recorded_at_ms": self.NOW_MS,
+                "provider": "anthropic",
+                "account_key": "acct",
+                "limit_id": "anthropic:5h",
+                "used_fraction": 0.50,
+            },
+            {
+                "recorded_at_ms": self.NOW_MS - self.HOUR_MS,
+                "provider": "anthropic",
+                "account_key": "acct",
+                "limit_id": "openai-codex:primary",
+                "used_fraction": 1.0,
+            },
+            {
+                "recorded_at_ms": self.NOW_MS,
+                "provider": "anthropic",
+                "account_key": "acct",
+                "limit_id": "openai-codex:primary",
+                "used_fraction": 1.0,
+            },
+            {
+                "recorded_at_ms": self.NOW_MS - self.HOUR_MS,
+                "provider": "anthropic",
+                "account_key": "acct",
+                "limit_id": "openai-codex:spark:secondary",
+                "used_fraction": 0.10,
+            },
+            {
+                "recorded_at_ms": self.NOW_MS,
+                "provider": "anthropic",
+                "account_key": "acct",
+                "limit_id": "openai-codex:spark:secondary",
+                "used_fraction": 0.20,
+            },
+        ]
+        snapshot = {
+            "start_ms": self.NOW_MS - 7 * 86_400_000,
+            "end_ms": self.NOW_MS,
+            "samples": samples,
+            "sources_ok": ["WSL"],
+            "issues": [],
+        }
+        result = reporter.apply_window_coupling([short, exhausted, comoving], snapshot)
+        self.assertEqual(result[0]["coupled_limit_id"], "openai-codex:spark:secondary")
+
+    def test_apply_window_coupling_skips_without_confident_ratio(self):
+        short = self.short_forecast(used=0.24)
+        long = self.long_forecast(used=0.50)
+        snapshot = self.coupled_snapshot(
+            [(self.NOW_MS - self.HOUR_MS, 0.10), (self.NOW_MS, 0.15)],
+            [(self.NOW_MS - self.HOUR_MS, 0.10), (self.NOW_MS, 0.15)],
+        )
+        result = reporter.apply_window_coupling([short, long], snapshot)
+        self.assertEqual(result[0]["verdict"], "SPARE")
+        self.assertIsNone(result[0]["coupled_limit_id"])
+        self.assertIsNone(result[0]["coupled_burn"])
+
+    def test_forecast_rows_couples_short_window_to_long_window(self):
+        now_ms = self.NOW_MS
+        payload = {
+            "reports": [
+                {
+                    "provider": "anthropic",
+                    "limits": [
+                        forecast_limit(
+                            limit_id="anthropic:5h",
+                            label="Claude 5 Hour",
+                            used_fraction=0.46,
+                            resets_at_ms=now_ms + 2 * self.HOUR_MS,
+                            duration_ms=5 * self.HOUR_MS,
+                        ),
+                        forecast_limit(
+                            limit_id="anthropic:7d",
+                            label="Claude 7 Day",
+                            used_fraction=0.51,
+                            resets_at_ms=now_ms + 6 * 24 * self.HOUR_MS,
+                            duration_ms=7 * 24 * self.HOUR_MS,
+                        ),
+                    ],
+                }
+            ]
+        }
+        snapshot = self.coupled_snapshot(
+            [(now_ms - self.HOUR_MS, 0.00), (now_ms, 0.50)],
+            [(now_ms - self.HOUR_MS, 0.10), (now_ms, 0.20)],
+        )
+        rows = reporter.forecast_rows(payload, snapshot, now_ms)
+        forecasts = {f["limit_id"]: f for f in rows[0][1]}
+        self.assertAlmostEqual(forecasts["anthropic:5h"]["coupled_ratio"], 0.2, places=3)
+        self.assertEqual(forecasts["anthropic:5h"]["coupled_limit_id"], "anthropic:7d")
+        self.assertIsNone(forecasts["anthropic:7d"]["coupled_limit_id"])
+
+    def test_fmt_window_short_labels_hours_days_and_unknown(self):
+        self.assertEqual(reporter.fmt_window_short(5 * self.HOUR_MS), "5h")
+        self.assertEqual(reporter.fmt_window_short(7 * 24 * self.HOUR_MS), "7d")
+        self.assertEqual(reporter.fmt_window_short(None), "long")
+        self.assertEqual(reporter.fmt_window_short(0), "long")
+
+
 class FmtDurationTests(unittest.TestCase):
     def test_zero_and_negative_durations_read_as_now(self):
         self.assertEqual(reporter.fmt_duration(0), "~now")
@@ -1990,6 +2320,35 @@ class ForecastAdviceTests(unittest.TestCase):
     def test_no_data_with_usage_reports_insufficient_history(self):
         shape = forecast_shape(used=0.3)
         self.assertEqual(reporter.forecast_advice(shape, self.NOW_MS), "not enough history yet")
+
+    def test_spare_advice_appends_long_window_cost(self):
+        shape = forecast_shape(verdict="SPARE", used=0.24, projected=0.24)
+        shape["coupled_burn"] = 0.076
+        shape["coupled_window_ms"] = 7 * 24 * 3_600_000
+        self.assertEqual(
+            reporter.forecast_advice(shape, self.NOW_MS),
+            "crank it up \u00b7 ~76% spare by reset \u00b7 ~8% of 7d",
+        )
+
+    def test_on_pace_advice_appends_long_window_cost(self):
+        shape = forecast_shape(verdict="ON PACE", used=0.5, projected=0.69)
+        shape["coupled_burn"] = 0.076
+        shape["coupled_window_ms"] = 7 * 24 * 3_600_000
+        self.assertEqual(
+            reporter.forecast_advice(shape, self.NOW_MS),
+            "keep going \u00b7 ~69% by reset \u00b7 ~8% of 7d",
+        )
+
+    def test_gated_advice_reports_burn_and_room(self):
+        shape = forecast_shape(verdict="GATED", used=0.24)
+        shape["coupled_burn"] = 0.38
+        shape["coupled_room"] = 0.2
+        shape["coupled_window_ms"] = 7 * 24 * 3_600_000
+        self.assertEqual(
+            reporter.forecast_advice(shape, self.NOW_MS),
+            "7d gates it \u00b7 full burn ~38%, room ~20%",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
