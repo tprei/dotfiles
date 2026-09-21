@@ -1,0 +1,1 @@
+../../../../agent/agents/git-commit-specialist.md

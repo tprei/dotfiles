@@ -1,0 +1,1 @@
+../../../../agent/extensions/antigravity-cli.ts

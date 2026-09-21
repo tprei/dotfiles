@@ -1,0 +1,1 @@
+../../../../agent/agents/technical-architect.md

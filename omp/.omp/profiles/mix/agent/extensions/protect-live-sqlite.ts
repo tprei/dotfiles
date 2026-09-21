@@ -1,0 +1,1 @@
+../../../../agent/extensions/protect-live-sqlite.ts
