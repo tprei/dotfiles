@@ -7,6 +7,8 @@ Speak english.
 - Use the strongest practical reasoning tier for the main agent and for planning or research agents such as `planner`, `explorer`, `strategist`, and `technical-architect`.
 - Use a cheaper, faster tier for mechanical agents such as `git-commit-specialist` and implementation subagents such as `task` or `worker`.
 - Strong models plan, smaller and faster models implement.
+- Frontend UI is strong-model work, not just planning: the decisions that make an interface beautiful — visual design, layout, interaction, styling — and the presentational component code itself belong to fable high, opus max, or astra medium. Route them through the `ui-designer` agent (blocking, one at a time), which writes the actual components. Design quality and multi-file visual coherence drop off far faster than code correctness on smaller models (see FrontendBench, DesignArena).
+- The labor around finished UI — data fetching, state, routes, form handling, types, tests — is cheap-model work: use the `ui-implementer` agent or `task` subagents wired to ui-designer's components. Spawn implementers only after the designer's report lands, never in the same batch call — a non-blocking implementer would start wiring before the components exist. Implementers never restyle, restructure, or fill visual gaps; if they hit a design decision, they stop and hand back instead of choosing.
 - Planning agents and planning phases must produce opinionated, detailed technical specifications with exact code changes. Never leave architectural decisions, interface designs, or file placement to implementers.
 - Plans must provide:
   - Exact relative file paths for additions, edits, and deletions.

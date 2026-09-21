@@ -43,6 +43,8 @@ task:
     triage: zai/glm-5.3:max
     git-commit-specialist: antigravity-cli/gemini-3.8-flash:medium
     task: zai/glm-5.3-flash:max
+    ui-implementer: zai/glm-5.3-flash:max
+  enableLsp: true
 dev:
   autoqaConsent: granted
 edit:

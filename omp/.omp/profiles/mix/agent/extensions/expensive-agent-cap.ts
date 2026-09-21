@@ -1,0 +1,1 @@
+../../../../agent/extensions/expensive-agent-cap.ts

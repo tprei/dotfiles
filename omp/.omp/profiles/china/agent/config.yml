@@ -42,6 +42,9 @@ task:
     triage: opencode-go/muse-spark-1.3-contributor:minimal
     git-commit-specialist: opencode-go/muse-spark-1.3-contributor:minimal
     task: zai/glm-5.3-flash:max
+    ui-implementer: zai/glm-5.3-flash:max
+    ui-designer: zai/glm-5.3:max
+  enableLsp: true
 dev:
   autoqaConsent: granted
 retry:
