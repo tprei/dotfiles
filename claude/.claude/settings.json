@@ -18,12 +18,7 @@
       "mcp__context7__*",
       "mcp__plugin_claude-mem_mcp-search__*",
       "mcp__web_reader__*",
-      "Grep*",
-      "Glob*",
-      "Read*",
       "Read(Plan*)",
-      "Plan*",
-      "Search*",
       "Agent(explorer)",
       "Agent(planner)",
       "Agent(technical-architect)",
@@ -69,8 +64,7 @@
     ],
     "defaultMode": "bypassPermissions"
   },
-  "model": "opus",
-  "outputStyle": "Unslop",
+  "model": "opus[1m]",
   "hooks": {
     "Stop": [
       {
@@ -113,6 +107,7 @@
       }
     }
   },
+  "outputStyle": "Unslop",
   "sandbox": {
     "enabled": true,
     "allowUnsandboxedCommands": true,
@@ -134,5 +129,6 @@
   "voiceEnabled": true,
   "feedbackSurveyState": {
     "lastShownTime": 1753994647675
-  }
+  },
+  "tui": "fullscreen"
 }
