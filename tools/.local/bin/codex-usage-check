@@ -106,6 +106,14 @@ LIMITS_STATE_KEY = "message_id"
 LOCK_PATH = CODEX_STATE_PATH.parent / "update.lock"
 TOKENS_STATE_KEY = "tokens_message_id"
 FORECAST_STATE_KEY = "forecast_message_id"
+RESET_WATCH_STATE_KEY = "reset_watch"
+RESET_FORWARD_TOLERANCE_MS = 60_000
+CAPTION_MAX_CHARS = 1024
+RESET_WATCH_TTL_MS = 40 * 86_400_000
+RESET_ANNOUNCE_MIN_USED = 0.05
+CAPTION_OVERFLOW_RESERVE = 12
+WEEKLY_WINDOW_MS = 302_400_000
+MONTHLY_WINDOW_MS = 1_728_000_000
 
 
 class UsageError(Exception):
@@ -1065,11 +1073,15 @@ def tg_upload(
     return payload
 
 
-def tg_send_photo(config: dict, image: bytes) -> int:
+def tg_send_photo(config: dict, image: bytes, caption: str | None = None) -> int:
+    fields: dict[str, object] = {"chat_id": config["chat_id"]}
+    if caption is not None:
+        fields["caption"] = caption
+        fields["parse_mode"] = "HTML"
     payload = tg_upload(
         config["bot_token"],
         "sendPhoto",
-        {"chat_id": config["chat_id"]},
+        fields,
         "photo",
         "omp-usage.png",
         image,
@@ -1188,6 +1200,252 @@ def build_image(payload: dict) -> tuple[bytes, int]:
         raise
     except (TypeError, ValueError, KeyError, AttributeError, OSError) as error:
         raise UsageError(f"failed to render usage image: {error}", 2) from error
+
+
+class WindowReset(TypedDict):
+    provider: str
+    kind: str
+    label: str
+    amount_text: str
+    closed_used: float
+    closed_at_ms: int
+    resets_at_ms: int
+    fresh_used: float
+
+
+def long_window_kind(limit: dict) -> str | None:
+    window = limit.get("window")
+    window = window if isinstance(window, dict) else {}
+    duration = window.get("durationMs")
+    if isinstance(duration, int) and not isinstance(duration, bool) and duration > 0:
+        if duration < WEEKLY_WINDOW_MS:
+            return None
+        return "monthly" if duration >= MONTHLY_WINDOW_MS else "weekly"
+    text = " ".join(
+        part.casefold()
+        for part in (window.get("id"), window.get("label"), limit.get("label"))
+        if isinstance(part, str)
+    )
+    if "month" in text or "1mo" in text or "30d" in text:
+        return "monthly"
+    if "week" in text or "7 day" in text or "7d" in text:
+        return "weekly"
+    return None
+
+
+def _amount_number(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    return number if math.isfinite(number) and number >= 0 else None
+
+
+def _format_amount(number: float) -> str:
+    return f"{int(number):,}" if number.is_integer() else f"{number:,.1f}"
+
+
+def window_amount_text(amount: dict) -> str:
+    unit = amount.get("unit")
+    used = _amount_number(amount.get("used"))
+    limit = _amount_number(amount.get("limit"))
+    if unit in ("percent", None) or used is None or limit is None:
+        return ""
+    return f"{_format_amount(used)}/{_format_amount(limit)} {unit}"
+
+
+def tracked_window_limits(payload: dict, now_ms: int) -> dict[str, dict]:
+    tracked: dict[str, dict] = {}
+    grouped: dict[str, list[dict]] = {}
+    for report in usable_reports(payload):
+        grouped.setdefault(report["provider"], []).append(report)
+    for provider, reports in grouped.items():
+        id_counts: dict[str, int] = {}
+        for report in reports:
+            limits = report.get("limits")
+            if not isinstance(limits, list):
+                continue
+            for limit in limits:
+                if isinstance(limit, dict):
+                    limit_id = str(limit.get("id") or "limit")
+                    id_counts[limit_id] = id_counts.get(limit_id, 0) + 1
+        for report_index, report in enumerate(reports):
+            limits = report.get("limits")
+            if not isinstance(limits, list):
+                continue
+            for limit in limits:
+                if not isinstance(limit, dict):
+                    continue
+                kind = long_window_kind(limit)
+                if kind is None:
+                    continue
+                window = limit.get("window")
+                window = window if isinstance(window, dict) else {}
+                moment = reset_datetime(window.get("resetsAt"))
+                amount = limit.get("amount")
+                amount = amount if isinstance(amount, dict) else {}
+                used_percent = to_percent(amount.get("usedFraction"))
+                if moment is None or used_percent is None:
+                    continue
+                limit_id = str(limit.get("id") or "limit")
+                if id_counts.get(limit_id, 0) > 1:
+                    continue
+                label = limit.get("label") or window.get("label")
+                tracked[f"{provider}:{report_index}:{limit_id}"] = {
+                    "provider": provider,
+                    "kind": kind,
+                    "label": label.strip() if isinstance(label, str) and label.strip() else "long window",
+                    "amount_text": window_amount_text(amount),
+                    "resets_at_ms": int(moment.timestamp() * 1000),
+                    "used": used_percent / 100.0,
+                    "seen_at_ms": now_ms,
+                }
+    return tracked
+
+
+def detect_window_resets(previous: dict, current: dict) -> list[WindowReset]:
+    resets: list[WindowReset] = []
+    for key, entry in current.items():
+        old = previous.get(key)
+        if not isinstance(old, dict):
+            continue
+        old_resets = old.get("resets_at_ms")
+        old_used = old.get("used")
+        if isinstance(old_resets, bool) or not isinstance(old_resets, int):
+            continue
+        if isinstance(old_used, bool) or not isinstance(old_used, (int, float)):
+            continue
+        if entry["resets_at_ms"] <= old_resets + RESET_FORWARD_TOLERANCE_MS:
+            continue
+        closed_used = float(old_used)
+        if closed_used < RESET_ANNOUNCE_MIN_USED:
+            continue
+        if closed_used - entry["used"] < RESET_DROP:
+            continue
+        kind = old.get("kind")
+        label = old.get("label")
+        resets.append({
+            "provider": entry["provider"],
+            "kind": kind if isinstance(kind, str) and kind else entry["kind"],
+            "label": label if isinstance(label, str) and label.strip() else entry["label"],
+            "amount_text": old.get("amount_text") if isinstance(old.get("amount_text"), str) else "",
+            "closed_used": closed_used,
+            "closed_at_ms": old_resets,
+            "resets_at_ms": entry["resets_at_ms"],
+            "fresh_used": entry["used"],
+        })
+    resets.sort(key=lambda item: (item["provider"], item["label"]))
+    return resets
+
+
+def merged_watch(previous: dict, current: dict, now_ms: int) -> dict:
+    merged: dict[str, dict] = {}
+    for key, entry in previous.items():
+        if not isinstance(entry, dict):
+            continue
+        seen_at = entry.get("seen_at_ms")
+        if isinstance(seen_at, int) and not isinstance(seen_at, bool) and now_ms - seen_at >= RESET_WATCH_TTL_MS:
+            continue
+        merged[key] = entry
+    merged.update(current)
+    return merged
+
+
+def persist_watch(merged: dict) -> bool:
+    state = load_state()
+    if state.get(RESET_WATCH_STATE_KEY) == merged:
+        return True
+    if not merged and RESET_WATCH_STATE_KEY not in state:
+        return True
+    state[RESET_WATCH_STATE_KEY] = merged
+    try:
+        save_state(state)
+    except OSError as error:
+        print(f"codex-usage-check: failed to persist reset watch: {error}", file=sys.stderr)
+        return False
+    return True
+
+
+def reset_caption(resets: list[WindowReset]) -> str:
+    kinds = {reset["kind"] for reset in resets}
+    if kinds == {"weekly"}:
+        title = "Weekly limit reset"
+    elif kinds == {"monthly"}:
+        title = "Monthly limit reset"
+    else:
+        title = "Limit resets"
+    lines = [f"🎉 <b>{title}</b>"]
+    grouped: dict[str, list[WindowReset]] = {}
+    for reset in resets:
+        grouped.setdefault(reset["provider"], []).append(reset)
+    shown = 0
+    overflow = 0
+    for provider in sorted(grouped):
+        if overflow:
+            break
+        block = [f"<b>{provider_display(provider)}</b>"]
+        for reset in grouped[provider]:
+            usage = f" ({escape(reset['amount_text'])})" if reset["amount_text"] else ""
+            detail = (
+                f"{escape(reset['label'])} · closed at <b>{reset['closed_used'] * 100:.1f}%</b> used{usage} · "
+                f"fresh window resets <b>{escape(fmt_reset(reset['resets_at_ms']))}</b>"
+            )
+            if len("\n".join([*lines, *block, detail])) > CAPTION_MAX_CHARS - CAPTION_OVERFLOW_RESERVE:
+                overflow = len(resets) - shown
+                break
+            block.append(detail)
+            shown += 1
+        if len(block) > 1:
+            lines.extend(["", *block])
+    if overflow:
+        lines.append(f"+{overflow} more")
+    return "\n".join(lines)
+
+
+def reset_image_text(resets: list[WindowReset]) -> str:
+    blocks = []
+    for reset in resets:
+        free_percent = 100.0 - reset["fresh_used"] * 100.0
+        blocks.append(
+            "\n".join(
+                [
+                    unescape(provider_display(reset["provider"])),
+                    f"{reset['label']} · fresh window",
+                    f"{bar(free_percent)} {free_percent:.0f}% free · resets {fmt_reset(reset['resets_at_ms'])}",
+                    f"closed at {reset['closed_used'] * 100:.1f}% used · {fmt_reset(reset['closed_at_ms'])}",
+                ]
+            )
+        )
+    return "\n\n".join(blocks)
+
+
+def build_reset_image(resets: list[WindowReset]) -> bytes:
+    try:
+        return render_image(plain_image_text(reset_image_text(resets)))
+    except UsageError:
+        raise
+    except (TypeError, ValueError, KeyError, AttributeError, OSError) as error:
+        raise UsageError(f"failed to render reset image: {error}", 2) from error
+
+
+def announce_window_resets(config: dict, payload: dict) -> int:
+    now_ms = time.time_ns() // 1_000_000
+    current = tracked_window_limits(payload, now_ms)
+    watch = load_state().get(RESET_WATCH_STATE_KEY)
+    watch = watch if isinstance(watch, dict) else {}
+    resets = detect_window_resets(watch, current)
+    merged = merged_watch(watch, current, now_ms)
+    if resets:
+        try:
+            tg_send_photo(config, build_reset_image(resets), reset_caption(resets))
+        except UsageError as error:
+            print(f"codex-usage-check: failed to send limit reset message: {error}", file=sys.stderr)
+            return 2
+        except (OSError, TimeoutError, TelegramError) as error:
+            print(f"codex-usage-check: failed to send limit reset message: {error}", file=sys.stderr)
+            return 2
+    if not persist_watch(merged):
+        return 2
+    return 0
 
 
 def token_display_name(provider: str) -> str:
@@ -1877,7 +2135,10 @@ def publish_images(config: dict) -> int:
             if not update_pinned(config, forecast_image, FORECAST_STATE_KEY):
                 print("codex-usage-check: failed to update the forecast Telegram message", file=sys.stderr)
                 forecast_code = 2
-    for code in (limits_code, token_code, forecast_code):
+    reset_code = 0
+    if payload is not None:
+        reset_code = announce_window_resets(config, payload)
+    for code in (limits_code, token_code, forecast_code, reset_code):
         if code == 1:
             return 1
         if code == 2:

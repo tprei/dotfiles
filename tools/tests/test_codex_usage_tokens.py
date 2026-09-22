@@ -8,6 +8,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import urllib.error
 from datetime import datetime, timezone
@@ -1442,6 +1443,7 @@ class PublishImagesTests(unittest.TestCase):
             reporter, "run_omp_usage", return_value={"reports": [{"provider": "zai", "limits": []}]}
         )
         update_patcher = mock.patch.object(reporter, "update_pinned", return_value=True)
+        announce_patcher = mock.patch.object(reporter, "announce_window_resets", return_value=0)
         failure_patcher = mock.patch.object(
             reporter, "fail", side_effect=lambda error: getattr(error, "exit_code", 2)
         )
@@ -1450,12 +1452,14 @@ class PublishImagesTests(unittest.TestCase):
         self.build_forecast = forecast_patcher.start()
         self.run_usage = usage_patcher.start()
         self.update = update_patcher.start()
+        self.announce = announce_patcher.start()
         self.failure = failure_patcher.start()
         self.addCleanup(limits_patcher.stop)
         self.addCleanup(token_patcher.stop)
         self.addCleanup(forecast_patcher.stop)
         self.addCleanup(usage_patcher.stop)
         self.addCleanup(update_patcher.stop)
+        self.addCleanup(announce_patcher.stop)
         self.addCleanup(failure_patcher.stop)
 
     def published(self):
@@ -1481,6 +1485,13 @@ class PublishImagesTests(unittest.TestCase):
             ],
         )
         self.failure.assert_not_called()
+        self.announce.assert_called_once_with(
+            self.config, {"reports": [{"provider": "zai", "limits": []}]}
+        )
+
+    def test_reset_announcement_failure_exits_two(self):
+        self.announce.return_value = 2
+        self.assertEqual(reporter.publish_images(self.config), 2)
 
     def test_quota_failure_still_publishes_token_chart(self):
         self.run_usage.side_effect = reporter.UsageError("omp usage unavailable", 2)
@@ -1574,6 +1585,385 @@ class PublishImagesTests(unittest.TestCase):
             self.assertEqual(reporter.setup_telegram(), 0)
         self.assertEqual(call_arg(get_me.call_args, 1, "method"), "getMe")
         publish.assert_called_once_with(self.config)
+
+def window_limit(
+    limit_id="openai-codex:primary",
+    label="7 days",
+    window_label="7 days",
+    window_id="weekly",
+    duration_ms=604800000,
+    resets_at_ms=None,
+    used_fraction=0.0,
+    unit="percent",
+    used=None,
+    limit=None,
+):
+    window = {"id": window_id, "label": window_label}
+    if duration_ms is not None:
+        window["durationMs"] = duration_ms
+    if resets_at_ms is not None:
+        window["resetsAt"] = resets_at_ms
+    amount = {"unit": unit, "usedFraction": used_fraction}
+    if used is not None:
+        amount["used"] = used
+    if limit is not None:
+        amount["limit"] = limit
+    return {"id": limit_id, "label": label, "window": window, "amount": amount, "status": "ok"}
+
+
+def usage_payload(provider="openai-codex", limits=None):
+    return {
+        "generatedAt": 1,
+        "reports": [{"provider": provider, "limits": limits if limits is not None else []}],
+    }
+
+
+class LongWindowKindTests(unittest.TestCase):
+    def test_duration_ms_classifies_weekly_and_monthly(self):
+        self.assertEqual(reporter.long_window_kind(window_limit(duration_ms=604800000)), "weekly")
+        self.assertEqual(reporter.long_window_kind(window_limit(duration_ms=2592000000)), "monthly")
+
+    def test_missing_duration_falls_back_to_window_text(self):
+        self.assertEqual(reporter.long_window_kind(window_limit(duration_ms=None, window_id="", window_label="Monthly", label="Zread Quota")), "monthly")
+        self.assertEqual(reporter.long_window_kind(window_limit(duration_ms=None, window_id="", window_label="Weekly", label="Zread Quota")), "weekly")
+        self.assertIsNone(reporter.long_window_kind(window_limit(duration_ms=None, window_id="", window_label="Quarterly", label="Zread Quota")))
+
+    def test_short_windows_are_never_tracked(self):
+        for duration_ms in (18_000_000, 86_400_000, 302_399_999):
+            self.assertIsNone(reporter.long_window_kind(window_limit(duration_ms=duration_ms)))
+
+
+class DetectWindowResetsTests(unittest.TestCase):
+    NOW_MS = 1_789_000_000_000
+
+    def entry(self, used, resets_at_ms):
+        return {
+            "provider": "openai-codex",
+            "kind": "weekly",
+            "label": "7 days",
+            "amount_text": "",
+            "resets_at_ms": resets_at_ms,
+            "used": used,
+            "seen_at_ms": self.NOW_MS,
+        }
+
+    def watch(self, used, resets_at_ms):
+        return {"openai-codex:0:openai-codex:primary": self.entry(used, resets_at_ms)}
+
+    def current(self, used=0.0, resets_at_ms=None):
+        resets = self.NOW_MS + 7 * 86_400_000 if resets_at_ms is None else resets_at_ms
+        return self.watch(used, resets)
+
+    def test_forward_jump_with_drop_announces_closed_window(self):
+        old_resets = self.NOW_MS - 1_000
+        resets = reporter.detect_window_resets(self.watch(1.0, old_resets), self.current())
+        self.assertEqual(len(resets), 1)
+        self.assertEqual(resets[0]["closed_used"], 1.0)
+        self.assertEqual(resets[0]["closed_at_ms"], old_resets)
+        self.assertEqual(resets[0]["fresh_used"], 0.0)
+        self.assertEqual(resets[0]["kind"], "weekly")
+        self.assertEqual(resets[0]["label"], "7 days")
+
+    def test_forward_jump_without_drop_is_ignored(self):
+        self.assertEqual(
+            reporter.detect_window_resets(self.watch(0.95, self.NOW_MS), self.current(used=0.94)),
+            [],
+        )
+
+    def test_drop_without_forward_jump_is_ignored(self):
+        same = self.NOW_MS + 7 * 86_400_000
+        self.assertEqual(
+            reporter.detect_window_resets(self.watch(0.95, same), self.current(used=0.0, resets_at_ms=same)),
+            [],
+        )
+
+    def test_reset_time_drift_within_tolerance_is_ignored(self):
+        self.assertEqual(
+            reporter.detect_window_resets(
+                self.watch(0.95, self.NOW_MS), self.current(used=0.0, resets_at_ms=self.NOW_MS + 30_000)
+            ),
+            [],
+        )
+
+    def test_unused_closed_window_is_not_announced(self):
+        self.assertEqual(
+            reporter.detect_window_resets(self.watch(0.03, self.NOW_MS - 1_000), self.current()),
+            [],
+        )
+
+    def test_missing_baseline_is_not_a_reset(self):
+        self.assertEqual(reporter.detect_window_resets({}, self.current()), [])
+        self.assertEqual(
+            reporter.detect_window_resets({"zai:0:other": self.entry(1.0, 1)}, self.current()),
+            [],
+        )
+
+    def test_events_sort_by_provider_then_label(self):
+        previous = {}
+        current = {}
+        for provider, label in (
+            ("anthropic", "Claude 7 Day"),
+            ("anthropic", "Claude 7 Day (Fable)"),
+            ("zai", "Zread Quota"),
+        ):
+            key = f"{provider}:0:{provider}:{label}"
+            previous[key] = {
+                "provider": provider,
+                "kind": "weekly",
+                "label": label,
+                "amount_text": "",
+                "resets_at_ms": self.NOW_MS - 1_000,
+                "used": 0.9,
+                "seen_at_ms": self.NOW_MS,
+            }
+            current[key] = dict(previous[key], resets_at_ms=self.NOW_MS + 86_400_000, used=0.0)
+        resets = reporter.detect_window_resets(previous, current)
+        self.assertEqual(
+            [(reset["provider"], reset["label"]) for reset in resets],
+            [
+                ("anthropic", "Claude 7 Day"),
+                ("anthropic", "Claude 7 Day (Fable)"),
+                ("zai", "Zread Quota"),
+            ],
+        )
+
+
+class ResetMessageTests(unittest.TestCase):
+    def event(self, **overrides):
+        event = {
+            "provider": "openai-codex",
+            "kind": "weekly",
+            "label": "7 days",
+            "amount_text": "",
+            "closed_used": 1.0,
+            "closed_at_ms": 1_789_000_000_000,
+            "resets_at_ms": 1_789_000_000_000 + 7 * 86_400_000,
+            "fresh_used": 0.0,
+        }
+        event.update(overrides)
+        return event
+
+    def test_caption_marks_weekly_reset_with_closed_usage(self):
+        caption = reporter.reset_caption([self.event()])
+        self.assertIn("🎉 <b>Weekly limit reset</b>", caption)
+        self.assertIn("<b>OpenAI Codex</b>", caption)
+        self.assertIn("closed at <b>100.0%</b> used", caption)
+        self.assertIn("fresh window resets <b>", caption)
+
+    def test_caption_titles_follow_the_announced_kinds(self):
+        self.assertIn(
+            "<b>Monthly limit reset</b>",
+            reporter.reset_caption([self.event(kind="monthly")]),
+        )
+        self.assertIn(
+            "<b>Limit resets</b>",
+            reporter.reset_caption([self.event(), self.event(kind="monthly", provider="zai", label="Monthly")]),
+        )
+
+    def test_caption_appends_request_amounts_when_available(self):
+        caption = reporter.reset_caption([self.event(amount_text="940/1,000 requests")])
+        self.assertIn("(940/1,000 requests)", caption)
+
+    def test_image_text_is_plain_and_shows_fresh_capacity(self):
+        text = reporter.reset_image_text([self.event(fresh_used=0.01)])
+        self.assertIn("OpenAI Codex", text)
+        self.assertIn("7 days · fresh window", text)
+        self.assertIn("99% free · resets", text)
+        self.assertIn("closed at 100.0% used", text)
+        self.assertNotIn("<b>", text)
+
+    def test_caption_never_exceeds_the_telegram_limit(self):
+        providers = ("anthropic", "google-antigravity", "openai-codex", "opencode-go", "zai")
+        events = [
+            self.event(provider=provider, label=f"Long limit name {index} of {provider}")
+            for provider in providers
+            for index in range(3)
+        ]
+        caption = reporter.reset_caption(events)
+        self.assertLessEqual(len(caption), 1024)
+        self.assertRegex(caption, r"\n\+\d+ more$")
+        self.assertNotIn("2 of zai", caption)
+
+    def test_window_amount_text_accepts_float_amounts(self):
+        self.assertEqual(
+            reporter.window_amount_text({"unit": "requests", "used": 940.0, "limit": 1000}),
+            "940/1,000 requests",
+        )
+        self.assertEqual(
+            reporter.window_amount_text({"unit": "credits", "used": 12.5, "limit": 500.0}),
+            "12.5/500 credits",
+        )
+        self.assertEqual(reporter.window_amount_text({"unit": "requests", "used": "9", "limit": 10}), "")
+
+
+class ResetAnnouncementTests(unittest.TestCase):
+    KEY = "openai-codex:0:openai-codex:primary"
+
+    def setUp(self):
+        super().setUp()
+        temporary = tempfile.TemporaryDirectory(prefix="omp-reset-state-")
+        self.addCleanup(temporary.cleanup)
+        self.state_path = Path(temporary.name) / "state.json"
+        state_patcher = mock.patch.object(reporter, "CODEX_STATE_PATH", self.state_path)
+        state_patcher.start()
+        self.addCleanup(state_patcher.stop)
+        self.config = {"bot_token": "unit-test-token", "chat_id": "42"}
+
+    def write_state(self, state):
+        self.state_path.parent.mkdir(parents=True, exist_ok=True)
+        self.state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    def read_state(self):
+        return json.loads(self.state_path.read_text(encoding="utf-8"))
+
+    def read_watch(self):
+        return self.read_state().get("reset_watch")
+
+    def payload(self, used_fraction=0.0, resets_offset_ms=7 * 86_400_000):
+        return usage_payload(
+            limits=[
+                window_limit(
+                    resets_at_ms=1_789_000_000_000 + resets_offset_ms,
+                    used_fraction=used_fraction,
+                )
+            ]
+        )
+
+    def closed_watch(self):
+        return {
+            self.KEY: {
+                "provider": "openai-codex",
+                "kind": "weekly",
+                "label": "7 days",
+                "amount_text": "",
+                "resets_at_ms": 1_789_000_000_000 - 3_600_000,
+                "used": 1.0,
+                "seen_at_ms": 1_789_000_000_000 - 300_000,
+            }
+        }
+
+    def test_tracked_label_prefers_limit_label_over_window_label(self):
+        limit = window_limit(
+            limit_id="anthropic:7d:fable",
+            label="Claude 7 Day (Fable)",
+            window_label="7 Day",
+            resets_at_ms=1_789_000_000_000 + 7 * 86_400_000,
+        )
+        tracked = reporter.tracked_window_limits(
+            usage_payload(provider="anthropic", limits=[limit]), 1_789_000_000_000
+        )
+        self.assertEqual(tracked["anthropic:0:anthropic:7d:fable"]["label"], "Claude 7 Day (Fable)")
+
+    def test_accounts_with_shared_limit_ids_are_not_tracked(self):
+        spent = window_limit(
+            limit_id="weekly",
+            label="Weekly limit",
+            window_label="Weekly",
+            resets_at_ms=1_789_000_000_000 + 2 * 86_400_000,
+            used_fraction=1.0,
+        )
+        fresh = window_limit(
+            limit_id="weekly",
+            label="Weekly limit",
+            window_label="Weekly",
+            resets_at_ms=1_789_000_000_000 + 7 * 86_400_000,
+            used_fraction=0.0,
+        )
+        shared = {"reports": [{"provider": "opencode-go", "limits": [spent]}, {"provider": "opencode-go", "limits": [fresh]}]}
+        self.assertEqual(reporter.tracked_window_limits(shared, 1_789_000_000_000), {})
+        distinct = {
+            "reports": [
+                {"provider": "opencode-go", "limits": [spent]},
+                {"provider": "opencode-go", "limits": [dict(fresh, id="monthly")]},
+            ]
+        }
+        tracked = reporter.tracked_window_limits(distinct, 1_789_000_000_000)
+        self.assertEqual(sorted(tracked), ["opencode-go:0:weekly", "opencode-go:1:monthly"])
+        self.assertEqual(tracked["opencode-go:0:weekly"]["used"], 1.0)
+        self.assertEqual(tracked["opencode-go:1:monthly"]["used"], 0.0)
+
+    def test_first_run_records_baseline_without_sending(self):
+        with mock.patch.object(reporter, "tg_send_photo") as send:
+            self.assertEqual(reporter.announce_window_resets(self.config, self.payload()), 0)
+        send.assert_not_called()
+        watch = self.read_watch()
+        self.assertEqual(list(watch), [self.KEY])
+        self.assertEqual(watch[self.KEY]["used"], 0.0)
+        self.assertEqual(watch[self.KEY]["kind"], "weekly")
+
+    def test_window_rollover_sends_reset_message_and_updates_watch(self):
+        self.write_state({"message_id": 5, "reset_watch": self.closed_watch()})
+        with mock.patch.object(reporter, "build_reset_image", return_value=b"reset-image") as build, \
+                mock.patch.object(reporter, "tg_send_photo", return_value=123) as send:
+            self.assertEqual(reporter.announce_window_resets(self.config, self.payload()), 0)
+        build.assert_called_once()
+        send.assert_called_once()
+        self.assertEqual(call_arg(send.call_args, 1, "image"), b"reset-image")
+        caption = call_arg(send.call_args, 2, "caption")
+        self.assertIn("Weekly limit reset", caption)
+        self.assertIn("OpenAI Codex", caption)
+        self.assertEqual(self.read_watch()[self.KEY]["resets_at_ms"], 1_789_000_000_000 + 7 * 86_400_000)
+        self.assertEqual(self.read_state()["message_id"], 5)
+
+    def test_failed_send_returns_two_and_retries_next_run(self):
+        self.write_state({"reset_watch": self.closed_watch()})
+        with mock.patch.object(reporter, "build_reset_image", return_value=b"reset-image"), \
+                mock.patch.object(
+                    reporter, "tg_send_photo", side_effect=reporter.TelegramError("sendPhoto failed")
+                ) as send:
+            self.assertEqual(reporter.announce_window_resets(self.config, self.payload()), 2)
+            self.assertEqual(reporter.announce_window_resets(self.config, self.payload()), 2)
+        self.assertEqual(send.call_count, 2)
+        self.assertEqual(self.read_watch(), self.closed_watch())
+
+    def test_below_floor_rollover_updates_watch_without_sending(self):
+        watch = self.closed_watch()
+        watch[self.KEY]["used"] = 0.03
+        self.write_state({"reset_watch": watch})
+        with mock.patch.object(reporter, "tg_send_photo") as send:
+            self.assertEqual(reporter.announce_window_resets(self.config, self.payload()), 0)
+        send.assert_not_called()
+        self.assertEqual(self.read_watch()[self.KEY]["used"], 0.0)
+
+    def test_short_windows_are_not_tracked(self):
+        limit = window_limit(
+            limit_id="zai:tokens:5h",
+            label="ZAI 5 Hours Token Quota",
+            window_label="5 Hours",
+            window_id="5h",
+            duration_ms=18_000_000,
+            resets_at_ms=1_789_000_000_000 + 3_600_000,
+            used_fraction=0.5,
+        )
+        with mock.patch.object(reporter, "tg_send_photo") as send:
+            self.assertEqual(
+                reporter.announce_window_resets(self.config, usage_payload(provider="zai", limits=[limit])),
+                0,
+            )
+        send.assert_not_called()
+        self.assertFalse(self.state_path.exists())
+
+    def test_stale_entries_past_ttl_are_pruned_on_save(self):
+        now_ms = time.time_ns() // 1_000_000
+        self.write_state(
+            {
+                "reset_watch": {
+                    "gone:0:x": {
+                        "provider": "gone",
+                        "kind": "weekly",
+                        "label": "old",
+                        "amount_text": "",
+                        "resets_at_ms": 1,
+                        "used": 0.5,
+                        "seen_at_ms": now_ms - reporter.RESET_WATCH_TTL_MS - 1_000,
+                    }
+                }
+            }
+        )
+        with mock.patch.object(reporter, "tg_send_photo") as send:
+            self.assertEqual(reporter.announce_window_resets(self.config, self.payload()), 0)
+        send.assert_not_called()
+        self.assertEqual(list(self.read_watch()), [self.KEY])
 
 def forecast_limit(
     used_fraction=0.24,
