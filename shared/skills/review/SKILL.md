@@ -5,139 +5,55 @@ description: Comprehensive PR review. Use when the user asks to review a pull re
 
 # PR review
 
-Perform a comprehensive, multi-dimensional review of a pull request.
+## 1. Fetch the PR
 
-## When to use
-
-- User invokes review with a PR number or URL.
-- User asks to review a pull request.
-
-## Instructions
-
-### 1. Fetch PR context
-
-Determine the PR to review from the user's input:
-
-- If a full URL (e.g. `https://github.com/owner/repo/pull/123`), extract owner/repo and number.
-- If a bare number (e.g. `123`), use the current repo context.
-- If empty, ask which PR to review.
-
-Fetch PR metadata and diff:
+Full URL: extract owner, repo, and number. Bare number: current repo. Nothing given: ask.
 
 ```bash
 gh pr view <PR> --json title,body,author,baseRefName,headRefName,files,additions,deletions,commits,reviews,labels,milestone
 gh pr diff <PR>
 ```
-### 2. Delegate the review to the `reviewer` task agent
 
-Every PR review MUST run through the `reviewer` task agent (`task` tool, `agent: "reviewer"`), never inline in the calling session. This repo's omp config pins `reviewer` to `zai/glm-5.3:max` (see `omp/.omp/agent/config.yml` and the `mix`/`china` profiles) — dispatching through the agent is what guarantees that model runs the review, not whichever model is driving the current session.
+## 2. Delegate to `reviewer`
 
-Pass the subagent a single self-contained prompt containing:
-- the PR metadata and diff fetched above (or the raw `gh pr view`/`gh pr diff` commands to run if the subagent should fetch them itself)
-- the repository context instructions (step 3 below)
-- the full review-dimensions checklist (step 4 below)
-- the required output format (step 6 below)
+Every review runs through the `reviewer` task agent (`task`, `agent: "reviewer"`), never inline. The omp config pins `reviewer` to `zai/glm-5.3:max` (root, `mix`, and `china` profiles); delegating guarantees that model reviews. Pass one self-contained prompt with the PR metadata and diff (or the `gh` commands), plus sections 3 to 5 below. Relay its output as the review; don't re-review.
 
-Do not re-review the diff yourself after the subagent returns — its output is the review. Relay it to the user, adding only light framing if asked.
+## 3. Context the reviewer builds
 
-### 3. Understand the repository
+- README, `AGENTS.md`/`CLAUDE.md`, and contributing guides.
+- Stack, test framework, CI, directory layout, architectural patterns, and the domain model: bounded contexts, aggregates, and the domain language.
+- Every changed file read in full, not only the diff.
 
-Before reviewing the diff in isolation, build context:
+## 4. Dimensions
 
-- Read the repo's README, AGENTS.md / CLAUDE.md, and any contributing guidelines.
-- Identify the tech stack, test framework, and CI configuration.
-- Understand the directory structure and architectural patterns.
+Mark each finding praise, concern, or question. Skip dimensions that don't apply.
+- Correctness: matches the description; logic errors, off-by-one, uncovered branches and edge cases.
+- Design: fits existing patterns and module boundaries; missing or needless abstractions; domain logic in the domain layer, not handlers, UI, or infra; names in the domain language; no crossed bounded contexts; scales with expected growth.
+- Product: user impact, UX regressions, accessibility, useful error messages.
+- Tests: new behavior and failure paths covered; stale tests updated; right level (unit, integration, e2e).
+- Security: injection (SQL, XSS, command), secret handling, authz on new operations, validation at boundaries.
+- Performance: N+1 queries, needless allocations, blocking calls, missing indexes, latency or memory regressions.
+- Reliability: behavior on network errors, timeouts, and bad input; retries; observability.
+- Quality: readability, precise and consistent names, dead code, duplication, needless complexity.
+- Dependencies and config: justified, maintained deps; safe defaults; reversible migrations.
+- Docs: PR explains why; public APIs and user-facing changes documented; comments only where logic is non-obvious.
 
-### 4. Review dimensions
+## 5. Output
 
-Evaluate the PR across every dimension below. For each, note findings as **praise**, **concern**, or **question**. Skip dimensions that don't apply.
-
-#### Correctness
-- Does the code do what the PR description claims?
-- Are there logic errors, off-by-one mistakes, or unhandled edge cases?
-- Do conditional branches cover all cases?
-
-#### Architecture and design
-- Does this fit the repo's existing patterns and abstractions?
-- Are there unnecessary abstractions or missing ones?
-- Does the change respect module boundaries and separation of concerns?
-- Will this scale with anticipated growth?
-
-#### Product impact
-- Does this change serve the user well?
-- Are there UX regressions, accessibility gaps, or usability concerns?
-- Does error messaging help the end user understand what happened?
-
-#### Tests
-- Are new behaviors covered by tests?
-- Are edge cases and failure paths tested?
-- Do existing tests still make sense after this change, or do some need updating?
-- Is the test strategy appropriate (unit vs integration vs e2e)?
-
-#### Security
-- Does this introduce injection vectors (SQL, XSS, command injection)?
-- Are secrets, tokens, or credentials handled safely?
-- Are authorization checks in place for new endpoints or operations?
-- Does input validation happen at system boundaries?
-
-#### Performance
-- Are there N+1 queries, unnecessary allocations, or blocking calls?
-- Could this regress latency or memory under load?
-- Are database queries indexed appropriately?
-
-#### Reliability
-- How does this behave under failure (network errors, timeouts, invalid input)?
-- Are retries, circuit breakers, or fallbacks appropriate here?
-- Does this change affect observability (logging, metrics, alerting)?
-
-#### Code quality
-- Is the code readable and self-documenting?
-- Are names precise and consistent with the codebase?
-- Is there dead code, duplication, or unnecessary complexity?
-
-#### Dependencies and configuration
-- Are new dependencies justified and well-maintained?
-- Do config changes have safe defaults?
-- Are migrations reversible?
-
-#### Documentation
-- Does the PR description explain the why, not just the what?
-- Are public APIs or user-facing changes documented?
-- Do inline comments add value where logic is non-obvious?
-
-### 5. Read changed files in full
-
-Do not review the diff in isolation. For every changed file, read the full file to understand context around the modifications. This prevents false positives and reveals impact on surrounding code.
-
-### 6. Produce the review
-
-Structure your output as:
+Cite files and lines; quote code when it helps. Omit empty sections.
 
 ```markdown
 ## Summary
-
-<One paragraph: what this PR does, who it affects, and your overall assessment>
+<what it does, who it affects, overall assessment>
 
 ## Verdict
-
-<APPROVE | REQUEST_CHANGES | COMMENT> — <one-line rationale>
+<APPROVE | REQUEST_CHANGES | COMMENT>: <one-line rationale>
 
 ## Findings
-
 ### Critical (must fix before merge)
-- ...
-
-### Suggestions (would improve the PR)
-- ...
-
-### Nits (optional polish)
-- ...
-
-### Praise (what's done well)
-- ...
+### Suggestions
+### Nits
+### Praise
 
 ## Questions
-- ...
 ```
-
-Omit empty sections. Reference specific files and line numbers. Quote code when relevant.

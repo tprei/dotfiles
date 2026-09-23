@@ -1,11 +1,6 @@
 # Slop catalog
 
-The pattern set for the deslop scan. Run each with `rg`. Patterns are case-sensitive regexes unless
-noted. Scope the scan to source dirs; exclude `node_modules`, `dist`, `build`, `.venv`, and vendored
-trees.
-
-A hit is slop until proven otherwise. The default action is to fix the root cause and delete the
-construct — never to widen or relocate a suppression.
+Case-sensitive `rg` regexes. Scan source dirs; exclude `node_modules`, `dist`, `build`, `.venv`, and vendored trees. A hit is slop until proven otherwise.
 
 ## Python
 
@@ -47,22 +42,19 @@ construct — never to widen or relocate a suppression.
 | warning slack | `--max-warnings` |
 | suppression baselines | files named `.mypy_baseline`, `*.baseline`, `.eslint-baseline*`, `tsc-baseline*` |
 
-When a gate is found advisory (`continue-on-error: true`, `|| true`) the checker has been passing
-without checking anything. Make it blocking, then fix whatever it surfaces.
+An advisory gate has been passing without checking anything. Make it blocking, then fix what it surfaces.
 
 ## Cross-language
 
 | What | How to find |
 |------|-------------|
-| commented-out code | scan for contiguous comment blocks that parse as code (`//`, `#`, `/* */`) — distinguish from prose comments |
-| untracked TODO/FIXME | `(TODO\|FIXME\|XXX)` then drop any line that references an issue id (e.g. `#1234`, `JIRA-1`, an issue URL); the remainder is slop |
-| dead code | unused exports, unreachable branches, functions with no callers — confirm with the language's own unused-symbol check before deleting |
-| unused imports/vars | rely on the linter/typechecker with warnings-as-errors; do not eyeball |
+| commented-out code | contiguous comment blocks that parse as code, not prose |
+| untracked TODO/FIXME | `(TODO\|FIXME\|XXX)` minus lines referencing an issue (`#1234`, `JIRA-1`, a URL) |
+| dead code | unused exports, unreachable branches, uncalled functions; confirm with the language's unused-symbol check |
+| unused imports/vars | linter or typechecker with warnings-as-errors, not eyeballing |
 
 ## Notes
 
-- `cast()` and `Any` are not always slop — flag them, then judge each: an `Any` at a genuine dynamic
-  boundary with a narrowing check is fine; an `Any` used to dodge a fixable type error is slop.
-- `print`/`console.log` inside a CLI's actual output path is not debug slop — judge by intent.
-- A `# noqa`/`@ts-expect-error` that survives must carry a specific rule code, an inline reason, and a
-  linked issue — bare blanket suppressions never survive.
+- `cast()` and `Any` at a real dynamic boundary with a narrowing check are fine; used to dodge a fixable type error, they're slop.
+- `print`/`console.log` in a CLI's real output path isn't debug slop.
+- A surviving `# noqa`/`@ts-expect-error` needs a specific rule code, inline reason, and linked issue. Blanket suppressions never survive.

@@ -5,6 +5,6 @@ condition: "issue #[0-9]"
 scope: ["tool:write(*)", "tool:edit(*)"]
 ---
 
-Code comments must describe current behavior only — never reference issue numbers (`issue #157`), issue URLs, or planning conversations (`as discussed`, `the issue asks`). When writing or editing `.go`, `.py`, `.ts`, `.tsx`, `.js` files, scan every comment for `issue #` references and rephrase them as self-contained behavior descriptions. In planning artifacts (`.md`, `local://`), issue references are acceptable.
+Code comments describe current behavior. Never reference issue numbers (`issue #157`), issue URLs, or planning talk (`as discussed`, `the issue asks`). Rephrase them as self-contained behavior in `.go`, `.py`, `.ts`, `.tsx`, and `.js` files. Planning artifacts (`.md`, `local://`) may reference issues.
 
-When you finish removing issue references from code, grep the ENTIRE repo — not just the directories you edited. A narrow `git grep -- path1 path2` that excludes `services/embedding/` or other subtrees will miss references like `# The vocabulary-mismatch pair from issue #157` in files outside your edit scope.
+When done, grep the whole repo for `issue #`, not only the directories you edited.

@@ -3,60 +3,34 @@ name: tmux-specialist
 description: Quick tmux reference. Use when the user asks about tmux commands, keybindings, sessions, panes, windows, or configuration.
 ---
 
-# tmux Specialist
+# tmux specialist
 
-Quick reference for tmux commands, keybindings, and workflows.
+Answer tmux questions: keybindings, sessions, windows, panes, copy mode, and config.
 
-## When to use
+The user's config is `references/tmux.conf` (symlinked to the dotfiles `tmux/.tmux.conf`); check it first, because it overrides defaults. Prefix is `C-a`, not `C-b`.
 
-Invoke this skill when the user asks about:
-- tmux keybindings (e.g., "how do I split panes?")
-- session management (create, attach, detach, kill)
-- window and pane operations
-- copy mode and buffer commands
-- configuration options
+User bindings:
+| Action | Key |
+|--------|-----|
+| Split side by side / stacked | `prefix -` / `prefix =` |
+| Next / previous window | `M-n` / `M-p` |
+| Window 1-5 | `M-1`..`M-5` |
+| Session chooser | `M-w` |
+| Copy mode | `M-]` |
+| Resize pane | `M-h/j/k/l` |
+| Select pane (innermost, vim-aware) | `C-h/j/k/l` |
+| Select pane (this session) | `prefix C-h/j/k` |
+| Kill pane (confirm) | `M-x` |
+| Break pane | `prefix b` |
+| Open pane dir / paste clipboard image (WSL) | `M-e` / `M-v` |
 
-## Reference files
+Alt+Shift variants send the same binding one level into a nested tmux or herdr.
 
-| File | Contents |
-|------|----------|
-| `references/cheatsheet.md` | **Start here** — quick reference tables for all commands. |
-| `references/Getting-Started.md` | Comprehensive tmux introduction and concepts. |
-| `references/Advanced-Use.md` | Advanced configuration and scripting. |
-| `references/FAQ.md` | Common issues and solutions. |
-| `references/Clipboard.md` | Clipboard integration. |
-| `references/Formats.md` | Format strings and variables. |
-| `references/tmux.conf` | The user's personal tmux configuration (symlinked to dotfiles). |
-
-## Quick reference
-
-### Prefix
-All tmux shortcuts use `Ctrl+b` as the prefix key.
-
-### Most common operations
-
-| Action | Shortcut |
-|--------|----------|
-| Split horizontal | `Ctrl+b "` |
-| Split vertical | `Ctrl+b %` |
-| New window | `Ctrl+b c` |
-| Next window | `Ctrl+b n` |
-| Detach | `Ctrl+b d` |
-| List sessions | `Ctrl+b s` |
-| Enter copy mode | `Ctrl+b [` |
-| Paste | `Ctrl+b ]` |
-
-### Session commands
+Upstream docs live in `references/files.md`, a Repomix pack of the tmux wiki. Search it by `## File: <name>`: `cheatsheet.md` first, then `Getting-Started.md`, `Advanced-Use.md`, `FAQ.md`, `Clipboard.md`, `Formats.md`.
 
 ```bash
-tmux new -s name          # Create named session
-tmux attach -t name       # Attach to session
-tmux ls                   # List sessions
-tmux kill-session -t name # Kill session
+tmux new -s name          # create named session
+tmux attach -t name       # attach
+tmux ls                   # list
+tmux kill-session -t name # kill
 ```
-
-## How to use
-
-1. Check `references/cheatsheet.md` for quick lookups.
-2. Check `references/Getting-Started.md` for detailed explanations.
-3. Check `references/FAQ.md` for troubleshooting.

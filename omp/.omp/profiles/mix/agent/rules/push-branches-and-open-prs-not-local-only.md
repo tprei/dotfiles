@@ -5,4 +5,4 @@ condition: ["did not push", "not yet push", "did not open PRs", "without pushing
 scope: "text"
 ---
 
-Completed, verified work belongs on GitHub, not stranded in a local worktree. Once a stacked branch set passes local verification (build, tests, lint), push every branch and open the PRs (`gh pr create` or `gt submit`) so GitHub CI runs the same checks in the real environment and a human can review. Leaving branches local-only skips CI entirely and blocks review — that's not a stopping point, it's an incomplete deliverable. If a genuine conflict (e.g., a competing concurrent PR stack) makes pushing risky, say so explicitly and ask, but default to pushing once verification is green; don't quietly stop at 'ready for your review' while sitting on unpushed commits.
+Verified work belongs on GitHub. Once a stacked branch set passes local build, tests, and lint, push every branch and open the PRs (`gh pr create` or `gt submit`; drafts are fine) so CI runs in the real environment and humans can review. Local-only branches are an incomplete deliverable. If pushing is genuinely risky (for example, a competing concurrent stack), say so and ask; otherwise push.

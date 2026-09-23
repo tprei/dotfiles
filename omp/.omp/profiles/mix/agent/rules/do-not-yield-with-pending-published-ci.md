@@ -5,4 +5,4 @@ condition: "Initial CI on #\\d+:.*\\b(?:pending|failed|red)\\b"
 scope: "text"
 ---
 
-After creating or pushing pull requests, poll the required checks for the published stack. If a check fails, inspect its logs, fix actionable failures, push the repair, and repeat until green. Do not present PR publication as complete while checks are pending or red unless an unavailable external prerequisite makes progress impossible; then name that exact blocker.
+After pushing PRs, poll the stack's required checks. On failure, read the logs, fix, push, and repeat until green. Don't report publication complete while checks are pending or red unless an unavailable external prerequisite blocks progress; name it.

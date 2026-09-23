@@ -5,4 +5,4 @@ condition: "\\b(?:1699999999999|1700000000000|1782993600000|1782993600001|178299
 scope: "tool"
 ---
 
-In test code, do not introduce opaque Unix-millisecond literals such as these. Construct deterministic instants with `time.Date` and derive milliseconds with `UnixMilli()` only at the API boundary; in TypeScript, use a named date helper that makes the intended instant readable.
+No opaque Unix-millisecond literals in tests. In Go, build instants with `time.Date` and call `UnixMilli()` only at the API boundary. In TypeScript, use a named date helper that makes the instant readable.

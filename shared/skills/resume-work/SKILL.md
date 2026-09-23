@@ -5,24 +5,8 @@ description: Resume an ongoing workstream by surfacing recent repo state and nex
 
 # Resume work
 
-Use this skill when the user wants to continue an in-progress effort and first needs a crisp summary of recent state and next steps.
+1. Read recent `git log` and any changelog the repo uses.
+2. Read active plans in `docs/` or other current planning notes.
+3. Check pending diffs and other in-flight work.
 
-## Workflow
-
-1. Inspect recent repo history.
-   - Check recent `git log` entries.
-   - Check any changelog files the repo actually uses.
-2. Inspect active planning artifacts.
-   - Read relevant `docs/` plans or other current planning notes when they exist.
-3. Inspect current repo state.
-   - Look for pending diffs or other obvious in-flight work that changes the next-step picture.
-4. Summarize before acting.
-
-## Output
-
-Return a compact TODO list covering:
-- what was recently done
-- what is next
-- any blockers, assumptions, or missing context
-
-Then confirm the next-step goal before making further changes when the direction is not already explicit.
+Output a compact TODO list: recently done, next, and blockers or missing context. Confirm the next goal before changing anything unless the direction is already explicit.

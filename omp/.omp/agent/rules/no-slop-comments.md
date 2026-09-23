@@ -14,25 +14,20 @@ condition:
 scope: "tool:edit(*.{py,pyi,ts,tsx,js,jsx,mjs,cjs,mts,cts,sh,bash,zsh,go,rs,lua,sql,tf,tfvars,hcl,nix,rb,php,java,kt,swift,scala,dart,c,cc,cpp,h,hpp,cs,ex,exs,clj,r,ps1,zig,vue,svelte,mk,toml,yaml,yml,jsonc}), tool:write(*.{py,pyi,ts,tsx,js,jsx,mjs,cjs,mts,cts,sh,bash,zsh,go,rs,lua,sql,tf,tfvars,hcl,nix,rb,php,java,kt,swift,scala,dart,c,cc,cpp,h,hpp,cs,ex,exs,clj,r,ps1,zig,vue,svelte,mk,toml,yaml,yml,jsonc})"
 ---
 
-A comment in this edit matches a shape that is slop by definition. Default verdict: **DELETE it**, then re-issue the edit.
+A comment in this edit matches a slop shape. Delete it and re-issue the edit.
 
-Judge only the comments this edit writes. Hashline and patch edits re-type untouched lines, so a pre-existing comment inside a replaced range can trip this rule: if you did not author the matched comment, keep it verbatim and move on.
+Judge only comments you wrote. Patch edits re-type untouched lines, so if you didn't author the matched comment, keep it verbatim.
 
-## Shapes matched here (all slop)
+Matched shapes:
+- Divider banners (`# === config ===`, `// --- helpers ---`). Use functions and modules for structure.
+- TODO, FIXME, XXX, HACK, placeholder, "for now", stub. Do the work or leave the code honest.
+- Step narration (`# Step 2:`, numbered comments above code).
+- Chain-of-thought openers (`we`, `let's`, `now`, `then`, `first`, `note that`, `here we`, `this is`, `basically`). Put that in your reply.
+- Restating the next line (`# fetch the articles` above `fetch_articles()`), including terse lowercase phrases and words echoed in the identifier below.
+- Trailing comments padded to a column (`MAX_ARXIV = 1        # cap`). Rename the symbol instead.
 
-- **Divider art and section banners** — `# === config ===`, `// --- helpers ---`, `// ─── fallback ───`. Express structure with functions and modules.
-- **TODO / FIXME / XXX / HACK / placeholder / "for now" / stub chatter** — do the work now or leave the code honest.
-- **Step narration** — `# Step 2: ...`, or a numbered comment sitting directly above the code it numbers.
-- **Chain-of-thought openers** — `we`, `let's`, `now`, `then`, `first`, `note that`, `here we`, `this is`, `basically`. That belongs in your reply, not in the file.
-- **Restatement of the line below** — `# fetch the articles` above `fetch_articles()`; a terse all-lowercase phrase above the statement it describes; a comment word echoed straight into the identifier beneath it.
-- **Trailing comments padded to a comment column** — `MAX_ARXIV = 1        # cap on arXiv items`. Rename the symbol; a plain 2-space note is tolerable, alignment padding is not.
+Keep a comment only for a fact the code can't state: a footgun, an external spec or API constraint, a workaround for a named bug (`# Workaround for jj-vcs/jj#53: jj ignores .gitattributes eol`), or a non-local invariant. Otherwise use a name, a type, or structure.
 
-## Bar for keeping a comment
+Not matched: causal comments (`because`, `so that`, `otherwise`, `without`, `never`, a parenthetical), doc comments on exported contracts, shebangs, license headers, preprocessor lines, directives (`//go:build`, `# shellcheck disable=`), continuation lines, and markers inside strings, URLs, or regexes.
 
-Keep only a concrete fact the code cannot state: a footgun that will bite the next reader, an external spec/protocol/API constraint, a workaround for a named bug (`# Workaround for jj-vcs/jj#53: jj ignores .gitattributes eol`), or a non-local invariant the code silently relies on. "It adds context" is not enough. Otherwise put it in a name, a type, or the structure — or delete it.
-
-## Deliberately not matched
-
-Causal comments carrying a real why (`because`, `so that`, `otherwise`, `without`, `never`, a parenthetical), doc comments stating an exported contract (`// Get returns the values for key`), shebangs, license/SPDX headers, preprocessor lines, directives (`# noqa`, `//go:build`, `# shellcheck disable=...`), and continuation lines of an existing comment block. Markers inside strings, URLs, and regexes are excluded by anchoring, so a match means a real comment.
-
-Where the substrate comment gate runs, it independently scores comment volume and prose blocks at checkpoint time from the real AST. This rule only intercepts the shapes above, mid-edit.
+Where the comment gate runs, it separately scores comment volume and prose blocks from the AST at checkpoints. This rule only catches the shapes above mid-edit.

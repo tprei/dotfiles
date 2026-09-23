@@ -3,337 +3,178 @@ name: dogfood-loop
 description: Drive a running agentic orchestrator (a service that spawns parallel coding-agent sessions on a target repo) to fix or extend that repo by dispatching sessions, applying their diffs to the main branch, verifying through tests and UI checks, and (for online repos) pushing/landing PRs. Use when the user says "dogfood", "use the local orchestrator", or wants to iterate on a repo via dispatched sessions rather than direct edits.
 ---
 
-# Dogfood loop — agentic orchestrator improving a repo
+# Dogfood loop
 
-Drive a running agentic orchestrator to fix or extend a target repo. Spawn parallel agent sessions, apply their diffs to the main branch, verify, optionally land PRs, iterate.
+Drive a running orchestrator to fix or extend a target repo: dispatch parallel sessions, apply their diffs to main, verify, optionally land PRs, iterate.
 
-This skill assumes:
-- An orchestrator service is running locally with an HTTP dispatch API (something like `POST /api/sessions { repoId, baseBranch, mode, prompt }` returning a session slug).
-- Each session runs in its own git worktree under a known workspace path (e.g. `<workspace>/<slug>/`).
-- The orchestrator can be configured against a `repoId` that points at the user's working repo.
+Assumes a local orchestrator with an HTTP dispatch API (`POST /api/sessions { repoId, baseBranch, mode, prompt }` returns a slug), one git worktree per session (`$WORKSPACE/<slug>/`), and a `repoId` bound to the target repo. Placeholders (`$ORCH_URL`, `$TOKEN`, `$REPO_ID`, `$WORKSPACE`, `$BUILD`, `$TYPECHECK`, `$TEST`, `$E2E`, `$LINT`) come from the orchestrator's config.
 
-Concrete commands below use placeholders like `$ORCH_URL`, `$TOKEN`, `$REPO_ID`, `$WORKSPACE`, `$BUILD`, `$TYPECHECK`, `$TEST`, `$E2E`, `$LINT`. Substitute from the orchestrator's configuration before running.
+Use when the user says "dogfood", "use it on itself", or "run a loop", the orchestrator is up with `$REPO_ID` bound, and you have 2 or more non-overlapping fixes. Skip when the orchestrator is down or a change spans too many subsystems for one session.
 
-## Non-negotiable
+## Dispatch-only rule
 
-When dogfooding *the orchestrator on itself* (the working repo IS the orchestrator's source), EVERY code change to that repo goes through a dispatched session. No exceptions:
+When the target repo is the orchestrator's own source, every change goes through a dispatched session: small tweaks, obvious CI fixes, and fixes you already know included. Before any edit to its source, ask "did this come from an applied agent diff (copied from `$WORKSPACE/<slug>/` per `references/apply-diffs.md`)?" If not, dispatch.
 
-- Not "small" tweaks (one-line edits, lint fixes, test stubs).
-- Not "obvious" CI failures (selector drift, missing exports, port collisions).
-- Not "I already know the fix" cases.
+Direct edits on main are allowed only for `.gitignore` additions, local memory or notes (`MEMORY.md`, scratch logs), and operational doc detour entries. When the orchestrator and target are different repos, the rule covers only the target.
 
-If you find yourself about to call Edit/Write directly on source files inside the dogfooded repo, STOP and dispatch instead.
+Direct edits poison the loop: they skip the architectural rejection rules, drift main from the bases sessions branch from, add no regression guard, and misrepresent what the system built.
 
-The exception list is exhaustive — only these paths may be edited directly on the main branch:
+Reject these rationalizations: "it's small", "the fix is obvious", "I know what changed" (the guard is the value), "it'd be a stale-base diff" (fix the base, then dispatch), "it's taking too long" (wait, or re-dispatch narrower), "I'll follow up" (queue it).
 
-- `.gitignore` additions
-- Local memory / notes files (`MEMORY.md`, scratch task logs)
-- Operational doc detour entries
-
-Nothing else.
-
-When dogfooding *another* repo (the orchestrator and the target repo are different codebases), you may still edit the orchestrator directly — the non-negotiable applies only to the target repo being dispatched against.
-
-### Pre-edit gate
-
-Before any Edit/Write into source dirs of the dogfooded repo, ask: **"Did this change come from an applied agent diff?"** If no, stop and dispatch a session. Applied agent diffs come from `cp`/`rsync` out of `<workspace>/<slug>/...` per `references/apply-diffs.md` — if the change isn't sourced from a worktree path, it doesn't belong on main.
-
-### Why direct edits poison the loop
-
-- They skip the architectural-lens rejection rules that gate dispatched work.
-- They produce diffs the worktree-base mechanism doesn't see, accumulating drift between main and the bases sessions branch from.
-- They bypass the regression-test requirement (every dispatched task adds a guard; ad-hoc edits add none).
-- The dogfood loop's whole point is the system improving itself. Bypassing it is a lie about what was built.
-
-### Orchestrator-broken bootstrap exception
-
-There's exactly one situation where direct edits to orchestrator source are permitted: **the orchestrator cannot dispatch a session that reaches `running` status.**
-
-Symptoms that qualify:
-- `POST /api/sessions` returns OK but the session sits in `pending` for >60s and gets killed by a stuck-pending sweeper.
-- The orchestrator refuses to boot (`SyntaxError`, `EADDRINUSE` you can't kill, immediate OOM).
-- Spawn auth is fully broken (every session fails with `Not logged in` or equivalent).
-- Sandbox prevents *every* agent from completing (every diff comes back as a patch fallback with the same gitdir-readonly error).
-
-In any of those, fix the orchestrator directly on main. The exception ends as soon as a probe-dispatch succeeds:
+Bootstrap exception: edit orchestrator source directly only when no session can reach `running`: sessions sit `pending` over 60s and get swept; boot fails (`SyntaxError`, unkillable `EADDRINUSE`, instant OOM); every spawn fails auth (`Not logged in`); or every diff returns as a patch fallback with the same readonly-gitdir error. It ends the moment this probe passes (status `completed` and `turns>0`):
 
 ```
-# Probe: dispatch a tiny task and confirm it reaches `running` and produces tool calls within 60s.
 curl -sX POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"title":"probe","repoId":"'"$REPO_ID"'","baseBranch":"main","mode":"task",
        "prompt":"Run the project typecheck and report the exit code. Do not edit any files."}' \
   "$ORCH_URL/api/sessions"
-# Then poll /api/sessions/<slug> until status=completed AND turns>0.
+# poll /api/sessions/<slug>
 ```
 
-If the probe succeeds, broken-mode is over and you must dispatch every subsequent change. If it fails the same way the original sessions did, the direct fix wasn't enough — keep iterating directly until the probe passes.
-
-This is a real exception, not a loophole. It applies only to the orchestrator failing to spawn, not to "this specific feature is hard to dispatch" or "this fix is small". The test is mechanical: did the probe succeed?
-
-### Bypass rationalizations to reject
-
-These all rationalize bypassing the dispatch. None justify it. If you catch yourself thinking any of them, dispatch instead:
-
-- "It's small enough to do directly" — the regression budget for a one-line edit equals the budget for a hundred-line one.
-- "The fix is obvious" — obvious fixes hide architectural mismatches the loop is built to catch.
-- "I already know what changed" — the value of the loop isn't the fix, it's the regression-test guard the dispatch produces.
-- "The session would just produce a stale-base diff" — fix the worktree base first (see "Stale-bare sanity check" below), then dispatch.
-- "The session is taking too long" — wait, or stop and re-dispatch with tighter scope.
-- "I'll fix it in a follow-up" — direct edits compound; the loop never catches up. Track it as a queued task instead.
-
-### Pre-dispatch gates (run all before each batch)
+## Environment check
 
 ```
-# 1. CI on main must be green. Red main makes every dispatched diff inherit the red.
-gh run list --branch main --limit 1
-# Expect: status "completed" + conclusion "success". Anything else: fix first.
-
-# 2. Bare-clone main (if the orchestrator branches sessions from a local bare) must match
-#    working-tree main. Stale bare ⇒ every worktree branches from a stale SHA ⇒ every diff
-#    reverts recent work.
-BARE="$WORKSPACE/.repos/$REPO_ID.git"   # adjust path to your orchestrator's layout
-test "$(git -C "$BARE" rev-parse main)" = "$(git rev-parse main)" \
-  || git -C "$BARE" fetch origin main:main --force
-
-# 3. No overlapping scopes across the batch. Two sessions touching the same file ⇒
-#    last-writer-wins regression. Dispatch them sequentially instead.
-
-# 4. No silently-shadowed routes / module registrations. If your framework de-dupes by key
-#    (Fastify routes, Express handlers, plugin slots), two registrations under the same key
-#    silently drop one. Grep for duplicates before adding new endpoints. Example:
-#      rg -n "app\.(get|post|patch|delete)\(['\"]/api" src/ | awk -F'"' '{print $2}' \
-#        | sort | uniq -d
-#    Adapt the grep to your framework. Empty output is the only acceptable result.
-
-# 5. No orchestrator running with an inherited sandbox. If the orchestrator was launched
-#    from inside a Claude Code (or other agentic) session, every spawned sub-agent inherits
-#    that session's sandbox and can't write to its worktree's gitdir.
-ORCH_PID=$(pgrep -f "<your-orchestrator-cmd-pattern>" | head -1)
-[ -n "$ORCH_PID" ] && ps -p $(awk '/^PPid:/ {print $2}' /proc/$ORCH_PID/status) -o cmd= \
-  | grep -qE 'claude|claude-code|codex' \
-  && echo "ORCHESTRATOR INHERITED AGENTIC SANDBOX — sessions can't write to gitdir; ask operator to relaunch from their terminal" \
-  && exit 1
-
-# 6. No stuck-pending sessions occupying admission slots.
-curl -sH "Authorization: Bearer $TOKEN" "$ORCH_URL/api/sessions" \
-  | python3 -c '
-import json,sys,datetime
-items = json.load(sys.stdin)["items"]
-stuck = [s for s in items
-         if s["status"] == "pending"
-         and (datetime.datetime.now(datetime.timezone.utc)
-              - datetime.datetime.fromisoformat(s["createdAt"].replace("Z","+00:00"))).total_seconds() > 120]
-for s in stuck: print("STUCK:", s["slug"])
-'
-# Stop each via POST /api/commands {kind:"stop", sessionSlug:...} (or your orchestrator's
-# equivalent) before dispatching new work.
-```
-
-## When to use
-
-- The user says "dogfood", "use it on itself", "run a loop", or wants to iterate on a repo via dispatched sessions.
-- The orchestrator is running with `$REPO_ID` bound to the target repo.
-- You have ≥ 2 distinct, non-overlapping fixes you can dispatch in parallel.
-
-Skip if the orchestrator isn't running, or if the change crosses too many subsystems for a single session to own end-to-end.
-
-## Quick environment check (run first)
-
-```
-# Orchestrator + web (if applicable) liveness
 curl -s -o /dev/null -w "orchestrator HTTP %{http_code}\n" "$ORCH_URL/api/health"
 curl -s -o /dev/null -w "web HTTP %{http_code}\n"          "${WEB_URL:-http://127.0.0.1:5173}/"
 ss -tlnp 2>/dev/null | grep -E "<orchestrator-port>|<web-ports>"
-
-# Zombie audit — kill anything from prior sessions that's been alive >4h.
-# Stale test runners, orphan dev servers, and synthetic e2e instances that didn't clean up
-# will fight your run for ports and memory.
+# Zombies: etime >= 04:00:00 or DD-HH:MM:SS is leaked; kill -9 it.
 ps -eo pid,etime,cmd | awk '/(test|run dev|tsx watch|vite)/ && !/awk/ { print }' | head
-# Format note: etime ≥ "04:00:00" or any "DD-HH:MM:SS" is leaked. `kill -9` it.
 ```
 
-If the orchestrator is down, restart via the project's own start script (see `references/restart-engine.sh` for a template). Boot the dev server too if relevant.
+- Restart a down orchestrator with the project's start script (template: `references/restart-engine.sh`).
+- After `git pull`, rebuild shared packages the orchestrator imports at runtime. `does not provide an export named '<X>'` means stale `dist/`; rebuild, never revert. Bake the rebuild into the start script.
+- The operator launches the orchestrator, not you. Launched from an agentic shell, every sub-agent inherits its sandbox and can't write its gitdir.
 
-**Always rebuild any shared/types package the orchestrator consumes at runtime before relaunching after a `git pull`.** Stale `dist/` of a shared package is a frequent boot-fail symptom — surface error is `SyntaxError: The requested module '<pkg>' does not provide an export named '<X>'`. Fix is the rebuild, never reverting the change in main. Bake the rebuild into the start script so the trap doesn't recur.
+## Pre-dispatch gates (every batch)
 
-**The operator launches the orchestrator, not the dogfood loop.** When you (the loop) start the orchestrator via Bash, every spawned sub-agent inherits the surrounding agentic sandbox and can't write to its worktree's gitdir. Run the sandbox-inheritance gate above; if it fires, ask the operator to relaunch in their own terminal.
+```
+# 1. Main CI green (completed + success). Red main poisons every diff.
+gh run list --branch main --limit 1
 
-## Loop, in order
+# 2. Bare clone main == working main, or every session reverts recent work.
+BARE="$WORKSPACE/.repos/$REPO_ID.git"
+test "$(git -C "$BARE" rev-parse main)" = "$(git rev-parse main)" \
+  || git -C "$BARE" fetch origin main:main --force
 
-1. **Audit.** Use Playwright (or `curl`) to capture broken states — desktop + mobile viewports, dark + light, every relevant view. Save screenshots under `.playwright-mcp/`. Don't guess. For layout/scroll bugs, query computed styles directly via `browser_evaluate` — chrome headless screenshots can mislead (e.g. body bg may be light per `getComputedStyle` but render dark in the screenshot).
+# 3. No two sessions in a batch touch the same file; sequence them instead.
 
-   **For operator-reported bugs, reproduce the failing flow in Playwright before any dispatch.** Take the operator's words ("can't close the chat", "no auto-update") and turn them into a sequence of `browser_click` / `browser_evaluate` calls that demonstrably fails right now. Save that sequence — it's both the dispatch prompt's Do-step and the regression test's setup. If you can't reproduce, ask for clarification before dispatching; you can't fix a flow you haven't seen fail.
+# 4. No duplicate route or plugin registrations (frameworks silently drop one). Output must be empty:
+rg -n "app\.(get|post|patch|delete)\(['\"]/api" src/ | awk -F'"' '{print $2}' | sort | uniq -d
 
-   **Operator pastes are primary signal.** When the operator pastes orchestrator logs, screenshots, or transcript fragments mid-loop, treat them as ground truth — not the orchestrator API responses, which can lag or contradict the paste. File the implied bug immediately, before continuing the queued work. Expect the loop to surface orchestrator bugs at roughly a 1:2 ratio with feature ships; budget time accordingly.
+# 5. Orchestrator not launched from an agentic CLI:
+ORCH_PID=$(pgrep -f "<your-orchestrator-cmd-pattern>" | head -1)
+[ -n "$ORCH_PID" ] && ps -p $(awk '/^PPid:/ {print $2}' /proc/$ORCH_PID/status) -o cmd= \
+  | grep -qE 'claude|claude-code|codex' \
+  && echo "ORCHESTRATOR INHERITED AGENTIC SANDBOX: ask operator to relaunch from their terminal" && exit 1
 
-2. **Group fixes into focused sessions.** Each session owns one coherent area (e.g. "light mode tokens", "mobile drawer", "chat typography"). 4–6 parallel sessions is healthy. Two sessions touching the same file is a recipe for last-writer-wins regressions — a session reverting another's fix is the most expensive failure mode in this loop.
+# 6. Stop sessions pending > 120s (POST /api/commands {kind:"stop", sessionSlug}):
+curl -sH "Authorization: Bearer $TOKEN" "$ORCH_URL/api/sessions" | python3 -c '
+import json,sys,datetime
+now=datetime.datetime.now(datetime.timezone.utc)
+for s in json.load(sys.stdin)["items"]:
+    if s["status"]=="pending" and (now-datetime.datetime.fromisoformat(s["createdAt"].replace("Z","+00:00"))).total_seconds()>120:
+        print("STUCK:", s["slug"])'
+```
 
-3. **Write tight prompts.** See `references/dispatch-prompt-template.md`. Highlights:
-   - Name exact files in scope. Forbid touching anything else.
-   - Specify the verify step (the project's typecheck/test commands) and the explicit commit incantation. Many sandboxes prevent the orchestrator's auto-commit handler from running, so agents must commit themselves.
-   - When a session touches infra/code that hot-reloads, warn the agent: "do NOT run dev servers; the operator already has those running. Just typecheck and test."
-   - For sessions adding **e2e tests / dev servers**, force a non-default port. Otherwise the test instance collides with the operator's running orchestrator and one of them dies.
+## Loop
 
-4. **Dispatch via REST.** `POST $ORCH_URL/api/sessions` with `{ title, repoId: "$REPO_ID", baseBranch: "main", mode: "task", prompt }`. Capture every slug; print them so the user sees what's running. Use `Authorization: Bearer $TOKEN` from your local config.
-
-5. **Wait for terminal status — in the background, not in your foreground context.** Use Bash `run_in_background: true` with an `until` loop, or spawn an Agent. Foreground polling consumes context proportional to runtime; for any session > 5 min, that compounds across the batch and forces a mid-loop compact. Mark all but the largest sessions for ~30 min cap. Treat `failed turns=0` as "killed mid-bootstrap" and re-dispatch; treat `failed turns>50` as a real attempt that hit a wall (read the last few transcript events to learn why — most often quota or sandbox).
-
-   **Monitor hygiene** (mistakes that make Monitors lie):
-   - Cancel old monitors when their target session is stopped — otherwise they fire on dead state and report false bugs.
-   - Use Python with `json.load` for any transcript / session inspection inside `until`-loops. `jq` chokes on control characters embedded in transcript event text and exits non-zero; the until-loop dies; the monitor reports failure on a healthy session.
-   - For reply-injection checks, search the *entire transcript after the reply timestamp* for the unique tag — do not assume the reply lands at any particular turn number. Replies can drain at turn N or turn N+1 depending on whether the agent is mid-turn at injection time.
-   - Treat "out of usage / quota exhausted · resets HH:MM" in any tool output as a hard stop. Don't retry — schedule a wakeup near the reset and re-enter the loop then. Retrying burns budget on dead-on-arrival sessions.
-
-6. **Inspect each diff before applying.** See `references/apply-diffs.md`. Critical: agents capture injected assets (project context files like `AGENTS.md`, `CLAUDE.md`, `.cursor/`, `instructions.md` that the orchestrator drops into worktrees) when they `git add .`. Excluding them via `.git/info/exclude` is best-effort and not always reliable. Filter assets out at apply time.
-
-7. **Apply, verify, commit, push.** The full gate, in order:
+1. Audit with Playwright or `curl`: desktop and mobile, dark and light, every relevant view; screenshots in `.playwright-mcp/`. For layout bugs, read computed styles with `browser_evaluate`; headless screenshots can mislead. Reproduce every operator-reported bug as a failing click/evaluate sequence before dispatch; that sequence becomes the prompt's Do step and the regression test's setup. Can't reproduce: ask. Operator pastes (logs, screenshots, transcripts) are ground truth over API responses; file the implied bug immediately. Expect about one orchestrator bug per two features.
+2. Group fixes into 4 to 6 sessions, each owning one coherent area. Overlapping files cause last-writer-wins reverts, the most expensive failure here.
+3. Write tight prompts from `references/dispatch-prompt-template.md`: exact files in scope, the verify commands, an explicit commit command (sandboxes often break auto-commit), "don't run dev servers" when code hot-reloads, and a non-default port for any e2e or dev server.
+4. Dispatch: `POST $ORCH_URL/api/sessions` with `{ title, repoId, baseBranch: "main", mode: "task", prompt }` and `Authorization: Bearer $TOKEN`. Print every slug.
+5. Wait in the background (async shell `until` loop or an agent), never by foreground polling; cap most sessions around 30 minutes. `failed turns=0` means killed at bootstrap: re-dispatch. `failed turns>50` hit a wall: read the last transcript events (usually quota or sandbox). Monitor hygiene:
+   - Cancel monitors for stopped sessions.
+   - Parse transcripts with Python `json.load`; `jq` dies on control characters and fakes a failure.
+   - Check reply injection by searching the whole transcript after the reply timestamp for the tag.
+   - "Out of usage / resets HH:MM" is a hard stop: schedule a wakeup near reset, don't retry.
+6. Inspect each diff before applying (`references/apply-diffs.md`). Agents' `git add .` captures injected assets (`AGENTS.md`, `CLAUDE.md`, `.cursor/`, `instructions.md`); `.git/info/exclude` is unreliable, so filter at apply time.
+7. Apply, verify, commit, push:
    ```
-   $INSTALL                                  # only if dependency manifest changed
-   $BUILD_SHARED_PACKAGES                    # types other packages depend on, if any
-   $TYPECHECK                                # all relevant packages
-   $TEST                                     # unit/integration; the regression test must pass
-   $WEB_BUILD                                # if your e2e serves built output
-   $E2E                                      # MANDATORY for any UI change. Typecheck does not catch selector drift.
-   #   Before running e2e, grep for selectors that touch files in this batch:
-   #     rg "data-testid|getByRole|getByText|locator\(" e2e/*.spec.ts
-   #   If any selector references a UI element your batch renamed/removed/restructured, fix the spec first.
-   #   Same rule for tests measuring DOM rects: confirm the spec measures the element that's
-   #   supposed to change, not a wrapper. (`getBoundingClientRect` on `<main>` rarely tells you
-   #   what you think it does.)
+   $INSTALL                 # only if the manifest changed
+   $BUILD_SHARED_PACKAGES
+   $TYPECHECK
+   $TEST                    # the regression test must pass
+   $WEB_BUILD               # if e2e serves built output
+   $E2E                     # mandatory for UI changes; typecheck misses selector drift
+   #   First: rg "data-testid|getByRole|getByText|locator\(" e2e/*.spec.ts and fix specs
+   #   touching renamed or removed UI. Rect assertions must measure the changing element, not a wrapper.
    $LINT
    git add -A && git -c user.email=local@dogfood -c user.name=local commit -q -m "<subject> (via session <slug>)"
    git push origin main
-   gh run watch                              # block until CI terminal. If red: fix BEFORE the next dispatch.
+   gh run watch             # red CI: fix before the next dispatch
    ```
+8. Recycle the orchestrator if its source changed; watch mode is unreliable across rapid edits (`references/restart-engine.sh`).
+9. Verify the flow, not the pixels, after a hard reload (`Ctrl+Shift+R`):
+   - Always: 1440×900 and 390×844; console clean except known dev warnings; every reported bug's reproduction now passes.
+   - Controls: click every control on the changed surface and assert its effect (close buttons close). Drag handles ±200 px and assert the bound element's `getBoundingClientRect().width` changes by about 200. Resizable panels at min and max must differ visibly.
+   - Event-union views: every event kind has a `case` arm (missing arms render blank); seed a session with every kind and check each renders.
+   - New session: the detail panel mounts into a spinner immediately, and the first streamed event renders without a reload.
+   - Filters: each option's row count matches the equivalent `curl '/api/...?<filter>'`.
+   - Multi-turn input: mid-turn, `await page.locator('textarea').first().isDisabled()` is `false`; submit through the UI, not the API.
+   - Flex and grid: list scroll containers with `[...document.querySelectorAll('*')].filter(c => /auto|scroll/.test(getComputedStyle(c).overflow)).map(c => `${c.tagName}.${c.className}: ${getComputedStyle(c).overflow}`)` at 320×568, 768×1024, and 1440×900; only intended containers scroll (not tab strips, headers, or pill rows).
+   - Realtime: on a resource with zero events, a triggered update appears without refresh.
+   - Read-only modes: `git -C "$WORKSPACE/<slug>" diff --stat` is empty and `status --short` shows only injected assets. The regression test asks a read-only session to modify a file and asserts no diff.
+   - Reply injection: post `echo back this token: $TAG` via `POST $ORCH_URL/api/commands {"kind":"reply","sessionSlug":"$SLUG","text":...}` with `TAG="reply-probe-$(date +%s)"` and assert a later `assistant_text` contains it. Presence in the transcript alone proves nothing.
+   - Every "mode X must not Y" constraint is an assertion in its regression test.
+10. Online repos: land via `references/landing-flow.md`. `POST /api/commands {kind:"land", sessionSlug, strategy:"squash", force:true}` pushes, opens the PR, and merges (`force` skips readiness while CI runs); confirm with `gh pr view <n> --json state,mergeCommit`. Stacked children auto-close when `--delete-branch` removes their base; recover with `references/restack-after-merge.md`. Prefer flat DAGs targeting `main` unless a node semantically depends on its parent; shared types go in a shared package, not a stack.
+11. Record failed session patterns (refusing to commit, readonly sandbox, parallel conflicts, env files eaten by shell sourcing) as feedback memory in the project memory dir.
 
-8. **Recycle the orchestrator** if you touched orchestrator source. Watch-mode dev servers are unreliable across rapid edits; use the restart template in `references/restart-engine.sh`.
+## Hazards
 
-9. **Verify the user flow, not the rendered pixels.** Reload the app hard (`Cmd/Ctrl+Shift+R` to bust cached modules). Then run every check below that matches the change type. A "screenshot looks right" passes happily while the flow is broken — these checks fail loudly when it is.
-
-   **Always (every batch)**:
-   - 1440×900 desktop and 390×844 mobile.
-   - `browser_console_messages` clean except known dev-only warnings.
-   - For each operator-reported bug in this batch: re-run the exact reproduction sequence from step 1. The flow that failed before must pass now.
-
-   **For any UI surface with controls** (button, link, handle, input, tab):
-   - Click every visible control on the changed surface. Each must produce its expected effect: dismiss buttons dismiss, navigation buttons route, toggles toggle, tabs change content. If a button looks like close/cancel/×, click it and assert the panel actually closes.
-   - For draggable handles: get `bbox = handle.boundingBox()`, drag from `bbox.x` to `bbox.x ± 200`, then read the bound element's `getBoundingClientRect().width`. Width must change by ≈ 200. Measure the element that's supposed to resize — not a wrapper.
-   - For resizable panels: drag the handle to its min and max. Both extremes must produce a visibly different layout (not the same ±60px). If the clamp range is too tight to be useful, that's a bug.
-
-   **For session/transcript views** (anything that renders a discriminated union of event kinds):
-   - Diff the dispatcher against the event-kind union. Every kind in the union must have a `case` arm. Missing arms render blank — fall-through is silent failure.
-   - Open a session that contains at least one of every event kind (seed via API if needed). Visually confirm each event kind renders distinctly.
-
-   **For session-create / "new session" flow**:
-   - Open a fresh tab. Submit a new session. The detail panel must mount immediately into a spinner state — no blank-flash.
-   - Watch for the first streaming event to render *without reloading the page*. If you have to close+reopen for events to appear, the streaming-store path lost a race with REST backfill.
-
-   **For filter / search / list controls**:
-   - Click each filter option in turn. Compare the visible row count to the equivalent `curl '/api/...?<filter>'` count. They must match. A filter showing zero rows when curl returns N is a bug, not an empty state.
-
-   **For multi-turn / `waiting_input` features** (interactive replies, multi-stage flows):
-   - In a live session that should accept input, run `await page.locator('textarea').first().isDisabled()` *while the session is mid-turn*. Must be `false`. Mock providers terminate fast; if the textarea only enables after `turn_completed`, the user can never reply.
-   - Type and submit through the UI control, not via a direct API call. Direct API calls succeed even when the UI never enabled input, so they can't surface this class of bug.
-
-   **For any flex/grid layout change**:
-   - On the changed surface, run:
-     ```js
-     [...document.querySelectorAll('*')]
-       .filter(c => /auto|scroll/.test(getComputedStyle(c).overflow))
-       .map(c => `${c.tagName}.${c.className}: ${getComputedStyle(c).overflow}`)
-     ```
-     Anything new in the list is a candidate scrollbar — confirm it's intended. Tab strips, header rows, and pill clusters should not scroll.
-   - Resize the viewport to 320×568, 768×1024, 1440×900 and re-run. Scrollbars only on intended scroll containers.
-
-   **For SSE / realtime work**:
-   - Open a fresh tab on a resource that has *zero* prior events. Trigger an update. Events must appear without any user-driven refresh. If you have to reload to see updates, the streaming path is broken.
-
-   **For mode / stage behavioral contracts** (anything with "this mode must not do X"):
-   - **Read-only modes must produce no diff.** After the turn ends, the worktree diff must be empty:
-     ```
-     git -C "$WORKSPACE/<slug>" diff --stat        # MUST be empty
-     git -C "$WORKSPACE/<slug>" status --short     # MUST show only injected assets
-     ```
-     If either shows tracked-file changes, the mode isn't honoring its read-only contract. Bake this into the regression test: dispatch a read-only-mode session that's *asked* to modify a file; assert the diff is empty when the turn completes.
-   - **Reply injection must reach the agent.** Don't just assert the reply appears in the transcript — that only proves the event landed. Post a uniquely-tagged reply, then assert the agent acknowledges it in its *next* assistant turn:
-     ```
-     TAG="reply-probe-$(date +%s)"
-     curl -X POST "$ORCH_URL/api/commands" -d "{\"kind\":\"reply\",\"sessionSlug\":\"$SLUG\",\"text\":\"echo back this token: $TAG\"}"
-     # poll /api/sessions/$SLUG/transcript until an assistant_text event after the reply contains $TAG
-     ```
-     If the tag never echoes back, the reply landed in the transcript but the agent didn't see it. That's the injection path silently dropping messages — a transcript-render check would have passed.
-   - **For every mode/stage with a constraint, write the constraint as an assertion in the regression test.** "Mode X must not Y" is a behavioral contract. The dispatch-prompt-template's regression-test step must encode the constraint, not just the happy path.
-
-10. **For online closed loop** (push → PR → merge), see `references/landing-flow.md`. The short of it:
-    - Agent commits in the worktree (manually if auto-commit handler is inert).
-    - `POST /api/commands {kind:"land", sessionSlug, strategy:"squash", force:true}` — orchestrator pushes via its preferred auth (GitHub App askpass, `gh` stored creds, etc.), opens PR via gh CLI, then `gh pr merge`. `force: true` skips readiness when CI hasn't completed yet.
-    - Verify on github: `gh pr view <n> --json state,mergeCommit`.
-    - **Stacked PRs auto-close on parent merge** when `--delete-branch` deletes the base. Every multi-node DAG produces this dance unless you flatten the stack to all-target-`main`. See `references/restack-after-merge.md` for the recovery pattern. Prefer flat DAGs in dispatch prompts whenever node N's content doesn't *semantically* depend on node N-1's content; type-only deps belong in a shared package and don't need stacking.
-
-11. **Save lessons as memory.** When a session pattern fails (agents refusing to commit, sandbox-readonly, parallel-session conflicts, env files getting eaten by shell sourcing) write a feedback memory under the project memory dir.
-
-## Hazards (and the fix you reach for)
-
-| symptom | cause | fix |
+| Symptom | Cause | Fix |
 |---|---|---|
-| `EADDRINUSE` on orchestrator restart | watch-mode leaked an orphan listener | `pkill -9 -f "<orchestrator-cmd-pattern>"`, then `ss -tlnp | grep <port>` empty before relaunch |
-| Sessions failing `turns=0` after orchestrator recycle | killed mid-spawn; resume marker stale | re-dispatch the session |
-| Auto-commit handler audit shows `GIT_EDITOR not permitted` | host agentic-CLI sandbox on subprocess git invocations | rely on agents committing themselves; the dispatch prompt and any injected `instructions.md` asset must enforce this |
-| `core.hooksPath is not permitted` errors | same host-sandbox issue | pre-commit hook is currently inert in worktrees; lint runs in CI |
-| JSON env vars get eaten by `set -a; . .env.local` | brace expansion + double-quote stripping in shell sourcing | single-quote the whole JSON value, or migrate to a config file the orchestrator reads directly (no shell parsing) |
-| Synthetic e2e job collides with operator's orchestrator | shared port | always force a different port for the test orchestrator via `webServer.env` (or equivalent) |
-| Chat / panel doesn't scroll | flexbox missing `min-h-0` chain | look for `flex-1` ancestors without `min-h-0` and add it |
-| Resize handle doesn't drag for real users but works in synthetic test | `setPointerCapture` doesn't propagate when cursor leaves the 1px hit target | switch to `document.addEventListener('pointermove'\|'pointerup')` for the duration of a drag |
-| Light mode toggles class but page still looks dark | tailwind tokens hard-coded; `darkMode: "class"` doesn't help | replace hard-coded color utilities (`bg-zinc-*` etc.) with theme tokens that consume CSS variables |
-| State-store "result of getSnapshot should be cached" infinite loop | selector returns a new object/Set/Map every render | use shallow-compare wrapper for multi-key selects, `useMemo` to derive collections from a stable scalar slice |
-| Two parallel sessions touched the same file → reverted fix | the agent that finished last won | don't dispatch overlapping scopes; if you must, take diffs from the LATER session and re-apply earlier-session intent on top |
-| Duplicate route registrations after parallel work | two agents wrote sibling files registering the same key | grep for duplicate registration keys before each dispatch (pre-dispatch gate §4); dedupe; only one path is wired in the registrar |
-| CORS works on REST but SSE blocked | many CORS plugins don't cover raw streamed responses | the SSE handler must emit ACAO/ACAC/Vary headers manually — preserve across edits |
-| Agents commit injected assets (`AGENTS.md`, `CLAUDE.md`, `.cursor/`, `instructions.md`) | injected context files; agent's `git add .` captures them; exclude file is best-effort | filter at apply time (see `references/apply-diffs.md`) |
-| Every dispatched diff comes back stale (regressions revert recent main commits) | bare clone has no fetch refspec; the bare's main is frozen at orchestrator-boot SHA | run the stale-bare gate (Pre-dispatch gates §2) before every batch. If it fires, the orchestrator's per-worktree force-fetch regressed |
-| Transcript event renders blank | dispatcher missing a `case` arm for that kind | diff the dispatcher's cases against the event-kind union (§9, "session/transcript views" check) |
-| Read-only stage produced a code diff | stage's prompt or tool allowlist isn't enforcing read-only | run §9 "mode/stage behavioral contracts" check; the dispatched-prompt for that stage must explicitly forbid Edit/Write/Bash-write tools, and the regression test must dispatch a read-only-mode session that's *asked* to modify code and assert the diff is empty |
-| Injected reply appears in transcript but agent never acknowledges it | reply event landed in store but never reached the spawned process's stdin / next turn input | run §9 "reply injection" check (unique-tag echo). If the tag never echoes, the bug is in the orchestrator's reply-delivery path, not the UI |
-| Orchestrator fails to boot after `git pull` with `does not provide an export named '<X>'` | stale `dist/` of a shared package | rebuild shared packages before relaunch (bake into start script) |
-| Orchestrator OOMs at default heap during heavy enumeration endpoint | endpoint enumerated all rows + ran sync `du`-like work synchronously | pin `NODE_OPTIONS=--max-old-space-size=8192` (or equivalent); paginate the endpoint |
-| Every session fails with `Not logged in · Please run /login` | per-session HOME isolation hides operator's credentials | symlink the operator's auth files into each session's per-session home dir |
-| Agent stalls on Bash prompts under acceptEdits permissionMode | acceptEdits auto-confirms file writes but still prompts for shell | per-session settings.json must include `{"permissions":{"allow":["Bash(*)"]}}` |
-| Every session's `git commit` returns "Read-only file system"; agents leave patch fallbacks | orchestrator inherited host agentic-CLI sandbox from its launching shell | operator must launch the orchestrator from their own terminal, outside any agentic CLI session; pre-dispatch gate detects parent-process |
-| `gh pr edit --base` errors with `projectCards` GraphQL deprecation | gh CLI mutation requests a deprecated field | upgrade gh ≥ 2.55, or use `gh api -X PATCH /repos/:owner/:repo/pulls/:n -f base=<branch>` |
-| Endpoint 404s despite source being present | two sibling files register the same route key; second registration silently dropped | run pre-dispatch gate §4; pick canonical, delete duplicate, fix import in the registrar |
-| Sessions stuck `pending` exhaust admission slots | spawn hangs without timeout, slot never freed | run pre-dispatch gate §6 (sweep stuck-pending > 120s, stop each); orchestrator-side fix is a 30-60s spawn timeout that flips to `failed` with `manual_intervention` |
-| Out-of-quota signal mid-batch | API quota exhausted | stop dispatching, schedule wakeup near the announced reset time, do not retry |
-| Stacked child PR auto-closes when parent merges with `--delete-branch` | GitHub closes children whose base was deleted; restacker raced or hit projectCards error | follow `references/restack-after-merge.md` recovery; prefer flat DAGs (all nodes target `main`) for future dispatches |
-| Retry / cancel button POST returns "Body cannot be empty when content-type is set to 'application/json'" | strict body parsers reject empty bodies with JSON content-type | web client must send `{}` for body-less posts |
+| `EADDRINUSE` on restart | watch mode leaked a listener | `pkill -9 -f "<orchestrator-cmd-pattern>"`; `ss -tlnp \| grep <port>` empty before relaunch |
+| `turns=0` failures after recycle | killed mid-spawn | re-dispatch |
+| `GIT_EDITOR not permitted` in auto-commit audit | host sandbox on subprocess git | agents commit themselves; prompt and injected `instructions.md` enforce it |
+| `core.hooksPath is not permitted` | same sandbox | pre-commit is inert in worktrees; lint runs in CI |
+| JSON env vars mangled by `set -a; . .env.local` | brace expansion and quote stripping | single-quote the JSON, or read a config file without shell parsing |
+| Synthetic e2e kills the operator's orchestrator | shared port | force a separate port via `webServer.env` |
+| Chat or panel won't scroll | `flex-1` ancestors missing `min-h-0` | add `min-h-0` down the chain |
+| Resize handle fails for users, passes in tests | `setPointerCapture` lost off the 1 px target | `document` `pointermove`/`pointerup` listeners during drag |
+| Light mode toggles but stays dark | hard-coded color utilities (`bg-zinc-*`) | theme tokens backed by CSS variables |
+| "getSnapshot should be cached" loop | selector returns a new object, Set, or Map | shallow-compare multi-key selects; `useMemo` from a stable scalar |
+| Parallel sessions reverted a fix | last writer won | no overlapping scopes; else apply the later diff and re-apply the earlier intent |
+| Duplicate registrations, endpoint 404s | sibling files register the same key | gate 4; keep one, fix the registrar import |
+| CORS fine on REST, SSE blocked | CORS plugins skip raw streams | SSE handler emits ACAO, ACAC, and Vary itself |
+| Injected assets committed | `git add .` | filter at apply time |
+| Every diff reverts recent main | bare clone has no refspec, frozen at boot SHA | gate 2; the per-worktree force-fetch regressed |
+| Blank transcript event | missing `case` arm | diff cases against the union |
+| Read-only stage produced a diff | prompt or tool allowlist doesn't enforce it | forbid write tools in that stage's prompt; regression test asserts an empty diff |
+| Reply shows in transcript, agent ignores it | never reached process stdin or next turn | tag echo check; bug is in reply delivery, not UI |
+| Boot fails after pull: `does not provide an export named '<X>'` | stale shared `dist/` | rebuild shared packages in the start script |
+| OOM on a heavy enumeration endpoint | enumerates all rows with sync `du`-like work | `NODE_OPTIONS=--max-old-space-size=8192`; paginate |
+| Every session `Not logged in · Please run /login` | per-session HOME hides credentials | symlink operator auth files into each session home |
+| Agent stalls on Bash under acceptEdits | acceptEdits still prompts for shell | per-session `settings.json`: `{"permissions":{"allow":["Bash(*)"]}}` |
+| `git commit`: "Read-only file system", patch fallbacks | orchestrator inherited a host sandbox | operator relaunches from their terminal; gate 5 detects it |
+| `gh pr edit --base` fails on `projectCards` | deprecated GraphQL field | gh ≥ 2.55, or `gh api -X PATCH /repos/:owner/:repo/pulls/:n -f base=<branch>` |
+| Pending sessions exhaust admission slots | spawn hangs without timeout | gate 6; orchestrator fix: 30 to 60 s spawn timeout flipping to `failed` with `manual_intervention` |
+| Out of quota mid-batch | quota exhausted | stop, schedule a wakeup near reset, don't retry |
+| Stacked child PR auto-closes | base deleted on parent merge | `references/restack-after-merge.md`; prefer flat DAGs |
+| Retry or cancel POST: "Body cannot be empty..." | strict JSON body parser | client sends `{}` |
 
-## Useful endpoints to keep in your back pocket
+## Endpoints
 
-A typical orchestrator exposes a shape like the following — adapt to your service's actual surface:
+Typical shape; adapt to the service:
 
 ```
-GET  /api/health                                  liveness
-GET  /api/version                                 features list + repos
-GET  /api/doctor                                  aggregate diagnostics in one round-trip
-GET  /api/sessions?status=running&limit=20        filter+pagination
-GET  /api/sessions/<slug>                         single session
-GET  /api/sessions/<slug>/transcript              all events
-GET  /api/sessions/<slug>/diff                    workspace diff
-GET  /api/sessions/<slug>/pr                      PR preview
-GET  /api/audit/events?limit=50                   audit trail (e.g. completion handlers)
-GET  /api/config/runtime                          runtime overrides + schema
-PATCH /api/config/runtime                         live-toggle (e.g. ciAutoFix:true)
-POST /api/sessions                                spawn one
-POST /api/sessions/variants                       spawn N + judge
-POST /api/commands                                discriminated union (reply/stop/land/...)
+GET   /api/health                            liveness
+GET   /api/version                           features + repos
+GET   /api/doctor                            aggregate diagnostics
+GET   /api/sessions?status=running&limit=20  filter + pagination
+GET   /api/sessions/<slug>[/transcript|/diff|/pr]
+GET   /api/audit/events?limit=50             audit trail
+GET   /api/config/runtime                    runtime overrides + schema
+PATCH /api/config/runtime                    live toggle (ciAutoFix:true)
+POST  /api/sessions                          spawn one
+POST  /api/sessions/variants                 spawn N + judge
+POST  /api/commands                          reply | stop | land | ...
 ```
 
-## Reference files
+## References
 
-| File | Contents |
-|------|----------|
-| `references/dispatch-prompt-template.md` | Prompt skeleton ready to paste into a `POST /api/sessions` body. |
-| `references/apply-diffs.md` | How to copy a worktree's diff to main, filtering injected assets, plus patch-fallback recovery. |
-| `references/known-bugs.md` | Categories of bug pattern that recur in dogfood loops — quick recognition. |
-| `references/landing-flow.md` | Push → PR → merge via the orchestrator's landing API + `gh pr merge`. |
-| `references/restack-after-merge.md` | Recovery dance for child PRs that auto-close when their stacked parent merges. |
-| `references/restart-engine.sh` | Idempotent kill + relaunch script template. |
+- `references/dispatch-prompt-template.md`: session prompt skeleton.
+- `references/apply-diffs.md`: copying a worktree diff to main, asset filtering, patch-fallback recovery.
+- `references/known-bugs.md`: recurring bug patterns.
+- `references/landing-flow.md`: push, PR, and merge via the landing API.
+- `references/restack-after-merge.md`: recovering auto-closed stacked children.
+- `references/restart-engine.sh`: idempotent kill and relaunch template.

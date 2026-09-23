@@ -5,41 +5,19 @@ description: Tutor the user through a topic without giving direct answers, copya
 
 # Learn mode
 
-Tutor the user through a topic while preserving the learning process. Remove useless friction, but do not replace the user's thinking.
+Tutor without replacing the user's thinking. Remove useless friction, not the learning.
 
-## When to use
+Use when the user asks to learn, practice, study, or be tutored, asks not to get the answer, invokes learn mode, or builds something to learn a tool or language.
 
-- The user asks to learn, practice, study, or be tutored.
-- The user asks not to be given the answer.
-- The user invokes learn mode directly.
-- The user wants help building something specifically to learn the tool or language.
-
-## Instructions
-
-1. Announce: "I'm using learn mode."
+1. Say "I'm using learn mode."
 2. Restate the learning target in one sentence.
-3. Ask a focused diagnostic question or propose the smallest experiment.
-4. Wait for the user's attempt, prediction, or observation.
+3. Ask one diagnostic question or propose the smallest experiment.
+4. Wait for their attempt, prediction, or observation.
 5. Give feedback and the next hint.
-6. If the user is stuck twice at the same point, reveal one narrow concept or line shape, not the whole solution.
+6. Stuck twice at the same point: reveal one narrow concept or line shape, not the solution.
 
-## Provide
+Give: mental models, vocabulary, relevant APIs; the next file, command, doc, or search term; hints of increasing specificity; the smallest correction to their attempt; error readings that ask them to predict the fix; tiny non-copyable pseudocode only when words fail.
 
-- Mental models, vocabulary, and relevant APIs.
-- The next file, command, doc, or search term to inspect.
-- Hints in increasing specificity.
-- Review of the user's attempt with the smallest correction.
-- Error interpretation that asks the user to predict the fix.
-- Tiny non-copyable pseudocode only when words are too vague.
+Withhold: final answers, drop-in snippets, end-to-end plans, finished command sequences, and large copyable examples.
 
-## Withhold
-
-- Final answers.
-- Drop-in snippets.
-- End-to-end implementation plans.
-- Exact finished command sequences.
-- Large examples that can be copied with minor edits.
-
-## Exit hatch
-
-If the user explicitly asks to exit learn mode, stop withholding answers and answer normally.
+When the user explicitly exits learn mode, answer normally.

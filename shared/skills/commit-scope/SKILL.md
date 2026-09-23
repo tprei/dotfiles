@@ -5,20 +5,11 @@ description: Isolate and commit a safe logical change. Use when the user asks to
 
 # Commit scope
 
-Use this skill when the user asks to commit changes and the correct scope needs to be isolated deliberately.
+User guidance is the primary scope filter.
 
-Treat any extra user guidance as the primary scope filter.
+1. Inspect `git status --short`, the staged diff, and the unstaged diff.
+2. Stage only changes in scope; keep unrelated or risky changes out.
+3. If the scope is tangled with partial or ambiguous work, don't force a commit.
+4. Delegate to `git-commit-specialist` when available; otherwise commit with a concise why-focused message.
 
-## Workflow
-
-1. Inspect `git status --short`, staged diff, and unstaged diff.
-2. Commit only the changes that match the requested scope.
-3. Stage or unstage intentionally so unrelated or risky changes stay out.
-4. Do not force a commit if the requested scope is mixed with partial or ambiguous work.
-5. If a dedicated `git-commit-specialist` agent is available, delegate the commit workflow to it.
-6. Otherwise create the commit directly with a concise message focused on the why.
-
-## Output
-
-- If a safe commit was made, return the commit hash and a short summary.
-- If nothing should be committed yet, explain why and what must be separated first.
+Output: the commit hash and a one-line summary, or why nothing was committed and what must be separated first.

@@ -4,36 +4,16 @@ description: Quick reference for browsing and understanding nvim configuration, 
 type: skill
 ---
 
-# nvim-configuration
+# nvim configuration
 
-Quick reference skill for navigating your Neovim setup and answering questions about configuration, keybindings, plugins, and troubleshooting.
+Answer questions about the user's Neovim keybindings, plugins, settings, and troubleshooting. Read the live config; don't answer from memory.
 
-## Usage
+Config: `nvim/.config/nvim/` in the dotfiles repo, stowed to `~/.config/nvim/`. `lazy.nvim`, leader is Space, colorscheme gruvbox.
+- `init.lua`: entry point and core options
+- `lua/config/{lazy,keymaps}.lua`: plugin manager setup and global keymaps
+- `lua/plugins/*.lua`: one spec per plugin (blink, conform, lint, lsp, telescope, treesitter, nvim-tree, which-key, vim-tmux-navigator, and more)
+- `lua/ai_ask/`: local AI ask module
 
-Ask about:
-- **Keybindings**: What key combination does X do? How do I rebind something?
-- **Plugins**: What plugins are installed? How do I configure them?
-- **Configuration**: Where is setting X? How do I add a new plugin?
-- **Troubleshooting**: Why isn't X working? How do I debug this?
+Find mappings with `rg -n "keymap.set|keys = " nvim/.config/nvim`. Add a plugin as a new `lua/plugins/<name>.lua`.
 
-Examples:
-- "What does `<leader>ss` do in my config?"
-- "How do I add a new plugin?"
-- "What's the keybinding for goto definition?"
-- "Show me the keybindings for telescope"
-
-## Setup
-
-Your config is stored at `~/.config/nvim/` and uses **kickstart.nvim** as a starting point with custom plugins in `lua/custom/plugins/`.
-
-## Key Files
-
-- `init.lua` - Main configuration file (keybindings, plugins, settings)
-- `lua/custom/plugins/init.lua` - Custom plugins you've added
-- `lua/kickstart/plugins/` - Kickstart plugin configurations
-
-## Common Commands
-
-- `:e $MYVIMRC` or `:e ~/.config/nvim/init.lua` - Edit main config
-- `:so $MYVIMRC` - Reload config
-- `:checkhealth` - Check nvim health/dependencies
+Commands: `:Lazy` (plugin status), `:checkhealth`, `:e $MYVIMRC`, `:so $MYVIMRC`.

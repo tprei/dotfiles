@@ -5,4 +5,4 @@ condition: "GitHub has queued fresh CI runs[\\s\\S]*current status is pending"
 scope: "text"
 ---
 
-Do not yield while CI is queued, pending, or failing. Continue monitoring the checks, diagnose and fix failures, and rerun them until every required check is green. Stop only when all CI is green or there is genuinely no actionable work left; state the exact blocker if one remains.
+Don't yield while CI is queued, pending, or failing. Watch the checks, fix failures, and rerun until every required check is green. Stop only when CI is green or no actionable work remains, and name the exact blocker if one does.

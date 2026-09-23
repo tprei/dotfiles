@@ -5,21 +5,18 @@ condition: ["cloudflareaccess.com", "behind Cloudflare Access", "Access is block
 scope: "text"
 ---
 
-Stop -- you are treating `forgejo.yfrit.com` as unreachable and are about to build around Cloudflare Access. It is already configured, per route. The workaround is the mistake, not the fix.
+Stop. `forgejo.yfrit.com` is reachable and Cloudflare Access is already configured per route. Building around it is the mistake.
 
-What is true on this machine:
+- Git smart-HTTP routes (`info/refs`, `git-upload-pack`, `git-receive-pack`, with or without `.git`) and Git-LFS (`*/*.git/info/lfs`) are Cloudflare **Bypass** apps. `git`, `jj`, and `git-lfs` clone, fetch, and push with no flags, headers, or CF credentials. `~/.gitconfig` has no `extraheader` for this host on purpose.
+- On git routes, Forgejo token auth is the only gate. `ENABLE_BASIC_AUTHENTICATION=false`: OAuth2, personal access, and Actions tokens work; username and password don't. A credential helper supplies the token.
+- `/api/v1` sits behind the Yfrit Forgejo API app, which admits a CF service token via a `non_identity` policy. Nothing needs creating in the dashboard.
+- `fj` on PATH is a shim that injects the service-token headers. It's required for the API, not for git.
 
-- The git smart-HTTP routes (`info/refs`, `git-upload-pack`, `git-receive-pack`, in both the `.git`-suffixed and bare forms) and the Git-LFS routes (`*/*.git/info/lfs`) are Cloudflare **Bypass** applications. `git`, `jj` and `git-lfs` clone, fetch, pull and push with no flags, no manual headers, and no Cloudflare credential of any kind. `~/.gitconfig` no longer carries `extraheader` values for this host; they were removed because nothing read them.
-- Forgejo's own token auth is the only gate on those git routes, and `ENABLE_BASIC_AUTHENTICATION` is `false` instance-wide: they accept OAuth2 access tokens, personal access tokens and Actions task tokens, and reject username-and-password. A credential helper supplies the token.
-- `/api/v1` is still behind the Yfrit Forgejo API application, admitting a CF service token via a `non_identity` policy. Nothing needs creating in the Cloudflare dashboard.
-- `fj` on PATH is a shim that injects those service-token headers, which is why `fj` subcommands work against the instance directly. That shim is load-bearing for the API, not for git.
+Status codes:
+- `302` to `yfrit.cloudflareaccess.com` from bare `curl` on a browser route or `/api/v1` is correct for a request without CF headers. Don't mint tokens, add policies, start tunnels, or switch to SSH.
+- `401` on a git route is Forgejo asking for a token (`WWW-Authenticate: Basic realm="Gitea"`, no `cf-access-aud`). Missing repos return the same.
+- `307` on a git remote means the repo changed owner; git won't follow it. Repos live under `fairfruit`, so `mpp/...` or `matheusp/...` remotes are stale: `git remote set-url origin https://forgejo.yfrit.com/fairfruit/<repo>.git`.
 
-A `302` to `yfrit.cloudflareaccess.com` from a bare `curl` against a browser route or `/api/v1` is the correct answer to a request carrying no CF headers. It is not evidence that Access is shut, and it is not a reason to mint a token, add a policy, start a tunnel, or move to SSH.
+Keep both git Bypass apps. Don't widen bypass to `/api/v1` or other routes; that's the owner's call.
 
-A `401` on a git route is likewise not Access -- it is Forgejo asking for a token, identifiable by `WWW-Authenticate: Basic realm="Gitea"` and the absence of a `cf-access-aud` header. It is identical for a repository that does not exist.
-
-The two git Bypass applications are deliberate and load-bearing; do not convert them back. Equally, do not widen the bypass to `/api/v1` or any other route on your own initiative -- that is an explicit decision.
-
-A `307` on a git remote is a different thing, and also not Access: Forgejo returns it for a repository that changed owner, and git does not follow it for smart HTTP. Repos live under the `fairfruit` owner, so an older `mpp/...` or `matheusp/...` remote is stale -- repoint it with `git remote set-url origin https://forgejo.yfrit.com/fairfruit/<repo>.git`.
-
-Before concluding anything is broken, issue the request the way the tooling issues it: `git ls-remote https://forgejo.yfrit.com/<owner>/<repo>`, or `fj repo view`. If those fail, report that real error -- do not route around the front door.
+Test the way the tooling does: `git ls-remote https://forgejo.yfrit.com/<owner>/<repo>` or `fj repo view`. If those fail, report that error.

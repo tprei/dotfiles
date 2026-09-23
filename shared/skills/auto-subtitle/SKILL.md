@@ -5,92 +5,52 @@ description: Transcribe a video locally with Whisper and burn in TikTok/Reels-st
 
 # Auto subtitle
 
-Turn a raw talking-head video into a shipped vertical clip with word-by-word highlighted captions, using local Whisper and ffmpeg only.
-
-## When to use
-
-- The user asks to subtitle, caption, or auto-sub a video file.
-- The user wants CapCut-style animated captions without a paid editor.
-- The user asks to re-render captions after correcting the transcript.
-
-## Pipeline
-
-Four stages. Stage 2 is a conversation with the user, not an automated step.
+Turn a talking-head video into a vertical clip with word-by-word highlighted captions, using local Whisper and ffmpeg. Also handles re-rendering after transcript corrections.
 
 ```
 transcribe.py  ->  words.json + draft.txt
-     (human correction pass)  ->  script.txt
+(human correction pass)  ->  script.txt
 build_ass.py   ->  subs.ass
 burn.sh        ->  final .mp4
 ```
 
-`words.json` holds the word-level timings and never changes. `script.txt` holds the corrected words. `build_ass.py` aligns the two, so corrections keep real speech timing and can be re-run in seconds.
+`words.json` holds word timings and never changes. `script.txt` holds corrected words. `build_ass.py` aligns them, so corrections keep real timing and re-run in seconds.
 
-## Instructions
-
-1. **Probe the source.** `ffprobe` for duration, resolution, audio codec. Report them. Check for CUDA (`nvidia-smi`); absent means CPU int8, roughly 45 s of compute per minute of audio with the `medium` model on 4 cores.
-
-2. **Transcribe.**
+1. Probe: `ffprobe` for duration, resolution, and audio codec; report them. Check CUDA with `nvidia-smi`. Without it, CPU int8 with `medium` on 4 cores takes about 45 s per audio minute.
+2. Transcribe through the process supervisor, not a blocking shell (it takes minutes). Seed `--prompt` with known names; it improves proper nouns.
    ```
    uv run --with faster-whisper python scripts/transcribe.py VIDEO --out-dir WORKDIR \
      --prompt "proper nouns, product names, jargon likely in this video"
    ```
-   Run it through the process supervisor, not a blocking shell call — it takes minutes. Seed `--prompt` with names you already know; it measurably improves proper nouns.
-
-3. **Correction pass.** Read `draft.txt` and show the user the transcript. Ask for corrections in one round rather than drip-feeding. Then write `script.txt` with every fix applied. Rules for that file:
-   - It is plain prose, whitespace-separated. Word order must still match the audio; only substitute, never reorder.
-   - Join a hanzi term and its pinyin gloss with a non-breaking space so they stay one caption token: `猎人\u00a0(lièrén)`. Same for any unit that must never be split across cues.
-   - Use the script the user's audience reads — simplified vs traditional hanzi is a real preference; ask once, apply everywhere.
-   - Keep the user's own on-screen graphics in mind: sections where they already have burned-in text want no captions at all.
-
-4. **Build the ASS.**
+3. Correct: show `draft.txt` and collect all corrections in one round, then write `script.txt`.
+   - Whitespace-separated prose in audio order. Substitute words, never reorder.
+   - Join a hanzi term and its pinyin with a non-breaking space so they stay one token: `猎人\u00a0(lièrén)`. Same for any unit that must not split.
+   - Ask once whether the audience reads simplified or traditional hanzi; apply everywhere.
+   - Sections where the user already has burned-in graphics get no captions.
+4. Build the ASS. `--mute START-END` drops cues overlapping that window; use it over the user's own graphics. Defaults are the house style (see below).
    ```
    python scripts/build_ass.py --words WORKDIR/words.json --script script.txt --out subs.ass \
      --mute 103-107
    ```
-   `--mute START-END` drops every cue overlapping that window; use it wherever the user has their own graphics. Defaults produce the house style: 4 words per cue, 74 px Noto Sans CJK SC bold, white with a 6 px near-black outline, active word in `#FFD60A`, `MarginV 300`.
-
-5. **Check frames before the full encode.**
+5. Preview before the full encode (seconds, not minutes). Confirm captions clear the face and existing graphics, mute windows are blank, and the highlight lands on the spoken word.
    ```
    scripts/preview.sh VIDEO subs.ass /tmp/prev 12 49 105 173
    ```
-   Look at the PNGs. Confirm caption position clears the speaker's face and any existing graphics, that mute windows are actually blank, and that the highlight lands on the spoken word. A full render is minutes; a preview is seconds.
-
-6. **Burn in.**
+6. Burn. 4K to 1080×1920 at CRF 23 cuts size about 20× with no visible loss on a phone.
    ```
    scripts/burn.sh VIDEO subs.ass OUT.mp4 1920 23
    ```
-   Downscaling 4K to 1080×1920 at CRF 23 is what makes the file small enough to upload — expect roughly 20× reduction with no visible loss on a phone.
+7. Verify the output file (not the preview): sample frames across the timeline, including every mute window, and view them. Report size, resolution, and what each frame showed.
+8. Style and text changes rerun steps 4 to 7 only. Never re-transcribe; keep `words.json`.
 
-7. **Verify the render.** Sample frames from the *output* file (not the preview) across the timeline, including inside every mute window, and view them. Report file size, resolution, and what each sampled frame showed.
+House style: 4 words per cue; Noto Sans CJK SC Bold 74 px (Latin, pinyin, and hanzi in one font); white with 6 px near-black outline, no shadow; active word `#FFD60A`; `MarginV 300` (below the face, above platform UI); one Dialogue event per word instead of `\k`, so the line never re-wraps.
 
-8. **Iterate cheaply.** Style and text changes only need steps 4–7 — never re-transcribe. `words.json` is the expensive artifact; keep it.
+Traps:
+- `str.split()` splits on U+00A0. Tokenize with `re.split(r"[ \t\r\n]+", ...)`, as `build_ass.py` does. Don't "simplify" it.
+- Preview frames need `-copyts`; with bare `-ss` the subtitles filter restarts at zero and you review the wrong caption.
+- MP4 can't hold `pcm_s24le`; transcode audio to AAC.
+- Stacked text means overlapping cues from a hand-edited ASS; the builder clamps each event to the next cue's start.
+- Whisper mangles names, URLs, and foreign phrases. Never ship the raw transcript.
+- `subtitles=` paths need double escaping: a `:` must arrive as `\\:` or ffmpeg parses it as `original_size` and fails with an image-size error. The scripts handle it; hand-written commands must too.
 
-## Style defaults
-
-| Property | Value | Why |
-|----------|-------|-----|
-| Words per cue | 4 | Short bursts read faster than full sentences on a phone. |
-| Highlight | `#FFD60A` on white | One accent colour, high contrast against video of any brightness. |
-| Font | Noto Sans CJK SC Bold | Covers Latin, pinyin diacritics, and hanzi in one file, so no fallback seams. |
-| Outline | 6 px near-black, no shadow | Survives bright and dark backgrounds. |
-| `MarginV` | 300 | Below the face, above the platform's bottom UI. |
-| Highlight mechanism | one Dialogue event per word | Full control over the active word; simpler than `\k` and never re-wraps. |
-
-## Traps
-
-- **`str.split()` splits on U+00A0.** Tokenize the corrected script with `re.split(r"[ \t\r\n]+", ...)`, or hanzi and pinyin land in different cues. `build_ass.py` already does this; do not "simplify" it.
-- **Preview frames need `-copyts`.** With a bare `-ss`, the subtitles filter restarts its timeline at zero and you review the wrong caption.
-- **MP4 cannot hold `pcm_s24le`.** Transcode audio to AAC when muxing or the container write fails.
-- **Cue overlap looks like flicker.** Events must be clamped to the next cue's start; the builder does this, so any stacked text means the ASS was hand-edited.
-- **Whisper mangles domain terms.** Names, product URLs, and foreign-language phrases are wrong until a human fixes them. Never ship the raw transcript.
-- **`subtitles=` paths need double escaping.** The filter re-splits on colons after the filtergraph parser unescapes, so a path containing `:` must arrive as `\\:` or ffmpeg reads it as `original_size` and fails with an image-size error. The scripts handle this; hand-written ffmpeg commands must too.
-
-## Reference files
-
-| File | Contents |
-|------|----------|
-| `scripts/transcribe.py` | Audio extraction plus faster-whisper word-level transcription; writes `words.json` and `draft.txt`. |
-| `scripts/build_ass.py` | Aligns the corrected script to word timings and emits karaoke ASS. |
-| `scripts/burn.sh` | Downscale plus hardsub encode to a share-ready MP4. |
-| `scripts/preview.sh` | Single-frame previews at given timestamps for visual checks. |
+Scripts: `transcribe.py` (audio extraction and word-level transcription), `build_ass.py` (alignment and karaoke ASS), `burn.sh` (downscale and hardsub), `preview.sh` (frame previews at timestamps).
