@@ -1,4 +1,11 @@
 providers:
+  anthropic:
+    modelOverrides:
+      claude-opus-5-5:
+        thinking:
+          mode: anthropic-adaptive
+          efforts: [low, medium, high, xhigh]
+          supportsDisplay: true
   openai-codex:
     modelOverrides:
       gpt-6-astra:
