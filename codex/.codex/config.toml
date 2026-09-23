@@ -21,7 +21,7 @@ web_search = true
 hide_gpt5_1_migration_prompt = true
 
 [notice.model_migrations]
-"gpt-5.4" = "gpt-5.6-sol"
+"gpt-5.4" = "gpt-6-sol"
 
 # ---------------------------------------------------------------------------
 # Trusted projects

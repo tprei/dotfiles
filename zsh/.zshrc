@@ -127,7 +127,7 @@ link_shared_definitions() {
   local agents_source="$dotfiles_dir/shared/agents/pi-codex"
   local skills_source="$dotfiles_dir/shared/skills"
   local agent_name base agent_dir
-  local -a omp_agent_names=(adversary enemy explorer git-commit-specialist planner strategist surveyor technical-architect triage)
+  local -a omp_agent_names=(enemy explorer git-commit-specialist planner strategist surveyor technical-architect triage)
   local -a pi_agent_names=(enemy explorer git-commit-specialist planner technical-architect)
   local -a omp_bases=("$HOME/.omp/agent")
 
@@ -162,7 +162,7 @@ link_shared_definitions
 
 alias mini="ssh mbn@mini-1"
 alias nihao="omp --profile china"
-alias mix="omp --profile mix --plan-yolo --plan-yolo-into=anthropic/claude-opus-5:high"
+alias mix="omp --profile mix --plan-yolo --plan-yolo-into=anthropic/claude-opus-5-5:high"
 alias omp-claude="omp --profile claude"
 
 export NVM_DIR="$HOME/.nvm"

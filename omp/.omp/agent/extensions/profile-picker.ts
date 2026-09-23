@@ -19,10 +19,10 @@ interface Profile {
 }
 
 const PROFILES: Record<string, Profile> = {
-	cld: { name: "Claude (Anthropic)", plan: "anthropic/claude-opus-5:high", rest: "anthropic/claude-sonnet-5:high" },
+	cld: { name: "Claude (Anthropic)", plan: "anthropic/claude-opus-5-5:high", rest: "anthropic/claude-sonnet-5:high" },
 	glm: { name: "GLM (Z.AI)",        plan: "zai/glm-5.3:max",          rest: "zai/glm-5.3:max"            },
 	oc:  { name: "OpenCode",          plan: "opencode-go/glm-5.3:high", rest: "opencode-go/deepseek-v4-pro:high" },
-	gpt: { name: "Codex (OpenAI)",    plan: "openai-codex/gpt-5.6-sol:high", rest: "openai-codex/gpt-5.6-luna:medium" },
+	gpt: { name: "Codex (OpenAI)",    plan: "openai-codex/gpt-6-sol:high", rest: "openai-codex/gpt-6-luna:medium" },
 };
 
 /** One-line model summary — provider prefix stripped so it fits the picker column. */

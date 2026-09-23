@@ -9,8 +9,8 @@ theme:
   light: light
 setupVersion: 2
 modelRoles:
-  default: anthropic/claude-opus-5:medium
-  slow: anthropic/claude-opus-5:high
+  default: anthropic/claude-opus-5-5:low
+  slow: anthropic/claude-opus-5-5:high
   plan: openai-codex/gpt-6-astra:medium
   advisor: antigravity-cli/gemini-3.8-flash:high
   task: zai/glm-5.3-flash:max
@@ -36,9 +36,8 @@ task:
     explorer: zai/glm-5.3-flash:max
     librarian: zai/glm-5.3-flash:max
     scout: zai/glm-5.3-flash:max
-    reviewer: openai-codex/gpt-5.6-sol:high
-    adversary: antigravity-cli/gemini-3.8-flash:high
-    enemy: anthropic/claude-opus-5:high
+    reviewer: openai-codex/gpt-6-sol:high
+    enemy: anthropic/claude-opus-5-5:medium
     security-reviewer: zai/glm-5.3:max
     triage: zai/glm-5.3:max
     git-commit-specialist: antigravity-cli/gemini-3.8-flash:medium
@@ -57,19 +56,18 @@ retry:
   fallbackChains:
     default:
       - zai/glm-5.3-flash:max
-    anthropic/claude-opus-5:
-      - anthropic/claude-fable-5-1:high
+    anthropic/claude-opus-5-5:
       - zai/glm-5.3:max
     anthropic/claude-fable-5-1:
-      - anthropic/claude-opus-5:high
+      - anthropic/claude-opus-5-5:high
       - zai/glm-5.3:max
     openai-codex/gpt-6-astra:
-      - openai-codex/gpt-5.6-sol:high
+      - openai-codex/gpt-6-sol:high
       - zai/glm-5.3:max
-    openai-codex/gpt-5.6-sol:
-      - anthropic/claude-opus-5:high
+    openai-codex/gpt-6-sol:
+      - anthropic/claude-opus-5-5:medium
       - zai/glm-5.3:max
-    openai-codex/gpt-5.6-luna:
+    openai-codex/gpt-6-luna:
       - antigravity-cli/gemini-3.8-flash:high
       - openrouter/meta/muse-spark-1.3-contributor:max
       - zai/glm-5.3-flash:max

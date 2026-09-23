@@ -2,7 +2,7 @@
 name: explorer
 package: codex
 description: USE PROACTIVELY when users ask to understand, find, explore, or map out code flows, components, or functionality in a codebase. Read-only.
-model: gpt-5.6-sol
+model: gpt-6-sol
 thinking: medium
 tools: read, grep, find, ls, bash
 systemPromptMode: replace

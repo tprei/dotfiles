@@ -36,7 +36,6 @@ task:
     surveyor: zai/glm-5.3:max
     explorer: zai/glm-5.3-flash:max
     reviewer: zai/glm-5.3:max
-    adversary: opencode-go/kimi-k3:high
     enemy: opencode-go/kimi-k3:high
     security-reviewer: zai/glm-5.3:max
     triage: opencode-go/muse-spark-1.3-contributor:minimal

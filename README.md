@@ -22,7 +22,7 @@ just usage                # provider usage report
 
 - `zsh/.zshrc`: Oh My Zsh (`git`, `z`, autosuggestions, `fzf`), nvim as editor, nvm, brew, bun, pnpm, local secrets, Claude wrappers, clipboard helpers.
 - `tmux/.tmux.conf`: `C-a` prefix, `tmux-256color`, mouse, clipboard passthrough, extended keys, vi copy mode, `C-h/j/k/l` pane navigation, Meta bindings for windows, panes, resizing, and WSL helpers. `tmux/scripts/tmux-paste-image.sh` pastes a WSL clipboard image path.
-- `herdr/.config/herdr/config.toml`: herdr inside tmux panes on a `ctrl+b` prefix that mirrors tmux. `alt+n/p/w/x`, `alt+]`/`alt+}` copy mode, `alt+1..9` tabs, `alt+h/j/k/l` resize, and `ctrl+h/j/k/l` nav match tmux root bindings. `prefix -`/`prefix =` split like tmux `-h`/`-v` (herdr's vertical and horizontal names are reversed). `scripts/open-pane-dir.sh` backs `alt+e`. `@in_nested` and `@vim_navigator_check` include `herdr`, so Alt+Shift and navigator keys pass one level in.
+- `herdr/.config/herdr/config.toml`: herdr inside tmux panes on a `ctrl+b` prefix that mirrors tmux. `alt+n/p/w/x`, `alt+1..9` tabs, and `alt+h/j/k/l` resize match tmux root bindings. Copy mode is `alt+]`, `alt+}`, or `alt+{`; tmux forwards Alt+Shift+] and Alt+Shift+[ as `M-}`/`M-{` because herdr drops a forwarded `ESC ]` as an OSC start. Pane focus is `ctrl+alt+h/j/k/l` so plain `ctrl+h/j/k/l` reach the shell, nvim, and ssh inside herdr. `prefix -`/`prefix =` split like tmux `-h`/`-v` (herdr's vertical and horizontal names are reversed). `scripts/open-pane-dir.sh` backs `alt+e`. `@in_nested` and `@vim_navigator_check` include `herdr`, so Alt+Shift and navigator keys pass one level in.
 - `nvim/.config/nvim`: `lazy.nvim` with gruvbox, LSP, formatting, linting, Telescope, Treesitter, Blink, `nvim-tree`, render-markdown, lualine, persistence, and tmux navigation.
 - `ghostty/.config/ghostty/config`: Gruvbox Light, zsh integration, Option-as-Alt, copy-on-select, top quick terminal, `Ctrl-Shift-V` paste. `alacritty/.config/alacritty`: config plus gruvbox dark.
 
@@ -74,7 +74,7 @@ A model id missing from the catalog, provider extensions, and `models.yml` resol
 omp --model antigravity-cli/gemini-3.8-flash --thinking high -p "Reply with one word: pong"
 ```
 
-Role config uses the effort suffix (`antigravity-cli/gemini-3.8-flash:high`). Root and `mix` profiles use it for advisor and commit roles and the latency-tolerant `surveyor`, `adversary`, and `git-commit-specialist` agents, and as a fallback for GPT-5.6 Luna, GLM-5.3 Flash, and OpenCode Go. Interactive, planner, task, explorer, and latency-sensitive roles keep their primary providers. `china` is unchanged.
+Role config uses the effort suffix (`antigravity-cli/gemini-3.8-flash:high`). Root and `mix` profiles use it for advisor and commit roles and the latency-tolerant `surveyor` and `git-commit-specialist` agents, and as a fallback for GPT-6 Luna, GLM-5.3 Flash, and OpenCode Go. Interactive, planner, task, explorer, and latency-sensitive roles keep their primary providers. `china` is unchanged.
 
 Bridge behavior:
 - The `omp-provider` agent strips AGY's default prompt components and MCP tools. AGY never gets native-tool permissions: the bridge renders OMP's tool catalog in OMP's XML dialect, parses Gemini's XML calls into OMP `toolCall` blocks, and OMP executes and approves.

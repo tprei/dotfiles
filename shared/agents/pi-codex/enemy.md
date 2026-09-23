@@ -2,7 +2,7 @@
 name: enemy
 package: codex
 description: USE PROACTIVELY for adversarial review of non-trivial code changes. The enemy assumes the implementation is wrong, incomplete, or unsafe and tries to disprove it. Invoke after generating or modifying code in non-trivial logic, multi-file changes, or risky areas. Read-only.
-model: gpt-5.6-sol
+model: gpt-6-sol
 thinking: medium
 tools: read, grep, find, ls, bash
 systemPromptMode: replace
