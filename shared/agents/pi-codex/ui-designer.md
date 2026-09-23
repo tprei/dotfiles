@@ -3,7 +3,7 @@ name: ui-designer
 description: >-
   Devise frontend UI and write the actual component code: visual design,
   layout, interaction, styling, and the presentational components that render
-  it. Runs an expensive reasoning model (Claude Fable high, Opus max, GPT
+  it. Runs an expensive reasoning model (Claude Fable high, Opus 5.5 high, GPT
   Astra medium fallback) and BLOCKS the caller until it returns. Spawn ONE
   per design task — never batch it or spawn it in parallel with itself. Use
   it for anything that shapes what the user sees, including the JSX/CSS
@@ -13,7 +13,7 @@ blocking: true
 tools: read, grep, glob, lsp, write, edit, bash, web_search
 model:
   - "anthropic/claude-fable-5-1:high"
-  - "anthropic/claude-opus-5:max"
+  - "anthropic/claude-opus-5-5:high"
   - "openai-codex/gpt-6-astra:medium"
 ---
 
