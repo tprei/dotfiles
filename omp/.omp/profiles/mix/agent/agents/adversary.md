@@ -1,1 +1,0 @@
-../../../../agent/agents/adversary.md
