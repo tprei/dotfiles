@@ -1,11 +1,11 @@
 Upstream OMP release this customization builds on.
-Release: v18.2.0
-Upstream commit: 6f2c14b3e4cc065139789da893e4f86f3d72958c
-Tarball: https://codeload.github.com/can1357/oh-my-pi/tar.gz/6f2c14b3e4cc065139789da893e4f86f3d72958c
+Release: v18.2.11
+Upstream commit: 7ae76f8e4daca0c8f409f61bcd514260cd522365
+Tarball: https://codeload.github.com/can1357/oh-my-pi/tarball/7ae76f8e4daca0c8f409f61bcd514260cd522365
 
 Local history.
-Baseline commit message: Upstream OMP v18.2.0 baseline 6f2c14b
-Baseline SHA: 6f2c14b3e4cc065139789da893e4f86f3d72958c
+Baseline commit message: Upstream OMP v18.2.11 baseline 7ae76f8
+Baseline SHA: 7ae76f8e4daca0c8f409f61bcd514260cd522365
 Runtime commit message: Prevent main sessions from using disabled providers
 Patch file: 0001-Prevent-main-sessions-from-using-disabled-providers.patch
 Runtime commit message: Retry transient transport failures after committed text
@@ -14,5 +14,5 @@ Runtime commit message: Stop the legacy pi shim from resolving canonical specifi
 Patch file: 0003-Stop-the-legacy-pi-shim-from-resolving-canonical-specifiers.patch
 
 Live locations, kept out of this repo. Override the checkout with OMP_SRC.
-Source checkout: ~/src/oh-my-pi, branch main-driver-no-agy, baseline tagged omp-baseline
-Launchers: ~/.bun/bin/omp and ~/.local/bin/omp -> .../packages/coding-agent/scripts/omp
+Source checkout: ~/.worktrees/oh-my-pi-main-driver-no-agy, branch main-driver-no-agy, upstream remote can1357/oh-my-pi; update by fetch + rebase, then `just omp-runtime-export`
+Launchers: ~/.bun/bin/omp -> .../packages/coding-agent/scripts/omp

@@ -1,4 +1,4 @@
-From b0d7f33de6f0e82227c88d90ecbbbec38518f9f0 Mon Sep 17 00:00:00 2001
+From f405be44c4133aa0702cc6ec0a58d77b43b8c236 Mon Sep 17 00:00:00 2001
 From: tprei <37089330+tprei@users.noreply.github.com>
 Date: Wed, 16 Sep 2026 09:58:35 +0100
 Subject: [PATCH 2/3] Retry transient transport failures after committed text
@@ -14,10 +14,10 @@ allow replay when a transient transport error is the only failure.
  2 files changed, 67 insertions(+), 5 deletions(-)
 
 diff --git a/packages/coding-agent/src/session/turn-recovery.ts b/packages/coding-agent/src/session/turn-recovery.ts
-index 784f2fb..2f732ba 100644
+index b2e67c7659..e694cadec9 100644
 --- a/packages/coding-agent/src/session/turn-recovery.ts
 +++ b/packages/coding-agent/src/session/turn-recovery.ts
-@@ -1267,11 +1267,50 @@ export class TurnRecovery {
+@@ -1325,11 +1325,50 @@ export class TurnRecovery {
  				AIError.is(id, AIError.Flag.MalformedFunctionCall) ||
  				AIError.retriable(id)) &&
  			this.#unexecutedToolCallsReplaySafe(message);
@@ -70,10 +70,10 @@ index 784f2fb..2f732ba 100644
  	 * True when every emitted tool call provably never executed and no other
  	 * replay-unsafe output exists. The caller restricts this exception to
 diff --git a/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts b/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
-index e5f8a0c..69ca441 100644
+index ce66e9e43a..934aae67dc 100644
 --- a/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
 +++ b/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
-@@ -265,9 +265,18 @@ describe("TurnRecovery replay-unsafe output classification", () => {
+@@ -276,9 +276,18 @@ describe("TurnRecovery replay-unsafe output classification", () => {
  		expect(modelChanges).toEqual([`${fallback.provider}/${fallback.id}`]);
  	});
  
@@ -93,7 +93,7 @@ index e5f8a0c..69ca441 100644
  		expect(recovery.isRetryableError(message)).toBe(false);
  	});
  
-@@ -410,7 +419,7 @@ describe("TurnRecovery replay-unsafe output classification", () => {
+@@ -462,7 +471,7 @@ describe("TurnRecovery replay-unsafe output classification", () => {
  		expect(recovery.isRetryableError(message)).toBe(true);
  	});
  
@@ -102,7 +102,7 @@ index e5f8a0c..69ca441 100644
  		const recovery = new TurnRecovery(createHost(model, modelRegistry));
  		const message = makeMessage(
  			[
-@@ -419,6 +428,20 @@ describe("TurnRecovery replay-unsafe output classification", () => {
+@@ -471,6 +480,20 @@ describe("TurnRecovery replay-unsafe output classification", () => {
  			],
  			model,
  		);
@@ -123,7 +123,7 @@ index e5f8a0c..69ca441 100644
  		expect(recovery.isRetryableError(message)).toBe(false);
  	});
  
-@@ -789,10 +812,10 @@ describe("TurnRecovery replay-unsafe output classification", () => {
+@@ -841,10 +864,10 @@ describe("TurnRecovery replay-unsafe output classification", () => {
  				"Codex error event: peer closed connection without sending complete message body (incomplete chunked read) (code=api_error)",
  			],
  		])("%s recovery", (_label, errorMessage) => {

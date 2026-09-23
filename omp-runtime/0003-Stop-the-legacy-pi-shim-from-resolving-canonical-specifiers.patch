@@ -1,4 +1,4 @@
-From 7eecdd7cee67863fad97da551158295fe63079d0 Mon Sep 17 00:00:00 2001
+From e029c5cdab26952d1ff890ea1ed3adc2ff78656c Mon Sep 17 00:00:00 2001
 From: tprei <37089330+tprei@users.noreply.github.com>
 Date: Wed, 16 Sep 2026 14:47:45 +0100
 Subject: [PATCH 3/3] Stop the legacy pi shim from resolving canonical
@@ -12,10 +12,10 @@ Canonical @oh-my-pi/pi-* specifiers remap to themselves, so the shim's own Bun.r
  create mode 100644 packages/coding-agent/test/extensibility/legacy-pi-canonical-scope-resolve.test.ts
 
 diff --git a/packages/coding-agent/src/extensibility/plugins/legacy-pi-compat.ts b/packages/coding-agent/src/extensibility/plugins/legacy-pi-compat.ts
-index b65b015..4016585 100644
+index dbb98e1935..2c3a2db1f0 100644
 --- a/packages/coding-agent/src/extensibility/plugins/legacy-pi-compat.ts
 +++ b/packages/coding-agent/src/extensibility/plugins/legacy-pi-compat.ts
-@@ -2720,10 +2720,25 @@ function resolveLegacyPiSpecifier(args: { path: string; importer: string }): Leg
+@@ -2655,10 +2655,25 @@ function resolveLegacyPiSpecifier(args: { path: string; importer: string }): Leg
  		return undefined;
  	}
  
@@ -44,7 +44,7 @@ index b65b015..4016585 100644
  		// /$bunfs/root and aren't reachable by filesystem resolution. Prefer the
 diff --git a/packages/coding-agent/test/extensibility/legacy-pi-canonical-scope-resolve.test.ts b/packages/coding-agent/test/extensibility/legacy-pi-canonical-scope-resolve.test.ts
 new file mode 100644
-index 0000000..8a1bad8
+index 0000000000..8a1bad846d
 --- /dev/null
 +++ b/packages/coding-agent/test/extensibility/legacy-pi-canonical-scope-resolve.test.ts
 @@ -0,0 +1,52 @@

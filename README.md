@@ -134,10 +134,10 @@ readlink -f ~/.omp/profiles/mix/agent/extensions/antigravity-cli.ts
 `omp/` tracks configuration. `omp-runtime/` tracks the source patches this machine's `omp` binary is built from, because the OMP checkout itself lives outside the repository and has no fork to push to.
 
 - `PIN` — upstream release, baseline commit, tarball URL, and the ordered patch inventory.
-- `0001-*.patch`, `0002-*.patch` — `git format-patch` output for every commit above the baseline.
-- `just omp-rebuild` is the single entry point on any machine, fresh or not: it bootstraps `~/src/oh-my-pi` from the pinned tarball, applies the patches, builds, and relinks every launcher that already holds an `omp`.
+- `NNNN-*.patch` — `git format-patch` output for every commit above the baseline.
+- `just omp-rebuild` is the single entry point on any machine, fresh or not: it bootstraps the pinned tarball into the checkout (default `~/.worktrees/oh-my-pi-main-driver-no-agy`, override with `OMP_SRC`), applies the patches, builds, and relinks every launcher that already holds an `omp`.
 
-`0001` stops main sessions from selecting disabled providers. `0002` retries a transient transport failure (a dropped socket mid-answer) when the turn's only committed output is text, which upstream treats as replay-unsafe and drops.
+`0001` stops main sessions from selecting disabled providers. `0002` retries a transient transport failure (a dropped socket mid-answer) when the turn's only committed output is text, which upstream treats as replay-unsafe and drops. `0003` stops the legacy pi shim from resolving canonical `@oh-my-pi/*` specifiers itself: resolving a specifier that remaps to itself re-entered the handler until Bun aborted with `NameTooLong`, which killed `/login`.
 
 After committing in the source checkout, `just omp-runtime-export` refreshes the patch files and `just omp-rebuild` rebuilds the runtime. `just omp-runtime-check` is the drift gate: it fails when a patch file does not match the source commit (everything but the commit sha line, which a fresh bootstrap legitimately changes), when a patch is not listed in `PIN`, and when `PIN` names a file that no longer exists. Running it after an upstream bump catches a stale `PIN` before the next machine rebuild trusts it.
 

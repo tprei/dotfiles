@@ -1,7 +1,7 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 home := env_var("HOME")
-omp_src := env_var_or_default("OMP_SRC", home / "src/oh-my-pi")
+omp_src := env_var_or_default("OMP_SRC", home / ".worktrees/oh-my-pi-main-driver-no-agy")
 packages := "aerospace alacritty borders claude codex ghostty herdr karabiner nvim omp pi starship tmux tools vim zsh"
 
 _default:
@@ -77,11 +77,11 @@ omp-rebuild:
     set -euo pipefail
     cd "{{ justfile_directory() }}"
     src="{{ omp_src }}"
-    if [ -d "$src" ] && [ -n "$(ls -A "$src")" ] && [ ! -d "$src/.git" ]; then
+    if [ -d "$src" ] && [ -n "$(ls -A "$src")" ] && [ ! -e "$src/.git" ]; then
         echo "refusing to bootstrap into nonempty $src without a .git dir" >&2
         exit 1
     fi
-    if [ ! -d "$src/.git" ]; then
+    if [ ! -e "$src/.git" ]; then
         tarball=$(sed -n 's/^Tarball: //p' omp-runtime/PIN)
         message=$(sed -n 's/^Baseline commit message: //p' omp-runtime/PIN)
         mkdir -p "$src"
@@ -131,7 +131,7 @@ omp-runtime-check:
     #!/usr/bin/env bash
     set -euo pipefail
     cd "{{ justfile_directory() }}"
-    [ -d "{{ omp_src }}/.git" ] || { echo "no omp source at {{ omp_src }}; run: just omp-rebuild" >&2; exit 1; }
+    [ -e "{{ omp_src }}/.git" ] || { echo "no omp source at {{ omp_src }}; run: just omp-rebuild" >&2; exit 1; }
     git -C "{{ omp_src }}" rev-parse omp-baseline >/dev/null 2>&1 || {
         echo "no omp-baseline tag in {{ omp_src }}; run: just omp-rebuild" >&2
         exit 1
