@@ -26,4 +26,10 @@ Out of scope: anything a user sees. Component structure, markup, class names, st
 - Follow the repository's existing wiring patterns; a second convention beside an existing one is a bug.
 - Keep changes minimal and mechanical: no speculative abstractions, no renames beyond your task.
 - Tests cover the behavior you wired (data flow, handlers, routes) — never static styles or copy.
+- Data flow is your craft. No `useEffect` chains for derived state or data fetching when the repo has a query/cache layer; derive during render, fetch through the existing client. Kill N+1 patterns: batch or join instead of fetching per row.
+- Data should feel instant and live: reuse cache, update optimistically, and subscribe or revalidate so users never need a manual refresh.
+- Never lose user input: wire drafts, form state, and navigation guards so accidental back or reload does not drop progress.
+- Keep device APIs (camera, gallery, microphone, share, haptics) behind the repo's adapter so a native build can swap them; call them nowhere else.
+- Every handler you wire does something real. If a designed control has no real destination, report it instead of stubbing it.
+- Keep domain logic out of components: follow the repo's domain boundaries (DDD) and put rules in the domain layer, not in handlers.
 </rules>
