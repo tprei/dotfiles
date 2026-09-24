@@ -1,11 +1,11 @@
 Upstream OMP release this customization builds on.
-Release: v18.2.11
-Upstream commit: 7ae76f8e4daca0c8f409f61bcd514260cd522365
-Tarball: https://codeload.github.com/can1357/oh-my-pi/tarball/7ae76f8e4daca0c8f409f61bcd514260cd522365
+Release: v18.3.0
+Upstream commit: 62bc57be1b03ef0802a33cf7f5f530e534527531
+Tarball: https://codeload.github.com/can1357/oh-my-pi/tarball/62bc57be1b03ef0802a33cf7f5f530e534527531
 
 Local history.
-Baseline commit message: Upstream OMP v18.2.11 baseline 7ae76f8
-Baseline SHA: 7ae76f8e4daca0c8f409f61bcd514260cd522365
+Baseline commit message: Upstream OMP v18.3.0 baseline 62bc57b
+Baseline SHA: 62bc57be1b03ef0802a33cf7f5f530e534527531
 Runtime commit message: Prevent main sessions from using disabled providers
 Patch file: 0001-Prevent-main-sessions-from-using-disabled-providers.patch
 Runtime commit message: Retry transient transport failures after committed text

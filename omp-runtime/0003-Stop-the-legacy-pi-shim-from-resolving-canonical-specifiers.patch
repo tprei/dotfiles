@@ -1,4 +1,4 @@
-From e029c5cdab26952d1ff890ea1ed3adc2ff78656c Mon Sep 17 00:00:00 2001
+From 9170533b6428ed7de2b6ec034bbd7e0256170803 Mon Sep 17 00:00:00 2001
 From: tprei <37089330+tprei@users.noreply.github.com>
 Date: Wed, 16 Sep 2026 14:47:45 +0100
 Subject: [PATCH 3/3] Stop the legacy pi shim from resolving canonical

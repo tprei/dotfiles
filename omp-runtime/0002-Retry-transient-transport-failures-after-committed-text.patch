@@ -1,4 +1,4 @@
-From f405be44c4133aa0702cc6ec0a58d77b43b8c236 Mon Sep 17 00:00:00 2001
+From 62b471f4d096dc5ab52e3c706d9c2edda6946e40 Mon Sep 17 00:00:00 2001
 From: tprei <37089330+tprei@users.noreply.github.com>
 Date: Wed, 16 Sep 2026 09:58:35 +0100
 Subject: [PATCH 2/3] Retry transient transport failures after committed text
