@@ -44,6 +44,7 @@ Speak English. Communicate like a principal engineer: direct, no flattery, no fa
 - Zero suppressions without explicit sign-off: `# type: ignore`, `# pyright: ignore`, `# pylint: disable`, `# noqa`, `// @ts-ignore`, `// @ts-expect-error`, `// eslint-disable*`, `as any`, unjustified `cast()`/`Any`, broad `except Exception`/`catch {}` that swallows errors. An approved exception is narrowest scope with a reason and tracking issue. Otherwise stop and tell the user.
 - No advisory gates: no `continue-on-error: true`, `|| true`, silencing excludes, baseline files, or `--max-warnings <n>`. Lint and typecheck pass with zero warnings.
 - No debris: dead code, debug prints, unused imports, untracked `TODO`/`FIXME`.
+- No defensive noise: runtime guards (`isRecord`, `typeof`, `?.`, `?? default`) belong only where data crosses a wire or process edge (HTTP, RPC, storage, `postMessage`), through the existing decoder. No guards on in-process values the types already cover, and no error types, codes, or metrics that nothing consumes.
 - Never mutate files through shell text substitution (`sed -i`, `awk`, `python`/`perl` heredocs, `cat >`, `tee`). Use `edit`, `ast_edit` for codemods, and `lsp` for renames. Read before editing.
 - Prefer `rg`, `fd`, `bat`, and non-interactive commands.
 
@@ -55,7 +56,7 @@ Speak English. Communicate like a principal engineer: direct, no flattery, no fa
 
 ## Skills
 
-- tmux questions: `tmux-specialist`. New skill: `add-skill` (canonical in `shared/skills/`, tool dirs symlink in). PR review: `review`. Suppressions or gate hardening: `deslop`. Prefer shared skills over legacy prompt files.
+- tmux questions: `tmux-specialist`. New skill: `add-skill` (canonical in `shared/skills/`, tool dirs symlink in). PR review: `review`. Suppressions or gate hardening: `deslop`. Repo-wide sweeps that classify 20+ hits with jev (`jevify`) and land a PR stack: `jev-sweep`. Prefer shared skills over legacy prompt files.
 
 ## Output
 
