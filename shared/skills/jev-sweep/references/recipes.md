@@ -211,10 +211,12 @@ When the audit overturns high-confidence verdicts in one category, fix that cate
 
 ```python
 CATEGORY = "empty-catch"
-for k in [k for k, s in states.items() if s["category"] == CATEGORY]:
-    for table in (states, res, failed, overrides):
-        table.pop(k, None)
 fresh, status = build_states([CATEGORY])
+for k in [k for k, s in states.items() if s["category"] == CATEGORY]:
+    for table in (states, res, failed):
+        table.pop(k, None)
+    if k not in fresh:
+        overrides.pop(k, None)
 states.update(fresh)
 batch2 = judge_batch(fresh, QUESTIONS, intent=f"Re-judging {CATEGORY}")
 print(batch2.id, dict(status))
