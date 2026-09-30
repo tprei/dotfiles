@@ -32,14 +32,17 @@ goto = ["prefix+g", "alt+g", "alt+shift+w"]
 open_notification_target = ["prefix+o", "alt+o"]
 rename_workspace = ["prefix+shift+w", "alt+shift+r"]
 rename_tab = ["prefix+shift+t", "alt+r"]
-next_workspace = "alt+shift+n"
-previous_workspace = "alt+shift+p"
+next_workspace = ["alt+shift+n", "alt+shift+j"]
+previous_workspace = ["alt+shift+p", "alt+shift+k"]
+next_agent = "alt+j"
+previous_agent = "alt+k"
 new_workspace = ["prefix+shift+n", "alt+shift+c"]
 switch_workspace = "alt+shift+1..9"
 navigate_workspace_up = ["up", "k"]
 navigate_workspace_down = ["down", "j"]
 new_tab = ["prefix+c", "alt+c"]
 zoom = ["prefix+z", "alt+z"]
+toggle_sidebar = ["prefix+b", "alt+f"]
 settings = "prefix+shift+s"
 move_tab_previous = ["prefix+shift+left", "ctrl+shift+left"]
 move_tab_next = ["prefix+shift+right", "ctrl+shift+right"]
@@ -50,13 +53,16 @@ focus_pane_right = ["prefix+l", "ctrl+alt+l"]
 swap_pane_left = ["prefix+shift+h", "alt+left"]
 swap_pane_right = ["prefix+shift+l", "alt+right"]
 resize_pane_left = "alt+h"
-resize_pane_down = "alt+j"
-resize_pane_up = "alt+k"
 resize_pane_right = "alt+l"
 last_pane = "prefix+semicolon"
 
 [keys.indexed]
 tabs = "alt"
+
+[[keys.command]]
+key = "alt+shift+e"
+type = "shell"
+command = "~/.config/herdr/scripts/open-pane-dir.sh"
 
 [[keys.command]]
 key = "alt+shift+period"
