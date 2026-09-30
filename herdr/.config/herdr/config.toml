@@ -4,6 +4,10 @@ onboarding = false
 name = "one-dark"
 auto_switch = false
 
+[theme.custom]
+active_row_bg = "#2c313a"
+selection_bg = "#3d59a1"
+
 [terminal]
 default_shell = "/bin/zsh"
 shell_mode = "non_login"
