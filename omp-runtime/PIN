@@ -1,17 +1,13 @@
 Upstream OMP release this customization builds on.
-Release: v18.3.0
-Upstream commit: 62bc57be1b03ef0802a33cf7f5f530e534527531
-Tarball: https://codeload.github.com/can1357/oh-my-pi/tarball/62bc57be1b03ef0802a33cf7f5f530e534527531
+Release: v18.4.4
+Upstream commit: 8ac1309bd8adaddc891eeb389c545345073875be
+Tarball: https://codeload.github.com/can1357/oh-my-pi/tarball/8ac1309bd8adaddc891eeb389c545345073875be
 
 Local history.
-Baseline commit message: Upstream OMP v18.3.0 baseline 62bc57b
-Baseline SHA: 62bc57be1b03ef0802a33cf7f5f530e534527531
+Baseline commit message: Upstream OMP v18.4.4 baseline 8ac1309
+Baseline SHA: 8ac1309bd8adaddc891eeb389c545345073875be
 Runtime commit message: Prevent main sessions from using disabled providers
 Patch file: 0001-Prevent-main-sessions-from-using-disabled-providers.patch
-Runtime commit message: Retry transient transport failures after committed text
-Patch file: 0002-Retry-transient-transport-failures-after-committed-text.patch
-Runtime commit message: Stop the legacy pi shim from resolving canonical specifiers
-Patch file: 0003-Stop-the-legacy-pi-shim-from-resolving-canonical-specifiers.patch
 
 Live locations, kept out of this repo. Override the checkout with OMP_SRC.
 Source checkout: ~/.worktrees/oh-my-pi-main-driver-no-agy, branch main-driver-no-agy, upstream remote can1357/oh-my-pi; update by fetch + rebase, then `just omp-runtime-export`
