@@ -14,17 +14,22 @@ shell_mode = "non_login"
 
 [keys]
 prefix = "ctrl+a"
-split_vertical = ["prefix+v", "prefix+minus"]
-split_horizontal = "prefix+="
+split_vertical = ["prefix+v", "prefix+minus", "alt+minus"]
+split_horizontal = ["prefix+=", "alt+="]
+help = ["prefix+?", "alt+?", "alt+shift+/"]
 copy_mode = ["prefix+[", "alt+]", "alt+}", "alt+{"]
 next_tab = ["prefix+n", "alt+n"]
 previous_tab = ["prefix+p", "alt+p"]
-close_pane = ["prefix+x", "alt+x"]
+close_pane = "prefix+x"
+close_tab = ["prefix+shift+x", "alt+x"]
+close_workspace = ["prefix+shift+d", "alt+shift+x"]
+edit_scrollback = ["prefix+e", "alt+e"]
 reload_config = "prefix+r"
 resize_mode = "prefix+shift+r"
 detach = ["prefix+q", "prefix+d"]
 workspace_picker = ["prefix+w", "prefix+s", "alt+w"]
-goto = ["prefix+g", "alt+g"]
+goto = ["prefix+g", "alt+g", "alt+shift+w"]
+open_notification_target = ["prefix+o", "alt+o"]
 rename_workspace = ["prefix+shift+w", "alt+shift+r"]
 rename_tab = ["prefix+shift+t", "alt+r"]
 next_workspace = "alt+shift+n"
@@ -54,12 +59,13 @@ last_pane = "prefix+semicolon"
 tabs = "alt"
 
 [[keys.command]]
-key = "alt+e"
-type = "shell"
-command = "~/.config/herdr/scripts/open-pane-dir.sh"
+key = "alt+shift+period"
+type = "plugin_action"
+command = "persiyanov.reviewr.toggle"
+description = "toggle reviewr"
 
 [[keys.command]]
-key = "prefix+alt+r"
+key = "alt+>"
 type = "plugin_action"
 command = "persiyanov.reviewr.toggle"
 description = "toggle reviewr"
@@ -74,7 +80,10 @@ show_agent_labels_on_pane_borders = true
 status_indicators = "symbols"
 
 [ui.toast]
-delivery = "terminal"
+delivery = "herdr"
 
 [experimental]
 pane_history = false
+
+[ui.sound]
+enabled = false
