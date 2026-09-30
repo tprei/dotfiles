@@ -9,7 +9,7 @@ macos-titlebar-style = tabs
 
 clipboard-read = allow
 clipboard-write = allow
-copy-on-select = clipboard
+copy-on-select = false
 
 mouse-hide-while-typing = true
 window-save-state = always

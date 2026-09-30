@@ -81,6 +81,7 @@ description = "toggle reviewr"
 [ui]
 tab_bar_position = "bottom"
 prompt_new_tab_name = false
+copy_on_select = false
 prompt_new_workspace_name = true
 hide_tab_bar_when_single_tab = true
 window_title = "{workspace} · {tab}"
