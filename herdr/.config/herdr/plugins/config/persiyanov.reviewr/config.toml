@@ -1,0 +1,4 @@
+theme = "one-dark"
+editor = "nvim +{line} {file}"
+toggle_placement = "split"
+toggle_direction = "right"

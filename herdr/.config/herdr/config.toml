@@ -13,7 +13,7 @@ default_shell = "/bin/zsh"
 shell_mode = "non_login"
 
 [keys]
-prefix = "ctrl+b"
+prefix = "ctrl+a"
 split_vertical = ["prefix+v", "prefix+minus"]
 split_horizontal = "prefix+="
 copy_mode = ["prefix+[", "alt+]", "alt+}", "alt+{"]
@@ -25,7 +25,12 @@ resize_mode = "prefix+shift+r"
 detach = ["prefix+q", "prefix+d"]
 workspace_picker = ["prefix+w", "prefix+s", "alt+w"]
 goto = ["prefix+g", "alt+g"]
-rename_workspace = ["prefix+shift+w", "alt+r"]
+rename_workspace = ["prefix+shift+w", "alt+shift+r"]
+rename_tab = ["prefix+shift+t", "alt+r"]
+next_workspace = "alt+shift+n"
+previous_workspace = "alt+shift+p"
+new_workspace = ["prefix+shift+n", "alt+shift+c"]
+switch_workspace = "alt+shift+1..9"
 navigate_workspace_up = ["up", "k"]
 navigate_workspace_down = ["down", "j"]
 new_tab = ["prefix+c", "alt+c"]
@@ -52,6 +57,12 @@ tabs = "alt"
 key = "alt+e"
 type = "shell"
 command = "~/.config/herdr/scripts/open-pane-dir.sh"
+
+[[keys.command]]
+key = "prefix+alt+r"
+type = "plugin_action"
+command = "persiyanov.reviewr.toggle"
+description = "toggle reviewr"
 
 [ui]
 tab_bar_position = "bottom"
