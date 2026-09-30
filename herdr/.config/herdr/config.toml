@@ -1,12 +1,14 @@
 onboarding = false
 
 [theme]
-name = "one-dark"
+name = "gruvbox"
 auto_switch = false
 
 [theme.custom]
-active_row_bg = "#2c313a"
-selection_bg = "#3d59a1"
+sidebar_bg = "#1d2021"
+active_row_bg = "#3c3836"
+selection_bg = "#504945"
+accent = "#fe8019"
 
 [terminal]
 default_shell = "/bin/zsh"
@@ -85,7 +87,8 @@ copy_on_select = false
 prompt_new_workspace_name = true
 hide_tab_bar_when_single_tab = true
 window_title = "{workspace} · {tab}"
-tab_bar_right = [{ type = "zoom" }, { type = "hostname" }]
+tab_bar_right = [{ type = "zoom" }, { type = "hostname" }, { type = "datetime", format = "%H:%M" }]
+tab_bar_right_separator = " · "
 
 agent_panel_scope = "all"
 show_agent_labels_on_pane_borders = true
@@ -93,8 +96,14 @@ status_indicators = "symbols"
 
 [ui.sidebar.agents]
 rows = [
-  ["state_icon", "machine", "workspace", "tab"],
-  ["agent", "terminal_title_stripped"],
+  ["state_icon", { token = "machine", fg = "#83a598", rules = [{ equals = "Local", hide = true }] }, { token = "workspace", bold = true }, { token = "tab", dim = true }],
+  [{ token = "agent", fg = "#fabd2f" }, { token = "terminal_title_stripped", dim = true }],
+]
+
+[ui.sidebar.spaces]
+rows = [
+  ["state_icon", { token = "workspace", bold = true }],
+  [{ token = "branch", fg = "#8ec07c" }, "git_status"],
 ]
 
 [ui.toast]

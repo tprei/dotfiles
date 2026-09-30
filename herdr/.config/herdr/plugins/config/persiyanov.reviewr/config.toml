@@ -1,4 +1,4 @@
-theme = "one-dark"
+theme = "gruvbox"
 editor = "nvim +{line} {file}"
 toggle_placement = "split"
 toggle_direction = "right"
