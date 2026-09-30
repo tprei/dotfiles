@@ -37,6 +37,7 @@ previous_workspace = ["alt+shift+p", "alt+shift+k"]
 next_agent = "alt+j"
 previous_agent = "alt+k"
 new_workspace = ["prefix+shift+n", "alt+shift+c"]
+new_worktree = ["prefix+shift+g", "alt+shift+g"]
 switch_workspace = "alt+shift+1..9"
 navigate_workspace_up = ["up", "k"]
 navigate_workspace_down = ["down", "j"]
@@ -58,6 +59,7 @@ last_pane = "prefix+semicolon"
 
 [keys.indexed]
 tabs = "alt"
+agents = "ctrl+alt"
 
 [[keys.command]]
 key = "alt+shift+e"
@@ -79,11 +81,20 @@ description = "toggle reviewr"
 [ui]
 tab_bar_position = "bottom"
 prompt_new_tab_name = false
+prompt_new_workspace_name = true
+hide_tab_bar_when_single_tab = true
+window_title = "{workspace} · {tab}"
 tab_bar_right = [{ type = "zoom" }, { type = "hostname" }]
 
 agent_panel_scope = "all"
 show_agent_labels_on_pane_borders = true
 status_indicators = "symbols"
+
+[ui.sidebar.agents]
+rows = [
+  ["state_icon", "machine", "workspace", "tab"],
+  ["agent", "terminal_title_stripped"],
+]
 
 [ui.toast]
 delivery = "herdr"

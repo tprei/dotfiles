@@ -118,6 +118,13 @@ vim.api.nvim_create_autocmd('TextYankPost', {
 	end
 })
 
+vim.api.nvim_create_autocmd('BufReadPost', {
+	desc = 'Open herdr scrollback buffers at the last line',
+	group = 'dotfiles',
+	pattern = 'herdr-scrollback-*.txt',
+	command = 'normal! G',
+})
+
 -- Adds basic LSP actions
 vim.api.nvim_create_autocmd('LspAttach', {
 	-- reason we don't create on opening a buffer and instead use attach is that these functions
