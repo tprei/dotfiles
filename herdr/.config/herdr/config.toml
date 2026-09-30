@@ -69,6 +69,12 @@ type = "shell"
 command = "~/.config/herdr/scripts/open-pane-dir.sh"
 
 [[keys.command]]
+key = "prefix+ctrl+s"
+type = "shell"
+command = "~/.config/herdr/scripts/checkpoint.sh"
+description = "save session checkpoint"
+
+[[keys.command]]
 key = "alt+shift+period"
 type = "plugin_action"
 command = "persiyanov.reviewr.toggle"
@@ -87,7 +93,12 @@ copy_on_select = false
 prompt_new_workspace_name = true
 hide_tab_bar_when_single_tab = true
 window_title = "{workspace} · {tab}"
-tab_bar_right = [{ type = "zoom" }, { type = "hostname" }, { type = "datetime", format = "%H:%M" }]
+tab_bar_right = [
+  { type = "zoom" },
+  { type = "command", command = "~/.config/herdr/scripts/checkpoint-status.sh", interval_seconds = 1, timeout_seconds = 2 },
+  { type = "hostname" },
+  { type = "datetime", format = "%H:%M" },
+]
 tab_bar_right_separator = " · "
 
 agent_panel_scope = "all"
