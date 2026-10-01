@@ -58,6 +58,7 @@ swap_pane_right = ["prefix+shift+l", "alt+right"]
 resize_pane_left = "alt+h"
 resize_pane_right = "alt+l"
 last_pane = "prefix+semicolon"
+cycle_pane_next = ""
 
 [keys.indexed]
 tabs = "alt"
@@ -73,6 +74,14 @@ key = "prefix+ctrl+s"
 type = "shell"
 command = "~/.config/herdr/scripts/checkpoint.sh"
 description = "save session checkpoint"
+
+[[keys.command]]
+key = "prefix+tab"
+type = "popup"
+command = "python3 ~/.config/herdr/extrakto/extract.py"
+description = "extract text from pane output"
+width = "90%"
+height = "80%"
 
 [[keys.command]]
 key = "alt+shift+period"
