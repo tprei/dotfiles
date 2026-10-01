@@ -76,6 +76,30 @@ command = "~/.config/herdr/scripts/checkpoint.sh"
 description = "save session checkpoint"
 
 [[keys.command]]
+key = "ctrl+h"
+type = "shell"
+command = "python3 ~/.config/herdr/scripts/navigate.py left"
+description = "focus pane left, or send ctrl+h to vim, fzf, or ssh"
+
+[[keys.command]]
+key = "ctrl+j"
+type = "shell"
+command = "python3 ~/.config/herdr/scripts/navigate.py down"
+description = "focus pane down, or send ctrl+j to vim, fzf, or ssh"
+
+[[keys.command]]
+key = "ctrl+k"
+type = "shell"
+command = "python3 ~/.config/herdr/scripts/navigate.py up"
+description = "focus pane up, or send ctrl+k to vim, fzf, or ssh"
+
+[[keys.command]]
+key = "ctrl+l"
+type = "shell"
+command = "python3 ~/.config/herdr/scripts/navigate.py right"
+description = "focus pane right, or send ctrl+l to vim, fzf, or ssh"
+
+[[keys.command]]
 key = "prefix+tab"
 type = "popup"
 command = "python3 ~/.config/herdr/extrakto/extract.py"
