@@ -1,1 +1,100 @@
-/mnt/c/Users/srtp-/AppData/Roaming/alacritty/alacritty.toml
+[general]
+import = ["themes/gruvbox_dark.toml"]
+live_config_reload = true
+
+[window]
+padding = { x = 10, y = 10 }
+dynamic_padding = true
+
+[scrolling]
+history = 20000
+multiplier = 3
+
+[font]
+size = 18.0
+
+[font.normal]
+family = "UbuntuMono Nerd Font Mono"
+style = "Regular"
+
+[font.bold]
+family = "UbuntuMono Nerd Font Mono"
+style = "Bold"
+
+[font.italic]
+family = "UbuntuMono Nerd Font Mono"
+style = "Italic"
+
+[font.bold_italic]
+family = "UbuntuMono Nerd Font Mono"
+style = "Bold Italic"
+
+[keyboard]
+bindings = [
+  { key = "Enter", mods = "Shift", chars = "\u001b[13;2u" },
+  { key = "Enter", mods = "Alt", chars = "\u001b[13;3u" },
+  { key = "n", mods = "Alt", chars = "\u001b[110;3u" },
+  { key = "p", mods = "Alt", chars = "\u001b[112;3u" },
+  { key = "j", mods = "Alt", chars = "\u001b[106;3u" },
+  { key = "k", mods = "Alt", chars = "\u001b[107;3u" },
+  { key = "c", mods = "Alt", chars = "\u001b[99;3u" },
+  { key = "x", mods = "Alt", chars = "\u001b[120;3u" },
+  { key = "r", mods = "Alt", chars = "\u001b[114;3u" },
+  { key = "z", mods = "Alt", chars = "\u001b[122;3u" },
+  { key = "f", mods = "Alt", chars = "\u001b[102;3u" },
+  { key = "h", mods = "Alt", chars = "\u001b[104;3u" },
+  { key = "l", mods = "Alt", chars = "\u001b[108;3u" },
+  { key = "w", mods = "Alt", chars = "\u001b[119;3u" },
+  { key = "g", mods = "Alt", chars = "\u001b[103;3u" },
+  { key = "e", mods = "Alt", chars = "\u001b[101;3u" },
+  { key = "o", mods = "Alt", chars = "\u001b[111;3u" },
+  { key = "1", mods = "Alt", chars = "\u001b[49;3u" },
+  { key = "2", mods = "Alt", chars = "\u001b[50;3u" },
+  { key = "3", mods = "Alt", chars = "\u001b[51;3u" },
+  { key = "4", mods = "Alt", chars = "\u001b[52;3u" },
+  { key = "5", mods = "Alt", chars = "\u001b[53;3u" },
+  { key = "6", mods = "Alt", chars = "\u001b[54;3u" },
+  { key = "7", mods = "Alt", chars = "\u001b[55;3u" },
+  { key = "8", mods = "Alt", chars = "\u001b[56;3u" },
+  { key = "9", mods = "Alt", chars = "\u001b[57;3u" },
+  { key = "-", mods = "Alt", chars = "\u001b[45;3u" },
+  { key = "=", mods = "Alt", chars = "\u001b[61;3u" },
+  { key = "]", mods = "Alt", chars = "\u001b[93;3u" },
+  { key = "n", mods = "Alt|Shift", chars = "\u001b[110;4u" },
+  { key = "p", mods = "Alt|Shift", chars = "\u001b[112;4u" },
+  { key = "j", mods = "Alt|Shift", chars = "\u001b[106;4u" },
+  { key = "k", mods = "Alt|Shift", chars = "\u001b[107;4u" },
+  { key = "c", mods = "Alt|Shift", chars = "\u001b[99;4u" },
+  { key = "r", mods = "Alt|Shift", chars = "\u001b[114;4u" },
+  { key = "x", mods = "Alt|Shift", chars = "\u001b[120;4u" },
+  { key = "w", mods = "Alt|Shift", chars = "\u001b[119;4u" },
+  { key = "g", mods = "Alt|Shift", chars = "\u001b[103;4u" },
+  { key = "e", mods = "Alt|Shift", chars = "\u001b[101;4u" },
+  { key = "!", mods = "Alt|Shift", chars = "\u001b[49;4u" },
+  { key = "@", mods = "Alt|Shift", chars = "\u001b[50;4u" },
+  { key = "#", mods = "Alt|Shift", chars = "\u001b[51;4u" },
+  { key = "$", mods = "Alt|Shift", chars = "\u001b[52;4u" },
+  { key = "%", mods = "Alt|Shift", chars = "\u001b[53;4u" },
+  { key = "^", mods = "Alt|Shift", chars = "\u001b[54;4u" },
+  { key = "&", mods = "Alt|Shift", chars = "\u001b[55;4u" },
+  { key = "*", mods = "Alt|Shift", chars = "\u001b[56;4u" },
+  { key = "(", mods = "Alt|Shift", chars = "\u001b[57;4u" },
+  { key = "{", mods = "Alt|Shift", chars = "\u001b[91;4u" },
+  { key = "}", mods = "Alt|Shift", chars = "\u001b[93;4u" },
+  { key = "?", mods = "Alt|Shift", chars = "\u001b[47;4u" },
+  { key = ">", mods = "Alt|Shift", chars = "\u001b[46;4u" },
+]
+
+[cursor]
+unfocused_hollow = true
+style = { shape = "Block", blinking = "Off" }
+
+[mouse]
+hide_when_typing = true
+
+[selection]
+save_to_clipboard = true
+
+[terminal]
+shell = { program = "wsl.exe", args = ["~"] }
+osc52 = "OnlyCopy"
