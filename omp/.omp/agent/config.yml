@@ -1,8 +1,6 @@
 mainAgent:
   disabledProviders:
     - antigravity-cli
-providers:
-  {}
 disabledProviders:
   - google-antigravity
 symbolPreset: nerd
@@ -57,7 +55,8 @@ retry:
     default:
       - zai/glm-5.3-flash:max
     anthropic/claude-opus-5-5:
-      - zai/glm-5.3:max
+      - openai-codex/gpt-6.1-sol:high
+      - openai-codex/gpt-6-astra:low
     anthropic/claude-fable-5-1:
       - anthropic/claude-opus-5-5:medium
       - zai/glm-5.3:max
@@ -81,6 +80,7 @@ retry:
     opencode-go/*:
       - antigravity-cli/gemini-3.8-flash:high
       - zai/glm-5.3-flash:max
+  maxRetries: 20
 hideThinkingBlock: true
 composer:
   shape: box
