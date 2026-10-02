@@ -4,8 +4,8 @@ Upstream commit: 8ac1309bd8adaddc891eeb389c545345073875be
 Tarball: https://codeload.github.com/can1357/oh-my-pi/tar.gz/8ac1309bd8adaddc891eeb389c545345073875be
 
 Local history.
-Baseline commit message: Upstream OMP v18.4.4 baseline 8ac1309
-Baseline SHA: 8ac1309bd8adaddc891eeb389c545345073875be
+Baseline commit message: Upstream OMP v18.4.12 baseline 7318a70
+Baseline SHA: 7318a70cf4ed04133366884d2723f72d9d490a15
 Runtime commit message: Prevent main sessions from using disabled providers
 Patch file: 0001-Prevent-main-sessions-from-using-disabled-providers.patch
 
