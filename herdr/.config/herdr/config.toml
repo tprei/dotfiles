@@ -19,9 +19,9 @@ prefix = "ctrl+a"
 split_vertical = ["prefix+v", "prefix+minus", "alt+minus"]
 split_horizontal = ["prefix+=", "alt+="]
 help = ["prefix+?", "alt+?", "alt+shift+/"]
-copy_mode = ["prefix+[", "alt+]", "alt+}", "alt+{"]
-next_tab = ["prefix+n", "alt+n"]
-previous_tab = ["prefix+p", "alt+p"]
+copy_mode = ["prefix+[", "alt+]", "alt+}", "alt+{", "alt+shift+[", "alt+shift+]"]
+next_tab = ["prefix+n", "alt+n", "alt+j"]
+previous_tab = ["prefix+p", "alt+p", "alt+k"]
 close_pane = "prefix+x"
 close_tab = ["prefix+shift+x", "alt+x"]
 close_workspace = ["prefix+shift+d", "alt+shift+x"]
@@ -29,15 +29,13 @@ edit_scrollback = ["prefix+e", "alt+e"]
 reload_config = "prefix+r"
 resize_mode = "prefix+shift+r"
 detach = ["prefix+q", "prefix+d"]
-workspace_picker = ["prefix+w", "prefix+s", "alt+w"]
-goto = ["prefix+g", "alt+g", "alt+shift+w"]
+workspace_picker = ["prefix+w", "prefix+s", "alt+shift+w"]
+goto = ["prefix+g", "alt+g", "alt+w"]
 open_notification_target = ["prefix+o", "alt+o"]
 rename_workspace = ["prefix+shift+w", "alt+shift+r"]
 rename_tab = ["prefix+shift+t", "prefix+comma", "alt+r"]
 next_workspace = ["alt+shift+n", "alt+shift+j"]
 previous_workspace = ["alt+shift+p", "alt+shift+k"]
-next_agent = "alt+j"
-previous_agent = "alt+k"
 new_workspace = ["prefix+shift+n", "alt+shift+c"]
 new_worktree = ["prefix+shift+g", "alt+shift+g"]
 switch_workspace = "alt+shift+1..9"
@@ -59,10 +57,8 @@ resize_pane_left = "alt+h"
 resize_pane_right = "alt+l"
 last_pane = "prefix+semicolon"
 cycle_pane_next = ""
-
-[keys.indexed]
-tabs = "alt"
-agents = "ctrl+alt"
+switch_tab = "alt+1..9"
+focus_agent = "ctrl+alt+1..9"
 
 [[keys.command]]
 key = "alt+shift+e"
