@@ -31,6 +31,22 @@ stow pkg="":
 unstow pkg:
     cd "{{ justfile_directory() }}" && stow -D -v -t ~ "{{ pkg }}"
 
+# Merge tern/keys.json into Tern's settings.json. Tern rewrites that file whole on every preference change, so it can't be stowed.
+tern-keys:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "$(uname -s)" in
+        Darwin) dir="$HOME/Library/Application Support/Tern" ;;
+        *) dir="${XDG_CONFIG_HOME:-$HOME/.config}/tern" ;;
+    esac
+    dir="${TERN_CONFIG_DIR:-$dir}"
+    settings="$dir/settings.json"
+    mkdir -p "$dir"
+    [[ -f "$settings" ]] || echo '{}' > "$settings"
+    jq -s '.[0] + .[1]' "$settings" "{{ justfile_directory() }}/tern/keys.json" > "$settings.keys-tmp"
+    mv "$settings.keys-tmp" "$settings"
+    echo "merged tern/keys.json into $settings; run Reload settings in Tern"
+
 # Prove the omp package is linked into $HOME and not shadowed by real files.
 omp-verify:
     #!/usr/bin/env bash
