@@ -42,9 +42,9 @@
 
     "alt+c": "new_tab",
     "alt+n": "next_tab",
-    "alt+j": "next_tab",
+    "alt+j": "plugin.nav.next_session",
     "alt+p": "previous_tab",
-    "alt+k": "previous_tab",
+    "alt+k": "plugin.nav.previous_session",
     "alt+x": "close_tab",
     "alt+r": "rename_tab",
     "alt+digit_1": "goto_tab:1",
