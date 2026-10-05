@@ -31,8 +31,8 @@ stow pkg="":
 unstow pkg:
     cd "{{ justfile_directory() }}" && stow -D -v -t ~ "{{ pkg }}"
 
-# Merge tern/keys.json into Tern's settings.json. Tern rewrites that file whole on every preference change, so it can't be stowed.
-tern-keys:
+# Merge tern/keys.json into Tern's settings.json, after linking the nav plugin its binds call. Tern rewrites settings.json whole on every preference change, so it can't be stowed.
+tern-keys: tern-plugin
     #!/usr/bin/env bash
     set -euo pipefail
     case "$(uname -s)" in
@@ -46,6 +46,10 @@ tern-keys:
     jq -s '.[0] + .[1]' "$settings" "{{ justfile_directory() }}/tern/keys.json" > "$settings.keys-tmp"
     mv "$settings.keys-tmp" "$settings"
     echo "merged tern/keys.json into $settings; run Reload settings in Tern"
+
+# Link the nav plugin (tern/nav) into Tern's plugins folder on the machine that shows the window.
+tern-plugin:
+    tern plugin link "{{ justfile_directory() }}/tern/nav"
 
 # Prove the omp package is linked into $HOME and not shadowed by real files.
 omp-verify:

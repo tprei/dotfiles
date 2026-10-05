@@ -38,6 +38,7 @@
     "ctrl+a>shift+/": "palette",
     "ctrl+a>shift+s": "preferences",
     "ctrl+a>r": "reload_config",
+    "ctrl+a>ctrl+l": "text:\\x0c",
 
     "alt+c": "new_tab",
     "alt+n": "next_tab",
@@ -76,6 +77,33 @@
     "alt+shift+c": "new_session",
     "alt+shift+r": "rename_session",
     "alt+shift+x": "close_session",
-    "alt+shift+w": "switch_session"
+    "alt+shift+w": "switch_session",
+
+    "ctrl+h": "plugin.nav.left",
+    "ctrl+j": "plugin.nav.down",
+    "ctrl+k": "plugin.nav.up",
+    "ctrl+l": "plugin.nav.right",
+    "alt+shift+n": "plugin.nav.next_session",
+    "alt+shift+j": "plugin.nav.next_session",
+    "alt+shift+p": "plugin.nav.previous_session",
+    "alt+shift+k": "plugin.nav.previous_session",
+    "alt+shift+digit_1": "plugin.nav.session_1",
+    "alt+shift+digit_2": "plugin.nav.session_2",
+    "alt+shift+digit_3": "plugin.nav.session_3",
+    "alt+shift+digit_4": "plugin.nav.session_4",
+    "alt+shift+digit_5": "plugin.nav.session_5",
+    "alt+shift+digit_6": "plugin.nav.session_6",
+    "alt+shift+digit_7": "plugin.nav.session_7",
+    "alt+shift+digit_8": "plugin.nav.session_8",
+    "alt+shift+digit_9": "plugin.nav.session_9",
+    "ctrl+alt+digit_1": "plugin.nav.agent_1",
+    "ctrl+alt+digit_2": "plugin.nav.agent_2",
+    "ctrl+alt+digit_3": "plugin.nav.agent_3",
+    "ctrl+alt+digit_4": "plugin.nav.agent_4",
+    "ctrl+alt+digit_5": "plugin.nav.agent_5",
+    "ctrl+alt+digit_6": "plugin.nav.agent_6",
+    "ctrl+alt+digit_7": "plugin.nav.agent_7",
+    "ctrl+alt+digit_8": "plugin.nav.agent_8",
+    "ctrl+alt+digit_9": "plugin.nav.agent_9"
   }
 }
