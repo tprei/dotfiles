@@ -1,0 +1,6 @@
+schema = 1
+id = "nav"
+name = "Nav"
+version = "0.1.0"
+description = "herdr-style pane, session and agent navigation."
+window = "window.luau"
