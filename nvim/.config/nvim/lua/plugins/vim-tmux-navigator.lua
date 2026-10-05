@@ -50,7 +50,14 @@ end
 
 local function tern(args)
 	local result = vim.system(vim.list_extend({ "tern" }, args), { text = true }):wait(1000)
-	assert(result.code == 0, ("tern %s exited %d: %s"):format(args[1], result.code, result.stderr))
+	assert(
+		result ~= nil and not (result.code == 124 and result.signal == 9),
+		("tern %s timed out after 1s"):format(args[1])
+	)
+	assert(
+		result.code == 0 and result.signal == 0,
+		("tern %s exited %d (signal %d): %s"):format(args[1], result.code, result.signal, result.stderr)
+	)
 	return result.stdout
 end
 
