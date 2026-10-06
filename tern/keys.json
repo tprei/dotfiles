@@ -73,6 +73,13 @@
     "alt+g": "mission_control",
     "alt+w": "mission_control",
     "alt+o": "inbox",
+    "alt+d": "new_git_block",
+    "alt+shift+d": "surface_diffs",
+    "alt+f": "files",
+    "alt+shift+f": "reveal_cwd",
+    "alt+t": "new_task_manager_block",
+    "alt+u": "pip",
+    "alt+/": "find",
     "alt+shift+/": "palette",
     "alt+shift+c": "new_session",
     "alt+shift+r": "rename_session",
@@ -104,6 +111,13 @@
     "ctrl+alt+digit_6": "plugin.nav.agent_6",
     "ctrl+alt+digit_7": "plugin.nav.agent_7",
     "ctrl+alt+digit_8": "plugin.nav.agent_8",
-    "ctrl+alt+digit_9": "plugin.nav.agent_9"
+    "ctrl+alt+digit_9": "plugin.nav.agent_9",
+
+    "ctrl+shift+up": "previous_prompt",
+    "ctrl+shift+down": "next_prompt",
+    "ctrl+shift+h": "git.previous_file",
+    "ctrl+shift+j": "git.next_hunk",
+    "ctrl+shift+k": "git.previous_hunk",
+    "ctrl+shift+l": "git.next_file"
   }
 }
