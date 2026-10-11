@@ -9,6 +9,13 @@ local CONTROL_BYTES: { [Dir]: string } = {
 	right = "\x0c",
 }
 
+local PICKER_ACTIONS: { [Dir]: string } = {
+	left = "text:\27[D",
+	down = "text:\27[B",
+	up = "text:\27[A",
+	right = "text:\27[C",
+}
+
 local KEY_OWNERS: { [string]: boolean } = {
 	view = true,
 	fzf = true,
@@ -28,6 +35,10 @@ end
 
 local function navigate(cx: WindowCx, dir: Dir)
 	local pane = cx.session:pane("@focused")
+	if pane ~= nil and pane.block == "extrakto.picker" then
+		cx:action(PICKER_ACTIONS[dir])
+		return
+	end
 	if pane ~= nil and owns_navigation_keys(pane) then
 		cx:run(pane.pane, CONTROL_BYTES[dir])
 		return
@@ -48,12 +59,12 @@ end
 
 local DIRS: { Dir } = { "left", "down", "up", "right" }
 
-for _, dir in DIRS do
+for index, dir in DIRS do
 	tern.command({
 		id = dir,
 		title = "Focus pane " .. dir .. ", or pass the key to vim",
 		run = function(cx)
-			navigate(cx, dir)
+			navigate(cx, DIRS[index])
 		end,
 	})
 end
