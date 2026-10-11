@@ -47,12 +47,9 @@ tern-keys: tern-plugin
     mv "$settings.keys-tmp" "$settings"
     echo "merged tern/keys.json into $settings; run Reload settings in Tern"
 
-# Link the Tern plugins (tern/nav, tern/extrakto) and put extrakto's picker on PATH as tern-extrakto. Run it on every machine whose panes you use, remote hosts included: the picker runs where the pane runs.
 tern-plugin:
     tern plugin link "{{ justfile_directory() }}/tern/nav"
     tern plugin link "{{ justfile_directory() }}/tern/extrakto"
-    mkdir -p "$HOME/.local/bin"
-    ln -sfn "{{ justfile_directory() }}/tern/extrakto/extract.py" "$HOME/.local/bin/tern-extrakto"
 
 # Prove the omp package is linked into $HOME and not shadowed by real files.
 omp-verify:
