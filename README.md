@@ -105,6 +105,10 @@ readlink -f ~/.omp/profiles/mix/agent/extensions/antigravity-cli.ts
 
 `just omp-rebuild` works on any machine: it bootstraps the pinned tarball into `~/.worktrees/oh-my-pi-main-driver-no-agy` (or `OMP_SRC`), applies patches, builds, and relinks every launcher holding an `omp`. After committing in the checkout, run `just omp-runtime-export` then `just omp-rebuild`. `just omp-runtime-check` fails when a patch differs from its source commit (ignoring the sha line), is missing from `PIN`, or `PIN` names a missing file. Run it after upstream bumps.
 
+## Private workspaces
+
+`private/<name>/` holds Git-ignored private workspaces, each a local directory or symlink that may carry its own private version control; `just private <name>` execs the workspace's `bin/launch`. The local source stays readable to agents, but this repo's Git never tracks anything under `private/`. The ignore isn't encryption or provider privacy.
+
 ## Tools
 
 `tools/.local/bin/claude-usage-check` reports Claude Code OAuth usage (5-hour and 7-day windows) and can post to Telegram. It refreshes tokens through `~/.claude/.credentials.json`; a dead refresh token sends a Telegram warning to run `claude auth login`. `tools/.config/systemd/user/claude-usage-report.{service,timer}` runs it with `--telegram` every 5 minutes (first run 1 minute after boot), editing one pinned message in place; the `message_id` lives in `~/.config/claude-usage/state.json` (0600, untracked) and a deleted message is re-sent and re-pinned. Needs `loginctl enable-linger $USER`.

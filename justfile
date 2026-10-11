@@ -185,3 +185,10 @@ usage:
 # Claude Code OAuth window utilization.
 usage-claude:
     tools/.local/bin/claude-usage-check
+
+[positional-arguments]
+private name:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [[ "$1" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "usage: just private <name> (letters, digits, underscore, hyphen)" >&2; exit 64; }
+    exec "{{ justfile_directory() }}/private/$1/bin/launch"
