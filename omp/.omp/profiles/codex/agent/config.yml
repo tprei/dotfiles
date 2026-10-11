@@ -1,0 +1,53 @@
+symbolPreset: nerd
+theme:
+  dark: titanium
+  light: light
+setupVersion: 2
+modelRoles:
+  default: openai-codex/gpt-6.1-sol:medium
+  task: openai-codex/gpt-6-luna:max
+  slow: openai-codex/gpt-6.1-sol:xhigh
+  plan: openai-codex/gpt-6.1-sol:xhigh
+  advisor: openai-codex/gpt-6-astra:medium
+  commit: openai-codex/gpt-6-luna:max
+  smol: openai-codex/gpt-6-luna:max
+  tiny: openai-codex/gpt-6-luna:max
+defaultThinkingLevel: auto
+task:
+  eager: always
+  disabledAgents:
+    - designer
+    - librarian
+    - plan
+    - scout
+    - sonic
+  agentModelOverrides:
+    task: openai-codex/gpt-6-luna:max
+    explorer: openai-codex/gpt-6.1-sol:xhigh
+    planner: openai-codex/gpt-6.1-sol:xhigh
+    technical-architect: openai-codex/gpt-6.1-sol:xhigh
+    reviewer: openai-codex/gpt-6-sol:max
+    enemy: openai-codex/gpt-6-sol:max
+    adversary: openai-codex/gpt-6-sol:max
+    surveyor: openai-codex/gpt-6-sol:xhigh
+    strategist: openai-codex/gpt-6-sol:xhigh
+    triage: openai-codex/gpt-6-luna:max
+    git-commit-specialist: openai-codex/gpt-6-luna:max
+dev:
+  autoqaConsent: granted
+retry:
+  modelFallback: true
+  fallbackChains:
+    openai-codex/gpt-6.1-sol:
+      - openai-codex/gpt-6-sol:xhigh
+      - openai-codex/gpt-6-luna:max
+    openai-codex/gpt-6-sol:
+      - openai-codex/gpt-6.1-sol:xhigh
+      - openai-codex/gpt-6-luna:max
+    openai-codex/gpt-6-luna:
+      - openai-codex/gpt-6-sol:medium
+    openai-codex/gpt-6-astra:
+      - openai-codex/gpt-6.1-sol:xhigh
+  maxDelayMs: 0
+composer:
+  shape: band

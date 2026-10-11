@@ -164,6 +164,7 @@ alias mini="ssh mbn@mini-1"
 alias nihao="omp --profile china"
 alias mix="omp --profile mix --plan-yolo --plan-yolo-into=anthropic/claude-opus-5-5:high"
 alias omp-claude="omp --profile claude"
+alias omp-codex="omp --profile codex"
 
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
