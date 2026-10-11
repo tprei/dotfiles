@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
-"""Tern port of the extrakto tmux plugin.
 
-Launched by the extrakto window plugin as `tern-extrakto` in a zoomed split under the focused pane.
-"""
-
-import base64
 import json
 import os
-import shlex
-import shutil
+import sqlite3
 import subprocess
 import sys
+import time
 from typing import Optional
+from urllib.parse import quote
 
 sys.dont_write_bytecode = True
 
@@ -20,19 +16,13 @@ sys.path.insert(0, ROOT)
 
 from extrakto import Extrakto, get_lines
 
-HELP_PATH = os.path.join(ROOT, "HELP.md")
-
 FULL_LINES = 2000
-NO_MATCH = "NO MATCH - use a different filter"
-NEXT_FILTER = {"word": "all", "all": "line", "line": "word"}
-BOLD = "\033[1m"
-YELLOW = "\033[0;33m"
-OFF = "\033[0m"
-FZF_ERROR = 2
+PREVIEW_LINES = 8
+USAGE = "usage: extract.py capture <pane> <db>\n       extract.py search <db> <filter> <scope> <origin> <query>"
 
 
-def run_tern(socket: str, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["tern", *args], check=True, capture_output=True, text=True, timeout=20, env={**os.environ, "TERN_DAEMON_SOCKET": socket})
+def run_tern(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["tern", *args], check=True, capture_output=True, text=True, timeout=20)
 
 
 def find_tab(ls: dict, me: int) -> dict:
@@ -66,115 +56,171 @@ def text_blocks(tab: dict, me: int) -> list[int]:
     return [block["id"] for block in tab["blocks"] if block["id"] != me and block["program"] != ""]
 
 
-def next_grab(grab: str, single_pane: bool) -> str:
-    if grab == "recent":
-        return "full" if single_pane else "window recent"
-    if grab == "window recent":
-        return "full"
-    if grab == "full":
-        return "recent" if single_pane else "window full"
-    return "recent"
+def pane_lines(pane: int) -> list[str]:
+    text = run_tern("capture", str(pane), "--surfaces", "--scrollback").stdout
+    lines = text.removesuffix("\n").split("\n")
+    return lines[-FULL_LINES:]
 
 
-def capture(socket: str, origin: int, blocks: list[int], grab: str) -> str:
-    pane_ids = []
-    if grab.startswith("window"):
-        pane_ids = [pane_id for pane_id in blocks if pane_id != origin]
-    pane_ids.append(origin)
-    texts = []
-    for pane_id in pane_ids:
-        args = ["capture", str(pane_id), "--surfaces"]
-        if grab in ("recent", "window recent"):
-            texts.append(run_tern(socket, *args).stdout)
-        else:
-            args.append("--scrollback")
-            text = run_tern(socket, *args).stdout
-            texts.append("\n".join(text.removesuffix("\n").split("\n")[-FULL_LINES:]))
-    return "\n".join(texts)
+def line_candidates(lines: list[str]) -> list[tuple[str, str, int]]:
+    word = Extrakto(alt=False, prefix_name=False)
+    alt = Extrakto(alt=True, prefix_name=False)
+    word_enabled = "word" in set(word.keys())
+    enabled_alt = set(alt.keys())
+    alt_names = [name for name in alt.all() if name in enabled_alt]
+    results: list[tuple[str, str, int]] = []
+    for index in range(len(lines) - 1, -1, -1):
+        line = lines[index]
+        if word_enabled:
+            for text in word["word"].filter(line):
+                results.append(("word", text, index))
+        for name in alt_names:
+            for text in alt[name].filter(line):
+                results.append((name, text, index))
+        for text in get_lines(line):
+            results.append(("line", text, index))
+    return results
 
 
-def candidates(filter_name: str, text: str) -> list[str]:
-    if filter_name == "all":
-        extrakto = Extrakto(alt=True, prefix_name=True)
-        results: list[str] = []
-        for name in extrakto.all():
-            results += extrakto[name].filter(text)
-    elif filter_name == "line":
-        results = get_lines(text)
-    else:
-        extrakto = Extrakto(alt=False, prefix_name=False)
-        results = extrakto[filter_name].filter(text)
-    if not results:
-        results = [NO_MATCH]
-    results.reverse()
-    return list(dict.fromkeys(results))
+def capture(ls: dict, me: int, lines_by_pane: dict[int, list[str]], db_path: str) -> dict:
+    tab = find_tab(ls, me)
+    origin = find_origin(tab["splits"], me)
+    blocks = {block["id"]: block for block in tab["blocks"]}
+    order = text_blocks(tab, me)
+    pane_order = [origin] + [pane for pane in reversed(order) if pane != origin]
 
+    candidates_rows = []
+    seen = set()
+    cand_ord = 0
+    for pane in pane_order:
+        block = blocks[pane]
+        lines = lines_by_pane[pane]
+        screen_start = len(lines) - block["rows"]
+        count = 0
+        for kind, text, index in line_candidates(lines):
+            key = (pane, kind, text)
+            if key in seen:
+                continue
+            seen.add(key)
+            cand_id = f"{pane}:{count}"
+            screen = 1 if index >= screen_start else 0
+            candidates_rows.append((cand_ord, cand_id, text, kind, pane, screen, index + 1))
+            count += 1
+            cand_ord += 1
 
-def selection_items(filter_name: str, selection: list[str]) -> list[str]:
-    if filter_name != "all":
-        return list(selection)
-    items = []
-    for entry in selection:
-        parts = entry.split(": ", 1)
-        items.append(parts[1] if len(parts) == 2 else entry)
-    return items
-
-
-def joined(filter_name: str, items: list[str]) -> str:
-    separator = "\n" if filter_name in ("all", "line") else " "
-    return separator.join(items)
-
-
-def header(filter_name: str, grab: str) -> str:
-    parts = [
-        f"{BOLD}tab{OFF}=insert",
-        f"{BOLD}enter{OFF}=copy",
-        f"{BOLD}ctrl-e{OFF}=edit",
-        f"{BOLD}ctrl-f{OFF}=filter [{YELLOW}{BOLD}{filter_name}{OFF}]",
-        f"{BOLD}ctrl-g{OFF}=grab [{YELLOW}{BOLD}{grab}{OFF}]",
-        f"{BOLD}ctrl-l{OFF}=help",
+    panes_meta = [
+        {
+            "id": pane,
+            "title": blocks[pane]["title"],
+            "program": blocks[pane]["program"],
+            "origin": pane == origin,
+            "lines": lines_by_pane[pane][-PREVIEW_LINES:],
+        }
+        for pane in order
     ]
-    return ", ".join(parts).replace("ctrl-", "^")
 
-
-def run_fzf(query: str, header_text: str, data: str) -> tuple[str, str, list[str]]:
-    env = {k: v for k, v in os.environ.items() if k not in ("FZF_DEFAULT_OPTS", "FZF_DEFAULT_OPTS_FILE")}
-    command = [
-        "fzf",
-        "--multi",
-        "--print-query",
-        f"--query={query}",
-        f"--header={header_text}",
-        "--expect=ctrl-c,ctrl-g,esc",
-        "--expect=tab,enter,ctrl-f,ctrl-e,ctrl-g,ctrl-l",
-        "--tiebreak=index",
-        "--layout=default",
-        "--no-info",
+    panes_rows = [
+        (
+            pane,
+            ord_idx,
+            blocks[pane]["title"],
+            blocks[pane]["program"],
+            1 if pane == origin else 0,
+            blocks[pane]["rows"],
+        )
+        for ord_idx, pane in enumerate(pane_order)
     ]
-    result = subprocess.run(command, input=data + "\n", stdout=subprocess.PIPE, text=True, env=env)
-    if result.returncode == FZF_ERROR:
-        raise subprocess.CalledProcessError(result.returncode, command)
-    lines = result.stdout.split("\n")[:-1]
-    query_out, key, *selection = lines
-    return query_out, key, selection
 
+    lines_rows = []
+    for pane in pane_order:
+        for idx, text in enumerate(lines_by_pane[pane], 1):
+            lines_rows.append((pane, idx, text))
 
-def copy_text(text: str) -> None:
-    with open("/dev/tty", "w") as tty:
-        tty.write("\033]52;c;" + base64.b64encode(text.encode()).decode() + "\a")
+    created_ms = int(time.time() * 1000)
+    meta_rows = [
+        ("origin", str(origin)),
+        ("pane_count", str(len(panes_meta))),
+        ("candidate_count", str(len(candidates_rows))),
+        ("created_ms", str(created_ms)),
+    ]
 
+    uri = "file:%s?mode=rw" % quote(os.path.abspath(db_path), safe="/")
+    conn = sqlite3.connect(uri, uri=True, isolation_level=None)
+    try:
+        conn.execute("PRAGMA journal_mode = OFF")
+        conn.execute("PRAGMA synchronous = OFF")
+        conn.execute("BEGIN TRANSACTION")
+        conn.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        conn.execute(
+            "CREATE TABLE panes (id INTEGER PRIMARY KEY, ord INTEGER NOT NULL, title TEXT NOT NULL, "
+            "program TEXT NOT NULL, origin INTEGER NOT NULL, rows INTEGER NOT NULL)"
+        )
+        conn.execute(
+            "CREATE TABLE lines (pane INTEGER NOT NULL REFERENCES panes(id), no INTEGER NOT NULL, "
+            "text TEXT NOT NULL, PRIMARY KEY(pane,no)) WITHOUT ROWID"
+        )
+        conn.execute(
+            "CREATE TABLE candidates (ord INTEGER PRIMARY KEY, id TEXT NOT NULL, text TEXT NOT NULL, "
+            "kind TEXT NOT NULL, pane INTEGER NOT NULL REFERENCES panes(id), screen INTEGER NOT NULL, "
+            "line INTEGER NOT NULL)"
+        )
+        conn.execute("CREATE UNIQUE INDEX candidates_dedupe ON candidates(pane,kind,text)")
+        conn.execute("CREATE INDEX candidates_kind_text_ord ON candidates(kind,text,ord)")
+        conn.execute(
+            "CREATE TABLE eligible (scope TEXT NOT NULL, ord INTEGER NOT NULL REFERENCES candidates(ord), "
+            "PRIMARY KEY(scope,ord)) WITHOUT ROWID"
+        )
+        conn.execute(
+            "CREATE TABLE totals (filter TEXT NOT NULL, scope TEXT NOT NULL, total INTEGER NOT NULL, "
+            "PRIMARY KEY(filter,scope)) WITHOUT ROWID"
+        )
 
-def insert_text(socket: str, origin: int, text: str) -> None:
-    run_tern(socket, "send", str(origin), "paste", text)
+        conn.executemany("INSERT INTO meta (key, value) VALUES (?, ?)", meta_rows)
+        conn.executemany(
+            "INSERT INTO panes (id, ord, title, program, origin, rows) VALUES (?, ?, ?, ?, ?, ?)",
+            panes_rows,
+        )
+        conn.executemany("INSERT INTO lines (pane, no, text) VALUES (?, ?, ?)", lines_rows)
+        conn.executemany(
+            "INSERT INTO candidates (ord, id, text, kind, pane, screen, line) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            candidates_rows,
+        )
 
+        conn.execute(
+            "INSERT INTO eligible (scope, ord) SELECT 'tab', MIN(ord) FROM candidates GROUP BY kind, text"
+        )
+        conn.execute(
+            "INSERT INTO eligible (scope, ord) SELECT 'pane', MIN(ord) FROM candidates WHERE pane = ? GROUP BY kind, text",
+            (origin,),
+        )
+        conn.execute(
+            "INSERT INTO eligible (scope, ord) SELECT 'screen', MIN(ord) FROM candidates WHERE pane = ? AND screen = 1 GROUP BY kind, text",
+            (origin,),
+        )
 
-def edit_selection(socket: str, origin: int, items: list[str]) -> None:
-    command = '"${EDITOR:-vi}" -- ' + " ".join(shlex.quote(item) for item in items)
-    run_tern(socket, "run", str(origin), command)
+        conn.execute(
+            """INSERT INTO totals (filter, scope, total) VALUES
+('word', 'tab', (SELECT COUNT(*) FROM eligible e JOIN candidates c ON e.ord = c.ord WHERE e.scope = 'tab' AND c.kind = 'word')),
+('word', 'pane', (SELECT COUNT(*) FROM eligible e JOIN candidates c ON e.ord = c.ord WHERE e.scope = 'pane' AND c.kind = 'word')),
+('word', 'screen', (SELECT COUNT(*) FROM eligible e JOIN candidates c ON e.ord = c.ord WHERE e.scope = 'screen' AND c.kind = 'word')),
+('all', 'tab', (SELECT COUNT(*) FROM eligible e JOIN candidates c ON e.ord = c.ord WHERE e.scope = 'tab' AND c.kind NOT IN ('word', 'line'))),
+('all', 'pane', (SELECT COUNT(*) FROM eligible e JOIN candidates c ON e.ord = c.ord WHERE e.scope = 'pane' AND c.kind NOT IN ('word', 'line'))),
+('all', 'screen', (SELECT COUNT(*) FROM eligible e JOIN candidates c ON e.ord = c.ord WHERE e.scope = 'screen' AND c.kind NOT IN ('word', 'line'))),
+('line', 'tab', (SELECT COUNT(*) FROM eligible e JOIN candidates c ON e.ord = c.ord WHERE e.scope = 'tab' AND c.kind = 'line')),
+('line', 'pane', (SELECT COUNT(*) FROM eligible e JOIN candidates c ON e.ord = c.ord WHERE e.scope = 'pane' AND c.kind = 'line')),
+('line', 'screen', (SELECT COUNT(*) FROM eligible e JOIN candidates c ON e.ord = c.ord WHERE e.scope = 'screen' AND c.kind = 'line'))"""
+        )
 
+        conn.execute("COMMIT")
+    finally:
+        conn.close()
 
-def show_help() -> None:
-    subprocess.run(["less", "-+EF", HELP_PATH])
+    return {
+        "origin": origin,
+        "db": db_path,
+        "panes": panes_meta,
+        "candidates": len(candidates_rows),
+    }
 
 
 def fail(message: str) -> int:
@@ -183,64 +229,49 @@ def fail(message: str) -> int:
 
 
 def process_failure(e: subprocess.CalledProcessError) -> int:
-    if e.stderr:
-        return fail(f"{e}: {e.stderr.strip()}")
-    return fail(str(e))
+    stderr = e.stderr.strip() if e.stderr else ""
+    return fail(f"{e.cmd[0]} exited {e.returncode}: {stderr}")
 
 
-def main() -> int:
-    pane = os.environ.get("TERN_PANE", "")
-    socket = os.environ.get("TERN_PANE_SOCKET", "")
-    if not pane:
-        return fail("TERN_PANE is not set")
-    if not socket:
-        return fail("TERN_PANE_SOCKET is not set")
-    if not shutil.which("fzf"):
-        return fail("fzf is not installed")
+def timeout_failure(e: subprocess.TimeoutExpired) -> int:
+    cmd = " ".join(e.cmd)
+    return fail("%s timed out after %ds" % (cmd, e.timeout))
 
-    me = int(pane)
+
+def main(argv: list[str]) -> int:
+    if not argv:
+        print(USAGE, file=sys.stderr)
+        return 2
+    cmd = argv[0]
+    if cmd == "search":
+        import search
+        return search.main(argv[1:])
+    if cmd != "capture" or len(argv) != 3:
+        print(USAGE, file=sys.stderr)
+        return 2
     try:
-        ls = json.loads(run_tern(socket, "ls", "--json").stdout)
+        me = int(argv[1])
+    except ValueError:
+        print(USAGE, file=sys.stderr)
+        return 2
+    db_path = argv[2]
+    try:
+        ls = json.loads(run_tern("ls", "--json").stdout)
         tab = find_tab(ls, me)
-        origin = find_origin(tab["splits"], me)
-        blocks = text_blocks(tab, me)
+        find_origin(tab["splits"], me)
+        lines_by_pane = {pane: pane_lines(pane) for pane in text_blocks(tab, me)}
+        result = capture(ls, me, lines_by_pane, db_path)
+        print(json.dumps(result, ensure_ascii=False))
+        return 0
     except LookupError as e:
         return fail(str(e))
     except subprocess.CalledProcessError as e:
         return process_failure(e)
-
-    single_pane = blocks == [origin]
-    filter_name = "word"
-    grab = "window full"
-    query = ""
-
-    try:
-        while True:
-            text = capture(socket, origin, blocks, grab)
-            entries = candidates(filter_name, text)
-            query, key, selection = run_fzf(query, header(filter_name, grab), "\n".join(entries))
-            items = selection_items(filter_name, selection)
-
-            if key in ("ctrl-c", "esc"):
-                return 0
-            if key == "tab":
-                insert_text(socket, origin, joined(filter_name, items))
-                return 0
-            if key == "enter":
-                copy_text(joined(filter_name, items))
-                return 0
-            if key == "ctrl-e":
-                edit_selection(socket, origin, items)
-                return 0
-            if key == "ctrl-f":
-                filter_name = NEXT_FILTER[filter_name]
-            elif key == "ctrl-g":
-                grab = next_grab(grab, single_pane)
-            elif key == "ctrl-l":
-                show_help()
-    except subprocess.CalledProcessError as e:
-        return process_failure(e)
+    except subprocess.TimeoutExpired as e:
+        return timeout_failure(e)
+    except (json.JSONDecodeError, OSError, sqlite3.Error, TypeError) as e:
+        return fail(str(e))
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

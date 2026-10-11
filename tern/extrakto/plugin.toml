@@ -3,4 +3,11 @@ id = "extrakto"
 name = "Extrakto"
 version = "0.1.0"
 description = "extrakto-style fuzzy picker over every pane in the current tab."
+host = "host.luau"
 window = "window.luau"
+styles = ["extrakto.css"]
+
+[[blocks]]
+id = "picker"
+title = "Extract"
+palette = false
