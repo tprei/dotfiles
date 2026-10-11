@@ -1,0 +1,6 @@
+schema = 1
+id = "extrakto"
+name = "Extrakto"
+version = "0.1.0"
+description = "extrakto-style fuzzy picker over every pane in the current tab."
+window = "window.luau"

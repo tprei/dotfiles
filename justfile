@@ -31,7 +31,7 @@ stow pkg="":
 unstow pkg:
     cd "{{ justfile_directory() }}" && stow -D -v -t ~ "{{ pkg }}"
 
-# Merge tern/keys.json into Tern's settings.json, after linking the nav plugin its binds call. Tern rewrites settings.json whole on every preference change, so it can't be stowed.
+# Merge tern/keys.json into Tern's settings.json, after linking the plugins its binds call. Tern rewrites settings.json whole on every preference change, so it can't be stowed.
 tern-keys: tern-plugin
     #!/usr/bin/env bash
     set -euo pipefail
@@ -47,9 +47,12 @@ tern-keys: tern-plugin
     mv "$settings.keys-tmp" "$settings"
     echo "merged tern/keys.json into $settings; run Reload settings in Tern"
 
-# Link the nav plugin (tern/nav) into Tern's plugins folder on the machine that shows the window.
+# Link the Tern plugins (tern/nav, tern/extrakto) and put extrakto's picker on PATH as tern-extrakto. Run it on every machine whose panes you use, remote hosts included: the picker runs where the pane runs.
 tern-plugin:
     tern plugin link "{{ justfile_directory() }}/tern/nav"
+    tern plugin link "{{ justfile_directory() }}/tern/extrakto"
+    mkdir -p "$HOME/.local/bin"
+    ln -sfn "{{ justfile_directory() }}/tern/extrakto/extract.py" "$HOME/.local/bin/tern-extrakto"
 
 # Prove the omp package is linked into $HOME and not shadowed by real files.
 omp-verify:

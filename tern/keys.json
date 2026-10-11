@@ -28,6 +28,7 @@
     "ctrl+a>shift+h": "move_pane:left",
     "ctrl+a>shift+l": "move_pane:right",
     "ctrl+a>e": "open_scrollback",
+    "ctrl+a>tab": "plugin.extrakto.open",
     "ctrl+a>g": "mission_control",
     "ctrl+a>o": "inbox",
     "ctrl+a>w": "switch_session",
