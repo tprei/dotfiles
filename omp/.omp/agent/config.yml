@@ -11,7 +11,7 @@ setupVersion: 2
 modelRoles:
   default: zai/glm-5.3:max
   slow: anthropic/claude-opus-5-5:high
-  plan: openai-codex/gpt-6.1-sol:medium
+  plan: openai-codex/gpt-6.1-sol:xhigh
   advisor: antigravity-cli/gemini-3.8-flash:high
   task: zai/glm-5.3-flash:max
   vision: zai/glm-5.3:max
@@ -31,8 +31,8 @@ task:
     - scout
     - sonic
   agentModelOverrides:
-    planner: openai-codex/gpt-6.1-sol:medium
-    technical-architect: openai-codex/gpt-6.1-sol:medium
+    planner: openai-codex/gpt-6.1-sol:xhigh
+    technical-architect: openai-codex/gpt-6.1-sol:xhigh
     strategist: zai/glm-5.3:max
     surveyor: antigravity-cli/gemini-3.8-flash:high
     explorer: zai/glm-5.3-flash:max
@@ -43,7 +43,7 @@ task:
     git-commit-specialist: antigravity-cli/gemini-3.8-flash:medium
     task: zai/glm-5.3-flash:max
     ui-implementer: zai/glm-5.3-flash:max
-    ui-designer: openai-codex/gpt-6.1-sol:medium
+    ui-designer: openai-codex/gpt-6.1-sol:xhigh
   enableLsp: true
 dev:
   autoqaConsent: granted
@@ -55,11 +55,11 @@ retry:
     default:
       - zai/glm-5.3-flash:max
     anthropic/claude-opus-5-5:
-      - openai-codex/gpt-6.1-sol:high
+      - openai-codex/gpt-6.1-sol:xhigh
       - openai-codex/gpt-6-astra:low
     anthropic/claude-fable-5-1:
       - anthropic/claude-opus-5-5:medium
-      - openai-codex/gpt-6.1-sol:medium
+      - openai-codex/gpt-6.1-sol:xhigh
       - zai/glm-5.3:max
     openai-codex/gpt-6.1-sol:
       - anthropic/claude-opus-5-5:high

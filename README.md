@@ -64,7 +64,7 @@ Layout:
 - `omp/.omp/agent/config.yml`: root profile (model roles, thinking level, subagent overrides, retry fallback chains).
 - `omp/.omp/agent/{rules,extensions}/`: global rules and TypeScript extensions.
 - `omp/.omp/agent/models.yml`: model definitions merged over the bundled catalog; each profile symlinks it. Narrows GPT-6 Astra (OpenAI Codex, OpenRouter) to `low` and `medium`.
-- `omp/.omp/profiles/{mix,claude,china}/agent/`: per-profile `config.yml`, `agents/`, and optional `rules/`, `APPEND_SYSTEM.md`, `WATCHDOG.md`.
+- `omp/.omp/profiles/{mix,claude,codex,china}/agent/`: per-profile `config.yml`, `agents/`, and optional `rules/`, `APPEND_SYSTEM.md`, `WATCHDOG.md`. `codex` pins every role, agent override, and fallback chain to OpenAI Codex GPT-6/6.1 only.
 - `omp/.gemini/config/agents/omp-provider/agent.md`: isolated AGY transport agent.
 
 `just omp-verify` fails when `~/.omp/agent/config.yml` resolves outside the repo. `just omp-config-check` fails when a `zai/glm-5.3` or `zai/glm-5.3-flash` selector uses a level other than `max`, or a `shared/agents/*/*.md` pinned to `model: zai/glm-5.3` declares anything but `thinking: max`. Level-less keys under `retry.fallbackChains` name a failing route and stay level-less.
