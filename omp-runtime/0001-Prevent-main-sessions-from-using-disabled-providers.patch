@@ -1,4 +1,4 @@
-From 0f4616320dd17152e578ff29c1c964b8d5568738 Mon Sep 17 00:00:00 2001
+From 387247482652137cc4bb771d45dc34fca780e081 Mon Sep 17 00:00:00 2001
 From: tprei <37089330+tprei@users.noreply.github.com>
 Date: Mon, 14 Sep 2026 22:09:29 +0100
 Subject: [PATCH] Prevent main sessions from using disabled providers
@@ -34,10 +34,10 @@ index d2688b9..dc8de78 100644
  	id: "modelRoleStorage",
  	type: "enum",
 diff --git a/packages/coding-agent/src/session/agent-session.ts b/packages/coding-agent/src/session/agent-session.ts
-index 1c78811..94c17fd 100644
+index 50465f8..56c58f7 100644
 --- a/packages/coding-agent/src/session/agent-session.ts
 +++ b/packages/coding-agent/src/session/agent-session.ts
-@@ -335,6 +335,7 @@ import {
+@@ -360,6 +360,7 @@ import {
  	LAUNCH_COMPLETION_MESSAGE_TYPE,
  	type LaunchCompletionEntry,
  } from "./launch-completion";
@@ -45,7 +45,7 @@ index 1c78811..94c17fd 100644
  import {
  	type BashExecutionMessage,
  	buildReplanTitleContext,
-@@ -1439,6 +1440,18 @@ export class AgentSession implements SettingsScope {
+@@ -1649,6 +1650,18 @@ export class AgentSession implements SettingsScope {
  		this.settings = config.settings;
  		this.#skillDescriptions = config.skillDescriptions ?? new SkillDescriptionCatalog();
  		this.memoryEnabled = config.memoryEnabled ?? true;
@@ -62,9 +62,9 @@ index 1c78811..94c17fd 100644
 +			};
 +		}
  		this.#modelRegistry = config.modelRegistry;
- 		this.#extensionRoots =
- 			config.extensionRoots ??
-@@ -1547,6 +1560,7 @@ export class AgentSession implements SettingsScope {
+ 		this.#allowSessionModelFallback = config.allowSessionModelFallback === true;
+ 		this.#interactivePrompts = config.interactivePrompts !== false;
+@@ -1762,6 +1775,7 @@ export class AgentSession implements SettingsScope {
  			sessionManager: this.sessionManager,
  			providerSessionState: this.#providerSessionState,
  			model: () => this.model,
@@ -72,7 +72,7 @@ index 1c78811..94c17fd 100644
  			sessionId: () => this.sessionId,
  			promptGeneration: () => this.#promptGeneration,
  			resolveActiveEditMode: () => this.#tools.resolveActiveEditMode(),
-@@ -1590,6 +1604,7 @@ export class AgentSession implements SettingsScope {
+@@ -1809,6 +1823,7 @@ export class AgentSession implements SettingsScope {
  			modelRegistry: this.#modelRegistry,
  			configWarnings: this.configWarnings,
  			model: () => this.model,
@@ -80,7 +80,7 @@ index 1c78811..94c17fd 100644
  			contextFitsModel: (model, excludedMessage) => this.#maintenance.contextFitsModel(model, excludedMessage),
  			textOutputCommitted: () => this.#textOutputCommitted,
  			thinkingLevel: () => this.thinkingLevel,
-@@ -1915,7 +1930,6 @@ export class AgentSession implements SettingsScope {
+@@ -2145,7 +2160,6 @@ export class AgentSession implements SettingsScope {
  		this.#streamingEditGuard = new StreamingEditGuard(streamGuardsHost);
  		this.#loopGuards = new LoopGuards(streamGuardsHost);
  		this.#agentId = config.agentId;
@@ -88,7 +88,7 @@ index 1c78811..94c17fd 100644
  		// A subagent's streamed text reaches no output sink until the run settles
  		// (the parent sees only the yield), so a failed turn's partial prose is
  		// replay-safe and transient provider errors after it stay retryable —
-@@ -10033,6 +10047,7 @@ export class AgentSession implements SettingsScope {
+@@ -10723,6 +10737,7 @@ export class AgentSession implements SettingsScope {
  	}
  
  	async #setModelWithProviderSessionReset(model: Model): Promise<void> {
@@ -96,14 +96,14 @@ index 1c78811..94c17fd 100644
  		const currentModel = this.model;
  		const isChanging = !currentModel || !modelsAreEqual(currentModel, model);
  		if (currentModel) {
-@@ -10791,6 +10806,7 @@ export class AgentSession implements SettingsScope {
- 					if (match) break;
- 				}
- 				if (match) {
-+					assertMainAgentProviderAllowed(this.settings, this.#agentKind, match.provider);
- 					const currentModel = this.model;
- 					const shouldResetProviderState =
- 						switchingToDifferentSession ||
+@@ -11581,6 +11596,7 @@ export class AgentSession implements SettingsScope {
+ 			}
+ 
+ 			if (targetModel) {
++				assertMainAgentProviderAllowed(this.settings, this.#agentKind, targetModel.provider);
+ 				const currentModel = this.model;
+ 				const shouldResetProviderState =
+ 					switchingToDifferentSession ||
 diff --git a/packages/coding-agent/src/session/main-agent-model-policy.ts b/packages/coding-agent/src/session/main-agent-model-policy.ts
 new file mode 100644
 index 0000000..6a74110
@@ -124,10 +124,10 @@ index 0000000..6a74110
 +	}
 +}
 diff --git a/packages/coding-agent/src/session/model-controls.ts b/packages/coding-agent/src/session/model-controls.ts
-index b2b8300..df82807 100644
+index 169031e..2ae25a9 100644
 --- a/packages/coding-agent/src/session/model-controls.ts
 +++ b/packages/coding-agent/src/session/model-controls.ts
-@@ -41,6 +41,7 @@ import {
+@@ -43,6 +43,7 @@ import {
  import type { EditMode } from "@oh-my-pi/pi-tui/tools/edit";
  import type { AgentSessionEvent } from "./agent-session-events";
  import type { ModelCycleResult, ResolvedRoleModel, RoleModelCycle, RoleModelCycleResult } from "./agent-session-types";
@@ -135,7 +135,7 @@ index b2b8300..df82807 100644
  import { formatRoleModelValue, resolveRoleModelFull } from "./role-models";
  import { EPHEMERAL_MODEL_CHANGE_ROLE } from "./session-entries";
  import type { SessionManager } from "./session-manager";
-@@ -50,6 +51,7 @@ import { cfgDisabledProviders, cfgEnabledModels } from "../config/model-settings
+@@ -52,6 +53,7 @@ import { cfgDisabledProviders, cfgEnabledModels } from "../config/model-settings
  
  /** Capabilities borrowed from the owning AgentSession. */
  export interface ModelControlsHost {
@@ -143,7 +143,7 @@ index b2b8300..df82807 100644
  	agent: Agent;
  	settings: Settings;
  	modelRegistry: ModelRegistry;
-@@ -230,6 +232,7 @@ export class ModelControls {
+@@ -232,6 +234,7 @@ export class ModelControls {
  			persist?: boolean;
  		},
  	): Promise<{ switched: boolean }> {
@@ -151,15 +151,15 @@ index b2b8300..df82807 100644
  		const previousEditMode = this.#host.resolveActiveEditMode();
  		if (!this.#host.modelRegistry.hasConfiguredAuth(model)) {
  			throw new Error(`No API key for ${model.provider}/${model.id}`);
-@@ -275,6 +278,7 @@ export class ModelControls {
- 		thinkingLevel?: ConfiguredThinkingLevel,
+@@ -278,6 +281,7 @@ export class ModelControls {
  		options?: { ephemeral?: boolean },
+ 		selection: "explicit" | "automatic" = "explicit",
  	): Promise<void> {
 +		assertMainAgentProviderAllowed(this.#host.settings, this.#host.agentKind(), model.provider);
  		const previousEditMode = this.#host.resolveActiveEditMode();
  		if (!this.#host.modelRegistry.hasConfiguredAuth(model)) {
  			throw new Error(`No API key for ${model.provider}/${model.id}`);
-@@ -345,6 +349,8 @@ export class ModelControls {
+@@ -348,6 +352,8 @@ export class ModelControls {
  				matchPreferences,
  			});
  			if (!resolved.model) continue;
@@ -168,7 +168,7 @@ index b2b8300..df82807 100644
  
  			models.push({
  				role,
-@@ -411,6 +417,7 @@ export class ModelControls {
+@@ -414,6 +420,7 @@ export class ModelControls {
  		const result: Array<{ model: Model; thinkingLevel?: ThinkingLevel }> = [];
  
  		for (const scoped of this.scopedModels) {
@@ -176,7 +176,7 @@ index b2b8300..df82807 100644
  			const provider = scoped.model.provider;
  			let apiKey: string | undefined;
  			if (apiKeysByProvider.has(provider)) {
-@@ -457,7 +464,9 @@ export class ModelControls {
+@@ -460,7 +467,9 @@ export class ModelControls {
  
  	async #cycleAvailableModel(direction: "forward" | "backward"): Promise<ModelCycleResult | undefined> {
  		const previousEditMode = this.#host.resolveActiveEditMode();
@@ -187,7 +187,7 @@ index b2b8300..df82807 100644
  		if (availableModels.length <= 1) return undefined;
  
  		const currentModel = this.#model;
-@@ -490,7 +499,9 @@ export class ModelControls {
+@@ -493,7 +502,9 @@ export class ModelControls {
  	 * See {@link filterAvailableModelsByEnabledPatterns} for supported pattern forms and limitations.
  	 */
  	getAvailableModels(): Model[] {
@@ -199,7 +199,7 @@ index b2b8300..df82807 100644
  		if (!patterns || patterns.length === 0) return all;
  		return filterAvailableModelsByEnabledPatterns(all, patterns, this.#host.settings);
 diff --git a/packages/coding-agent/src/session/turn-recovery.ts b/packages/coding-agent/src/session/turn-recovery.ts
-index ad84ed5..2e423f5 100644
+index 8959301..803dbd4 100644
 --- a/packages/coding-agent/src/session/turn-recovery.ts
 +++ b/packages/coding-agent/src/session/turn-recovery.ts
 @@ -30,6 +30,7 @@ import type { ModelRegistry } from "../config/model-registry";
@@ -210,7 +210,7 @@ index ad84ed5..2e423f5 100644
  import type { RetryErrorUpdate } from "../extensibility/shared-events";
  import emptyStopRetryTemplate from "../prompts/system/empty-stop-retry.md" with { type: "text" };
  import malformedFunctionCallRetryTemplate from "../prompts/system/malformed-function-call-retry.md" with { type: "text" };
-@@ -198,6 +199,7 @@ export interface TurnRecoveryHost {
+@@ -215,6 +216,7 @@ export interface TurnRecoveryHost {
  	settings: Settings;
  	modelRegistry: ModelRegistry;
  	configWarnings: string[];
@@ -218,7 +218,7 @@ index ad84ed5..2e423f5 100644
  	model(): Model | undefined;
  	/**
  	 * Whether the live context fits `model`'s usable window. `excludedMessage`
-@@ -384,6 +386,11 @@ export class TurnRecovery {
+@@ -435,6 +437,11 @@ export class TurnRecovery {
  		this.#fallbackRoutedFor = this.#host.sessionManager.getSessionId();
  	}
  
@@ -230,7 +230,7 @@ index ad84ed5..2e423f5 100644
  	/**
  	 * Model this session's produced work is attributed to.
  	 *
-@@ -1859,7 +1866,9 @@ export class TurnRecovery {
+@@ -1960,7 +1967,9 @@ export class TurnRecovery {
  				if (this.isRetryFallbackSelectorSuppressed(candidate)) continue;
  				const resolved = resolveModelOverride([candidate.raw], this.#host.modelRegistry, this.#host.settings);
  				const candidateModel = resolved.model ?? this.#host.modelRegistry.find(candidate.provider, candidate.id);
@@ -241,7 +241,7 @@ index ad84ed5..2e423f5 100644
  				if (ceiling !== undefined && !modelSupportsEffortCeiling(candidateModel, ceiling)) continue;
  				// A usage fallback must also fit: skip a candidate whose window cannot
  				// hold the live context so we never switch onto an oversized request
-@@ -1993,6 +2002,7 @@ export class TurnRecovery {
+@@ -2100,6 +2109,7 @@ export class TurnRecovery {
  		if (!candidate) {
  			throw new Error(`Retry fallback model not found: ${selector.raw}`);
  		}
@@ -249,7 +249,7 @@ index ad84ed5..2e423f5 100644
  		const apiKey =
  			options?.apiKey ??
  			(await this.#host.modelRegistry.getApiKey(candidate, this.#host.sessionId(), { signal: options?.signal }));
-@@ -2104,6 +2114,7 @@ export class TurnRecovery {
+@@ -2217,6 +2227,7 @@ export class TurnRecovery {
  				// sets `switchedModel`, and the retry budget is reset to 1 on every
  				// failure — an unbounded retry loop against a model that cannot work.
  				if (this.#isNoOpRetryFallback(candidate, selector)) continue;
@@ -257,7 +257,7 @@ index ad84ed5..2e423f5 100644
  				if (options?.excludeProvider === candidate.provider) continue;
  				// Anthropic signatures and redacted blocks are model-bound, while the
  				// latest assistant response must remain byte-identical. A same-provider
-@@ -2234,8 +2245,13 @@ export class TurnRecovery {
+@@ -2348,8 +2359,13 @@ export class TurnRecovery {
  		}
  		if (this.#hasReplayUnsafeOutput(message)) return false;
  		const currentSelector = formatRetryFallbackSelector(model, this.#host.thinkingLevel());
@@ -273,7 +273,7 @@ index ad84ed5..2e423f5 100644
  		);
  	}
  
-@@ -2250,6 +2266,7 @@ export class TurnRecovery {
+@@ -2364,6 +2380,7 @@ export class TurnRecovery {
  		if (!model) return false;
  		const baseModel = this.#host.modelRegistry.find("fireworks", toFireworksBaseModelId(model.id));
  		if (!baseModel) return false;
@@ -281,7 +281,7 @@ index ad84ed5..2e423f5 100644
  		const apiKey = await this.#host.modelRegistry.getApiKey(baseModel, this.#host.sessionId());
  		if (!apiKey) return false;
  		const baseSelector = formatModelStringWithRouting(baseModel);
-@@ -2311,6 +2328,7 @@ export class TurnRecovery {
+@@ -2425,6 +2442,7 @@ export class TurnRecovery {
  		const primaryModel =
  			resolvedPrimary.model ?? this.#host.modelRegistry.find(originalSelector.provider, originalSelector.id);
  		if (!primaryModel) return false;
@@ -418,10 +418,10 @@ index 8d7f15e..eb5864e 100644
 +	});
  });
 diff --git a/packages/coding-agent/test/agent-session-retry-fallback.test.ts b/packages/coding-agent/test/agent-session-retry-fallback.test.ts
-index ca9b315..633228c 100644
+index 29b5b46..f473bad 100644
 --- a/packages/coding-agent/test/agent-session-retry-fallback.test.ts
 +++ b/packages/coding-agent/test/agent-session-retry-fallback.test.ts
-@@ -6847,4 +6847,166 @@ describe("AgentSession retry fallback", () => {
+@@ -7654,4 +7654,166 @@ describe("AgentSession retry fallback", () => {
  		expect(requestedModels).toContain("openrouter/z-ai/glm-4.7@chutes");
  		expect(getLastAssistantMessage(session).stopReason).not.toBe("error");
  	});
@@ -601,10 +601,10 @@ index 05b0c9b..2dcf95a 100644
  					thinkingLevel: () => activeLevel,
  					sessionManager: { getSessionId: () => "literal-model" },
 diff --git a/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts b/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
-index 0fbea70..8fd5d08 100644
+index e3a7500..88d15ba 100644
 --- a/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
 +++ b/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
-@@ -61,6 +61,7 @@ function createHost(
+@@ -65,6 +65,7 @@ function createHost(
  	}
  	const agentState = { messages: options.messages ?? [] };
  	return {
