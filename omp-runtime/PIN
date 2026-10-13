@@ -1,14 +1,14 @@
 Upstream OMP release this customization builds on.
-Release: v18.4.4
-Upstream commit: 8ac1309bd8adaddc891eeb389c545345073875be
-Tarball: https://codeload.github.com/can1357/oh-my-pi/tar.gz/8ac1309bd8adaddc891eeb389c545345073875be
+Release: v18.10.4
+Upstream commit: 687892d1046ecaf18829b45f5b86928a308258f4
+Tarball: https://codeload.github.com/can1357/oh-my-pi/tar.gz/687892d1046ecaf18829b45f5b86928a308258f4
 
 Local history.
-Baseline commit message: Upstream OMP v18.4.12 baseline 7318a70
-Baseline SHA: 7318a70cf4ed04133366884d2723f72d9d490a15
+Baseline commit message: Upstream OMP v18.10.4 baseline 687892d
+Baseline SHA: 02135e692dc5db2c763ec73e12a41385e0d878d9
 Runtime commit message: Prevent main sessions from using disabled providers
 Patch file: 0001-Prevent-main-sessions-from-using-disabled-providers.patch
 
 Live locations, kept out of this repo. Override the checkout with OMP_SRC.
-Source checkout: ~/.worktrees/oh-my-pi-main-driver-no-agy, branch main-driver-no-agy, upstream remote can1357/oh-my-pi; update by fetch + rebase, then `just omp-runtime-export`
+Source checkout: ~/.worktrees/oh-my-pi-main-driver-no-agy, branch main-driver-no-agy, no remote (baseline imported from the tarball); update by committing the new release tarball over omp-baseline, `git am -3` the patches, retag omp-baseline, then `just omp-runtime-export`
 Launchers: ~/.bun/bin/omp -> .../packages/coding-agent/scripts/omp
