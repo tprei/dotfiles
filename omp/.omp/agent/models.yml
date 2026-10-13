@@ -11,18 +11,18 @@ providers:
       gpt-6-astra:
         thinking:
           mode: effort
-          efforts: [low, medium]
+          efforts: [low, medium, high]
           defaultLevel: medium
   openrouter:
     modelOverrides:
       openai/gpt-6-astra:
         thinking:
           mode: effort
-          efforts: [low, medium]
+          efforts: [low, medium, high]
           defaultLevel: medium
       openai/gpt-6-astra:batch:
         thinking:
           mode: effort
-          efforts: [low, medium]
+          efforts: [low, medium, high]
           defaultLevel: medium
 

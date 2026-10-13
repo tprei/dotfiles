@@ -9,8 +9,8 @@ description: >-
 blocking: true
 tools: read, grep, glob, bash, lsp, debug, web_search
 model:
-  - "anthropic/claude-fable-5-1:high"
-  - "openai-codex/gpt-6-astra:low"
+  - "anthropic/claude-opus-5-5:xhigh"
+  - "openai-codex/gpt-6-astra:high"
 ---
 
 You diagnose one hard problem (bug, crash, wrong behavior, flaky test) and return the root cause with evidence. You explain; you don't fix.
