@@ -41,6 +41,19 @@ tern.command({
 			cx:toast("error", "Extrakto couldn't open its picker")
 			return
 		end
-		cx:action("zoom")
+		tern.timer(0, function(zcx)
+			if zcx == nil or zcx.session:focused() ~= picker then
+				return
+			end
+			local tab = zcx.session:tab_of(picker)
+			if tab == nil then
+				return
+			end
+			local tree = zcx.session:layout(tab)
+			if tree == nil or tree.zoomed then
+				return
+			end
+			zcx:action("zoom")
+		end)
 	end,
 })
