@@ -23,16 +23,16 @@ plugin changes.
 
 ## Install
 
-From where you unpacked [the SDK](../index.md#the-sdk):
-
 ```sh
-tern plugin install tern-sdk/examples/workspaces
+tern plugin install github.com/stencil-hq/tern-sdk/plugins/examples/workspaces
 ```
 
-While you change it, link it instead so Tern reloads it on every save:
+While you change it, clone the SDK and link the folder instead, so Tern
+reloads it on every save:
 
 ```sh
-tern plugin link tern-sdk/examples/workspaces
+git clone https://github.com/stencil-hq/tern-sdk
+tern plugin link tern-sdk/plugins/examples/workspaces
 ```
 
 Then open a shell inside a project that has `.tern/workspace.json` (the

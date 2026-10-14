@@ -49,7 +49,7 @@ reach it as an event it drops.
 - Over a misspelling decorated `typo`, the context menu leads with the
   platform spell checker's guesses; a pick sends an `edit`.
 
-**Undo.** With the `undo` feature too, ⌃Z (Ctrl+Z on PC keyboards) in a
+**Undo.** With the `undo` feature too, ⌘Z or ⌃Z (Ctrl+Z on PC keyboards) in a
 natively edited field goes to you as one `undo` event instead of a key, with
 or without a selection and in an empty field, so a cleared draft can come
 back. The history is yours, each `edit` event one step. In Vim mode, with
@@ -92,8 +92,12 @@ object with an action per gesture, `{"click": act, "dblclick": act, "menu":
 - `menu` lists context-menu entries, labeled from the action name
   (`open-file` reads Open file), with Tern's Copy appended unless the list
   names `copy`. A pick runs the action as a click does, without `mods`.
-- `toggle`'s `key` is the node's `key` prop, when it has one: Tern keeps the
-  local fold state under it, so it survives the node being rebuilt.
+- `toggle`'s `key` is still the bare node `key` prop, when it has one; the
+  event does not qualify it with the parent. Tern remembers the local fold
+  by that key among the node's siblings, not surface-wide. A `del` followed
+  by an `add` with a new node id and the same key under the same parent
+  preserves the fold; the same key under another parent has independent
+  state. Without a key, local state uses the node's id.
 - For `select` and `activate` on an `item` of a `list`, `id` is the list and
   `item` the item; on any other node both are the node's id.
 - A custom name with `=` splits into `act` and `value` (`"sort=name"`).

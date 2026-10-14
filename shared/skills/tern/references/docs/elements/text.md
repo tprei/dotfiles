@@ -92,8 +92,8 @@ ui.node("text", { lines = 2, spans = { ui.span("lines=2 ", "dim"),
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-text-fit.light.png" srcset="../figures/elements-text-fit.light.png 2x" alt="The same sentence cut at the end, at the start and in the middle; a path line shortened to …/routes/users.ts; and a paragraph clamped to two lines ending in an ellipsis">
-<img class="tn-dark" src="../figures/elements-text-fit.dark.png" srcset="../figures/elements-text-fit.dark.png 2x" alt="The same sentence cut at the end, at the start and in the middle; a path line shortened to …/routes/users.ts; and a paragraph clamped to two lines ending in an ellipsis">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-text-fit.light.png" srcset="../figures/elements-text-fit.light.png 2x" alt="The same sentence cut at the end, at the start and in the middle; a path line shortened to …/routes/users.ts; and a paragraph clamped to two lines ending in an ellipsis">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-text-fit.dark.png" srcset="../figures/elements-text-fit.dark.png 2x" alt="The same sentence cut at the end, at the start and in the middle; a path line shortened to …/routes/users.ts; and a paragraph clamped to two lines ending in an ellipsis">
 <figcaption>The five nodes at 288px: <code>start</code> cuts the label too, since the whole text is cut; the path line drops directories before anything else.</figcaption>
 </figure>
 
@@ -144,8 +144,8 @@ You can combine tokens: `"strong error"`, `"muted path"`. A token appears once e
 A `key` span whose text has spaces or is not a `+`-joined id (`Esc to cancel`) draws its text as is.
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-text-tokens.light.png" srcset="../figures/elements-text-tokens.light.png 2x" alt="Five lines of text nodes, each word styled by the span token it names: muted, dim, strong, em, accent, link, success, warning, error, info, ins, del, num, mono, code, a ctrl+r key cap, a path with a dim directory, mark, typo, an icon and strong error">
-<img class="tn-dark" src="../figures/elements-text-tokens.dark.png" srcset="../figures/elements-text-tokens.dark.png 2x" alt="Five lines of text nodes, each word styled by the span token it names: muted, dim, strong, em, accent, link, success, warning, error, info, ins, del, num, mono, code, a ctrl+r key cap, a path with a dim directory, mark, typo, an icon and strong error">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-text-tokens.light.png" srcset="../figures/elements-text-tokens.light.png 2x" alt="Five lines of text nodes, each word styled by the span token it names: muted, dim, strong, em, accent, link, success, warning, error, info, ins, del, num, mono, code, a ctrl+r key cap, a path with a dim directory, mark, typo, an icon and strong error">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-text-tokens.dark.png" srcset="../figures/elements-text-tokens.dark.png 2x" alt="Five lines of text nodes, each word styled by the span token it names: muted, dim, strong, em, accent, link, success, warning, error, info, ins, del, num, mono, code, a ctrl+r key cap, a path with a dim directory, mark, typo, an icon and strong error">
 <figcaption>Each word is a span styled by the token it names: <code>{t = "ctrl+r", s = "key"}</code>, <code>{t = "src/routes/users.ts", s = "path"}</code>, a folder glyph with <code>s = "icon"</code>.</figcaption>
 </figure>
 
@@ -197,7 +197,7 @@ plain click opens it too, unless ⇧ is held or the click ended a text selection
 | --- | --- |
 | A URL with a scheme (`https://…`, `mailto:…`) | Through the window's link handling, `tern.route.link` first (see [Routing](../guides/routing.md)) |
 | `file://…` | The file, in a file block, through Tern's system integration |
-| No scheme: a path (`./README.md`, `docs/a.md:12`, `../b.md#L3`, `~/x`, `C:\x`) | `%XX`-decoded; a relative one resolves against the pane's working directory; it opens in a file block like a `file://` link. A path that does not exist shows a toast naming the resolved path |
+| No scheme: a path (`./README.md`, `docs/a.md:12`, `../b.md#L3`, `src/a.rs:10-20`, `src/a.rs#L10-L20`, `~/x`, `C:\x`) | `%XX`-decoded; a relative one resolves against the pane's working directory, on the pane's host; it opens in a file block like a `file://` link, at the line (a range at its first line). A path that does not exist on this machine shows a toast naming the resolved path |
 
 `tern.ui.path(p, cwd)` builds a `path` span linked to the absolute `file://` URL.
 
@@ -239,7 +239,7 @@ An unstyled span with no `href` and no effect is a bare text node, not a `span`.
 | Prose measure | `.sf-text.prose` |
 | A styled span | `.sf-t-<token>` |
 | A link span | `.sf-link`, `[data-href]`, `[data-href^="http"]` |
-| A path's directory | `.sf-t-path .dir` (inner, may change) |
+| A path's directory, its position (`:12`, `#L3`) | `.sf-t-path .dir`, `.sf-t-path .ln` (inner, may change) |
 | An icon followed by text | `.sf-t-icon.gap` |
 | Effects | `.sf-fx-shimmer`, `.sf-fx-pulse`, `.sf-sh` (one per shimmering character, inner) |
 
@@ -302,6 +302,7 @@ rows inside a big block mount the same way. Find and copy still see the whole so
 | Code fences | ```` ```lang ```` | `div.code > div.code-head (language + Copy) + pre > code` on `--code-bg`, one span per line, highlighted with `.tk-*` classes (see [`code`](#code)). The head shows only on hover or focus, at the block's top right. The label is the lowercased fence language, `text` without one |
 | Mermaid | ```` ```mermaid ```` | `figure.mfig[data-m] > div.mfig-head (icon, "mermaid · <kind>", Open) + div.mfig-body` with the diagram at natural size; wide diagrams scroll sideways |
 | Color swatches | a hex color in a code span | a `span.chip` color chip before it |
+| File paths | a path in prose or as a whole code span, with an optional position: `` `crates/x/y.rs:10-20` ``, `src/a.ts#L4`, `./b.md:3:7` | A linked `path` span, `span.sf-t-path.sf-link[data-href]` (directory `.dir` and position `.ln` quiet, the name strong), opening the file at the line like a path `href`. Only what reads as a file links: a separator or a position, and an extension (`src/a.rs`, `keys.rs:12`; not `ui.now`, `and/or`, `styles/*.css`). Text inside a Markdown link keeps to that link |
 | Nerd icons | Private Use Area codepoints | `icon` spans (see [Span style tokens](#span-style-tokens)) |
 
 Prose (the text inside paragraphs, headings, list items, cells) is drawn through the same span path as `text`.
@@ -389,8 +390,8 @@ return { main = ui.col({ doc }) }
 ````
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-text-md.light.png" srcset="../figures/elements-text-md.light.png 2x" alt="An annotated ## Release heading, a warning callout, a task list with one checked item struck through, a table with high and low severity pills, inline math with a color swatch chip, and a highlighted Rust fence">
-<img class="tn-dark" src="../figures/elements-text-md.dark.png" srcset="../figures/elements-text-md.dark.png 2x" alt="An annotated ## Release heading, a warning callout, a task list with one checked item struck through, a table with high and low severity pills, inline math with a color swatch chip, and a highlighted Rust fence">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-text-md.light.png" srcset="../figures/elements-text-md.light.png 2x" alt="An annotated ## Release heading, a warning callout, a task list with one checked item struck through, a table with high and low severity pills, inline math with a color swatch chip, and a highlighted Rust fence">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-text-md.dark.png" srcset="../figures/elements-text-md.dark.png 2x" alt="An annotated ## Release heading, a warning callout, a task list with one checked item struck through, a table with high and low severity pills, inline math with a color swatch chip, and a highlighted Rust fence">
 <figcaption>With <code>stream</code> off. The fence's language label and Copy button appear on hover.</figcaption>
 </figure>
 
@@ -398,7 +399,8 @@ return { main = ui.col({ doc }) }
 
 Draws a code block with Tern's highlighter, optional line numbers and marked lines. Highlighting runs in the
 background over the whole text, so multi-line strings and comments color right; lines show plain until their
-colors land. Unwrapped lines scroll sideways inside the block. Past 400 lines (or whenever the block knows its
+colors land. Unwrapped lines scroll sideways inside the block. The code block keeps its full source height inside
+an enclosing vertical scroller, including virtual spacers. Past 400 lines (or whenever the block knows its
 visible part), the block virtualizes: only the rows near the viewport are mounted, between two spacers. Without
 `wrap` the rows are one line tall and the window is the lines in view plus 40 on each side; with `wrap` the rows
 keep their wrapped heights.
@@ -486,8 +488,8 @@ return { main = ui.col({ block }) }
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-text-code.light.png" srcset="../figures/elements-text-code.light.png 2x" alt="A Lua code block headed by a file icon and src/server.lua, numbered 40 to 46; line 42 has a red bar and tint with the word sockt tinted stronger, line 45 a yellow bar and tint">
-<img class="tn-dark" src="../figures/elements-text-code.dark.png" srcset="../figures/elements-text-code.dark.png 2x" alt="A Lua code block headed by a file icon and src/server.lua, numbered 40 to 46; line 42 has a red bar and tint with the word sockt tinted stronger, line 45 a yellow bar and tint">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-text-code.light.png" srcset="../figures/elements-text-code.light.png 2x" alt="A Lua code block headed by a file icon and src/server.lua, numbered 40 to 46; line 42 has a red bar and tint with the word sockt tinted stronger, line 45 a yellow bar and tint">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-text-code.dark.png" srcset="../figures/elements-text-code.dark.png 2x" alt="A Lua code block headed by a file icon and src/server.lua, numbered 40 to 46; line 42 has a red bar and tint with the word sockt tinted stronger, line 45 a yellow bar and tint">
 <figcaption>The example with a seven-line <code>state.source</code>. The grammar comes from <code>path</code>, since <code>lang</code> is nil.</figcaption>
 </figure>
 
@@ -506,7 +508,7 @@ diff with no changes shows "No changes".
 | `hunks` | list of `{oldStart?, newStart?, lines}` | none | Hunks given directly; wins over `text` when it is a list. `oldStart`/`newStart` default to `1`; `lines` are strings starting with `+`, `-` or a space (any other line, and an empty one, reads as context, whole). Lines starting with `\` (`\ No newline at end of file`) are skipped |
 | `path` | string | the file the headers name | Picks the grammar when `lang` is absent. Not drawn |
 | `lang` | string | none | The grammar by language name; wins over `path` |
-| `mode` | `"unified"` \| `"split"` \| `"auto"` | `"auto"` | `unified`: one column, old and new numbers. `split`: old \| new side by side, each side wrapping inside its half, the missing side of an unpaired line left blank. Absent, `auto` or any other value: the user's setting |
+| `mode` | `"unified"` \| `"split"` \| `"auto"` | `"auto"` | `unified`: one column, old and new numbers. `split`: old \| new side by side, the missing side of an unpaired line left blank. Absent, `auto` or any other value: the user's setting. Either way a long line wraps inside its row (or its half) under its text; the diff never scrolls sideways |
 
 **The Edits setting.** For any `mode` but `unified` and `split`, Tern's "Edits" setting decides: Inline (the default) draws
 unified; Split draws side by side when the block is wider than 112 cells and unified otherwise, re-deciding as
@@ -583,8 +585,8 @@ return ui.col({
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-text-diff.light.png" srcset="../figures/elements-text-diff.light.png 2x" alt="The same two-hunk Lua diff unified, with old and new line numbers and changed words tinted, and split into old and new columns with a blank side for the added line; a fold row between hunks reads 13 unchanged lines, return {">
-<img class="tn-dark" src="../figures/elements-text-diff.dark.png" srcset="../figures/elements-text-diff.dark.png 2x" alt="The same two-hunk Lua diff unified, with old and new line numbers and changed words tinted, and split into old and new columns with a blank side for the added line; a fold row between hunks reads 13 unchanged lines, return {">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-text-diff.light.png" srcset="../figures/elements-text-diff.light.png 2x" alt="The same two-hunk Lua diff unified, with old and new line numbers and changed words tinted, and split into old and new columns with a blank side for the added line; a fold row between hunks reads 13 unchanged lines, return {">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-text-diff.dark.png" srcset="../figures/elements-text-diff.dark.png 2x" alt="The same two-hunk Lua diff unified, with old and new line numbers and changed words tinted, and split into old and new columns with a blank side for the added line; a fold row between hunks reads 13 unchanged lines, return {">
 <figcaption><code>mode = "unified"</code> (top) and <code>mode = "split"</code> (bottom). Paired lines tint only the words that changed.</figcaption>
 </figure>
 
@@ -665,8 +667,8 @@ return ui.node("ansi", { text = out, preview = { lines = 7 } })
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-text-ansi.light.png" srcset="../figures/elements-text-ansi.light.png 2x" alt="Cargo output in terminal colors: green Compiling lines, a yellow warning, a red error, blue arrows; the seventh line fades out above a 1 more line button">
-<img class="tn-dark" src="../figures/elements-text-ansi.dark.png" srcset="../figures/elements-text-ansi.dark.png 2x" alt="Cargo output in terminal colors: green Compiling lines, a yellow warning, a red error, blue arrows; the seventh line fades out above a 1 more line button">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-text-ansi.light.png" srcset="../figures/elements-text-ansi.light.png 2x" alt="Cargo output in terminal colors: green Compiling lines, a yellow warning, a red error, blue arrows; the seventh line fades out above a 1 more line button">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-text-ansi.dark.png" srcset="../figures/elements-text-ansi.dark.png 2x" alt="Cargo output in terminal colors: green Compiling lines, a yellow warning, a red error, blue arrows; the seventh line fades out above a 1 more line button">
 <figcaption>Colors come from the terminal theme. Without <code>follow</code>, the preview keeps the first lines and fades at the bottom.</figcaption>
 </figure>
 
@@ -755,7 +757,7 @@ return ui.col({
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-text-math.light.png" srcset="../figures/elements-text-math.light.png 2x" alt="The text The identity:, then e to the i pi plus 1 equals 0 centered as display math, then an inline sum formula at the left edge">
-<img class="tn-dark" src="../figures/elements-text-math.dark.png" srcset="../figures/elements-text-math.dark.png 2x" alt="The text The identity:, then e to the i pi plus 1 equals 0 centered as display math, then an inline sum formula at the left edge">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-text-math.light.png" srcset="../figures/elements-text-math.light.png 2x" alt="The text The identity:, then e to the i pi plus 1 equals 0 centered as display math, then an inline sum formula at the left edge">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-text-math.dark.png" srcset="../figures/elements-text-math.dark.png 2x" alt="The text The identity:, then e to the i pi plus 1 equals 0 centered as display math, then an inline sum formula at the left edge">
 <figcaption>A display formula (centered) and an inline one (text style: limits beside the sum, a small fraction).</figcaption>
 </figure>

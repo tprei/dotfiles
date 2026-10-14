@@ -22,7 +22,7 @@ from every loaded plugin.
 
 ## Commands
 
-Tern has 167 built-in commands. The id is what `tern.override`, `cx:command`, `tern.bind` and `settings.json` `keybinds` take; the label is the palette row. Ids with a `:` are one command per value (`layout:rail`, `layout:float`, …); each value is its own id, and the bare prefix (`layout`) is not a command.
+Tern has 173 built-in commands. The id is what `tern.override`, `cx:command`, `tern.bind` and `settings.json` `keybinds` take; the label is the palette row. Ids with a `:` are one command per value (`layout:rail`, `layout:float`, …); each value is its own id, and the bare prefix (`layout`) is not a command.
 
 ```lua
 tern.override("split_right", function(cx)
@@ -48,6 +48,8 @@ Every command can be overridden. The override is consulted at the top of the com
 | `close_tab` | Close tab | Destructive |
 | `next_tab` | Next tab |  |
 | `previous_tab` | Previous tab |  |
+| `next_tab_across_sessions` | Next tab across sessions | Past a session's last tab, the next session's first |
+| `previous_tab_across_sessions` | Previous tab across sessions |  |
 | `move_tab_right` | Move tab right |  |
 | `move_tab_left` | Move tab left |  |
 | `rename_tab` | Rename tab… |  |
@@ -123,6 +125,7 @@ Every command can be overridden. The override is consulted at the top of the com
 | `scroll_bottom` | Scroll to bottom |  |
 | `previous_prompt` | Jump to previous prompt |  |
 | `next_prompt` | Jump to next prompt |  |
+| `reply_start` | Jump to start of reply | In a chat (omp's): the start of the reply above the view; ⌘↑ / Ctrl+Shift+Z there |
 | `open_scrollback` | Open scrollback in editor |  |
 | `clear` | Clear screen and scrollback |  |
 | `restart` | Restart shell |  |
@@ -214,6 +217,20 @@ Every command can be overridden. The override is consulted at the top of the com
 | `chat:console` | Chat style: Console |  |
 | `native_prompt` | Native prompt |  |
 | `prompt_style` | Prompt style… |  |
+| `prompt_part:palette` | Prompt: next colors |  |
+| `prompt_part:fill` | Prompt: next fill |  |
+| `prompt_part:shape` | Prompt: next shape |  |
+| `prompt_part:frame` | Prompt: next frame |  |
+| `prompt_part:line_end` | Prompt: frame line end on or off |  |
+| `prompt_part:gap` | Prompt: next gap |  |
+| `prompt_part:char` | Prompt: next prompt character |  |
+| `prompt_part:separator` | Prompt: next separators |  |
+| `prompt_part:git` | Prompt: next git format |  |
+| `prompt_part:dir` | Prompt: next directory format |  |
+| `prompt_part:icons` | Prompt: icons on or off |  |
+| `prompt_part:clock` | Prompt: next clock |  |
+| `prompt_segments` | Prompt segments… |  |
+| `prompt_collapse` | Collapse past prompts |  |
 | `next_layout` | Next layout |  |
 | `layout:rail` | Layout: Rail |  |
 | `layout:float` | Layout: Float |  |
@@ -236,12 +253,14 @@ Every command can be overridden. The override is consulted at the top of the com
 | `add_remote_host` | Add remote host… |  |
 | `new_session_on_host` | New session on host… |  |
 | `disconnect_host` | Disconnect from host… |  |
+| `update_remote_host` | Update remote host… | Listed while a connected host runs an older Tern |
 
 ### App
 
 | Id | Palette label | Notes |
 | --- | --- | --- |
 | `preferences` | Settings… |  |
+| `secure_keyboard_entry` | Toggle Secure Keyboard Entry | macOS only |
 | `open_config` | Open settings.json |  |
 | `reload_config` | Reload settings |  |
 | `reload_plugins` | Reload plugins |  |
@@ -254,6 +273,8 @@ Every command can be overridden. The override is consulted at the top of the com
 | `show_commands` | Show all commands |  |
 | `sign_out` | Sign out of Stencil |  |
 | `check_for_updates` | Check for updates |  |
+| `release_notes` | What's new: release notes |  |
+| `help` | Help & documentation | Opens docs.stencil.so/tern |
 | `restart_to_update` | Restart to update |  |
 | `restart_session_daemon` | Restart session daemon |  |
 
@@ -383,6 +404,8 @@ Where focus is in a git block or the Files pane's Changes or Refs tab; the diff 
 | git.toggle_wrap | Wrap long diff lines |
 | git.cycle_whitespace | Whitespace: exact → ignore whitespace → ignore formatting |
 | git.toggle_hunk_view | One hunk at a time |
+| git.expand_context | Reveal 20 more unchanged lines above and below the current hunk |
+| git.toggle_all_context | Reveal every unchanged line of the open diff, or fold them again |
 | git.edit_file | Edit the open working-tree file in a file block |
 | git.stage | Stage / unstage the picked lines, else the hunk in hunk view, else the file |
 | git.discard_lines | Discard the picked lines, else the hunk in hunk view (asks first) |

@@ -12,9 +12,9 @@ Carly can inspect and operate on the active Tern window without a plugin:
 - `inspect` lists sessions, hosts, tabs, panes, agents and processes; `object="block"`
   returns typed state for screen, board, Markdown, browser and other blocks.
   `read_block` returns their contents.
-- `configure` reads every persisted setting as flat dotted keys and applies any
-  valid setting patch. Use `inspect object="settings"` for names and current values;
-  nested objects and dotted paths are accepted.
+- `inspect object="settings"` lists every persisted setting as a dotted key with
+  its value, type, choices, range and description. `configure` applies a patch of
+  those keys; nested objects and dotted paths are accepted.
 - `session` switches, creates, renames and closes sessions. `arrange` regroups,
   renames and recolors tabs. `actions` discovers and runs built-in, plugin and
   keymap actions. `processes` lists or signals local process IDs.

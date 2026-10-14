@@ -13,7 +13,7 @@ headers.
 | [`badge`](#badge) | `tern.ui.badge(text, tone)` | A tone-tinted pill |
 | [`kbd`](#kbd) | `tern.ui.node("kbd", { keys = … })` | Keycaps with platform glyphs (`⌃` `⇧` `⏎`) |
 | [`icon`](#icon) | `tern.ui.node("icon", { name = … })` | One icon from Tern's set |
-| [`image`](#image) | `tern.ui.node("image", { blob = … })` | A PNG, JPEG, GIF, WebP or SVG image; click to zoom |
+| [`image`](#image) | `tern.ui.node("image", { blob = … })` | A PNG, JPEG, GIF, WebP or SVG image (animations play), with children drawn over it; click to zoom |
 
 Every kind also takes the common props (`id`, `role`, `tone`, `actions`, `min`/`max`, …): see
 [Elements](index.md). Every node is `<tag class="sf sf-<kind>" data-id="<id>">`. The stable styling hooks are
@@ -21,8 +21,8 @@ Every kind also takes the common props (`id`, `role`, `tone`, `actions`, `min`/`
 below (`.sf-kv-k`, `.sf-tbl-c`, …) are Tern's structure: they are documented so you can style them, but they are
 inner and may change between versions. See [Styling views](../styles/index.md) for sheets and the cascade.
 
-None of these kinds draws children: children of a `kv`, `table`, `tree`, `badge`, `kbd`, `icon` or `image` are
-ignored.
+Apart from `image`, which draws its children over the picture, none of these kinds draws children: children of a
+`kv`, `table`, `tree`, `badge`, `kbd` or `icon` are ignored.
 
 ## `kv`
 
@@ -99,8 +99,8 @@ return line
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-data-kv.light.png" srcset="../figures/elements-data-kv.light.png 2x" alt="A kv grid with keys context, namespace and pods aligned in a muted column, above an inline kv line reading branch main · ahead 2 · dirty yes">
-<img class="tn-dark" src="../figures/elements-data-kv.dark.png" srcset="../figures/elements-data-kv.dark.png 2x" alt="A kv grid with keys context, namespace and pods aligned in a muted column, above an inline kv line reading branch main · ahead 2 · dirty yes">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-data-kv.light.png" srcset="../figures/elements-data-kv.light.png 2x" alt="A kv grid with keys context, namespace and pods aligned in a muted column, above an inline kv line reading branch main · ahead 2 · dirty yes">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-data-kv.dark.png" srcset="../figures/elements-data-kv.dark.png 2x" alt="A kv grid with keys context, namespace and pods aligned in a muted column, above an inline kv line reading branch main · ahead 2 · dirty yes">
 <figcaption>The grid layout (top) and the inline layout (bottom).</figcaption>
 </figure>
 
@@ -258,8 +258,8 @@ return ui.node("table", {
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-data-table.light.png" srcset="../figures/elements-data-table.light.png 2x" alt="The pod table twice: at full width with Pod, CPU and Memory columns and meter bars in blue, amber and red; at 300px wide the CPU column is hidden">
-<img class="tn-dark" src="../figures/elements-data-table.dark.png" srcset="../figures/elements-data-table.dark.png 2x" alt="The pod table twice: at full width with Pod, CPU and Memory columns and meter bars in blue, amber and red; at 300px wide the CPU column is hidden">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-data-table.light.png" srcset="../figures/elements-data-table.light.png 2x" alt="The pod table twice: at full width with Pod, CPU and Memory columns and meter bars in blue, amber and red; at 300px wide the CPU column is hidden">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-data-table.dark.png" srcset="../figures/elements-data-table.dark.png 2x" alt="The pod table twice: at full width with Pod, CPU and Memory columns and meter bars in blue, amber and red; at 300px wide the CPU column is hidden">
 <figcaption>The same table at 560px and at 300px: CPU (priority 1) hides first. The bars cross the <code>warn</code> and <code>bad</code> thresholds.</figcaption>
 </figure>
 
@@ -366,8 +366,8 @@ return ui.node("tree", {
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-data-tree.light.png" srcset="../figures/elements-data-tree.light.png 2x" alt="A tree: an open src folder with a guide line under it holding main.rs, a muted lib.rs and a closed kinds folder, then Cargo.toml at the top level">
-<img class="tn-dark" src="../figures/elements-data-tree.dark.png" srcset="../figures/elements-data-tree.dark.png 2x" alt="A tree: an open src folder with a guide line under it holding main.rs, a muted lib.rs and a closed kinds folder, then Cargo.toml at the top level">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-data-tree.light.png" srcset="../figures/elements-data-tree.light.png 2x" alt="A tree: an open src folder with a guide line under it holding main.rs, a muted lib.rs and a closed kinds folder, then Cargo.toml at the top level">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-data-tree.dark.png" srcset="../figures/elements-data-tree.dark.png 2x" alt="A tree: an open src folder with a guide line under it holding main.rs, a muted lib.rs and a closed kinds folder, then Cargo.toml at the top level">
 <figcaption>The tree above, with <code>src/kinds</code> (one child, no <code>open</code>) shown closed.</figcaption>
 </figure>
 
@@ -430,8 +430,8 @@ return ui.node("row", { gap = "sm", wrap = true }, badges)
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-data-badges.light.png" srcset="../figures/elements-data-badges.light.png 2x" alt="Ten badges: untoned and neutral in gray, then accent, info, success, warning, error, pending, muted and user each tinted in its tone color">
-<img class="tn-dark" src="../figures/elements-data-badges.dark.png" srcset="../figures/elements-data-badges.dark.png 2x" alt="Ten badges: untoned and neutral in gray, then accent, info, success, warning, error, pending, muted and user each tinted in its tone color">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-data-badges.light.png" srcset="../figures/elements-data-badges.light.png 2x" alt="Ten badges: untoned and neutral in gray, then accent, info, success, warning, error, pending, muted and user each tinted in its tone color">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-data-badges.dark.png" srcset="../figures/elements-data-badges.dark.png 2x" alt="Ten badges: untoned and neutral in gray, then accent, info, success, warning, error, pending, muted and user each tinted in its tone color">
 </figure>
 
 ## `kbd`
@@ -496,8 +496,8 @@ return ui.row({ ui.node("kbd", { keys = { "cmd", "shift", "p" } }), ui.text(ui.s
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-data-kbd.light.png" srcset="../figures/elements-data-kbd.light.png 2x" alt="Keycaps ⌘ ⇧ P beside muted text command palette; below, keycaps for ctrl o, alt enter, esc, tab, backspace, space, up, pagedown, f5 and fn /">
-<img class="tn-dark" src="../figures/elements-data-kbd.dark.png" srcset="../figures/elements-data-kbd.dark.png 2x" alt="Keycaps ⌘ ⇧ P beside muted text command palette; below, keycaps for ctrl o, alt enter, esc, tab, backspace, space, up, pagedown, f5 and fn /">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-data-kbd.light.png" srcset="../figures/elements-data-kbd.light.png 2x" alt="Keycaps ⌘ ⇧ P beside muted text command palette; below, keycaps for ctrl o, alt enter, esc, tab, backspace, space, up, pagedown, f5 and fn /">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-data-kbd.dark.png" srcset="../figures/elements-data-kbd.dark.png 2x" alt="Keycaps ⌘ ⇧ P beside muted text command palette; below, keycaps for ctrl o, alt enter, esc, tab, backspace, space, up, pagedown, f5 and fn /">
 <figcaption>The example, then <code>ctrl o</code>, <code>alt enter</code>, <code>esc</code>, <code>tab</code>, <code>backspace</code>, <code>space</code>, <code>up</code>, <code>pagedown</code>, <code>f5</code> and <code>fn /</code>.</figcaption>
 </figure>
 
@@ -548,7 +548,7 @@ Tern ships these 207 icons:
 
 | Group | Names |
 | --- | --- |
-| Apps and brands | `app-btop`, `app-bun`, `app-claude`, `app-codex`, `app-deno`, `app-docker`, `app-go`, `app-hammer`, `app-helix`, `app-htop`, `app-java`, `app-node`, `app-omp`, `app-python`, `app-ruby`, `app-rust`, `app-vim`, `logo`, `tern`, `pi-mark` |
+| Apps and brands | `app-btop`, `app-bun`, `app-claude`, `app-codex`, `app-deno`, `app-docker`, `app-go`, `app-hammer`, `app-helix`, `app-hermes`, `app-htop`, `app-java`, `app-node`, `app-omp`, `app-python`, `app-ruby`, `app-rust`, `app-vim`, `logo`, `tern`, `pi-mark` |
 | Arrows and navigation | `arrow-up`, `arrow-down`, `arrow-left`, `arrow-right`, `back`, `forward`, `chev`, `chev-r`, `chev-up`, `corner-down-right`, `expand`, `shrink`, `minimize`, `fit`, `zoom-in`, `zoom-out`, `more`, `grip`, `compass` |
 | Status and alerts | `check`, `x`, `x-circle`, `warn`, `info`, `help`, `bell`, `shield`, `shield-alert`, `slash`, `slash-circle`, `lock`, `key`, `key-round`, `plus`, `minus`, `clock`, `timer` |
 | Files and documents | `doc`, `file`, `file-code`, `file-image`, `file-pdf`, `file-plus`, `files`, `folder`, `folder-go`, `folder-minus`, `folder-open`, `folder-plus`, `markdown`, `note`, `clipboard`, `save`, `inbox`, `image`, `newspaper`, `trash` |
@@ -560,8 +560,8 @@ Tern ships these 207 icons:
 | People and misc | `user`, `users`, `message`, `brain`, `sparkle`, `lightbulb`, `bolt`, `flame`, `rocket`, `moon`, `sun`, `cart`, `footprints`, `scale`, `log-in`, `log-out` |
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-data-icons.light.png" srcset="../figures/elements-data-icons.light.png 2x" alt="All 207 icons in a four-column grid, each labeled with its name, in alphabetical order">
-<img class="tn-dark" src="../figures/elements-data-icons.dark.png" srcset="../figures/elements-data-icons.dark.png 2x" alt="All 207 icons in a four-column grid, each labeled with its name, in alphabetical order">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-data-icons.light.png" srcset="../figures/elements-data-icons.light.png 2x" alt="All 207 icons in a four-column grid, each labeled with its name, in alphabetical order">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-data-icons.dark.png" srcset="../figures/elements-data-icons.dark.png 2x" alt="All 207 icons in a four-column grid, each labeled with its name, in alphabetical order">
 <figcaption>Every icon, as <code>icon</code> nodes in the current text color.</figcaption>
 </figure>
 
@@ -571,7 +571,7 @@ wins over an alias:
 `success` → `check`, `done` → `check`, `error` → `x`, `failed` → `x`, `warning` → `warn`, `pending` → `clock`,
 `running` → `activity`, `aborted` → `stop`, `cancelled` → `stop`, `disabled` → `minus`, `model` → `sparkle`, `plan` →
 `list`, `goal` → `pin`, `loop` → `redo`, `git` → `branch`, `pr` → `merge`, `tokens` → `hash`, `speculation` →
-`selection`, `compaction` → `wand`, `context` → `layers`, `cost` → `hash`, `time` → `clock`, `omp` → `app-omp`,
+`selection`, `compaction` → `wand`, `context` → `layers`, `cost` → `hash`, `time` → `clock`, `omp` → `app-omp`, `hermes` → `app-hermes`,
 `agents` → `user`, `agent` → `user`, `job` → `run`, `cache` → `database`, `input` → `download`, `output` → `send`,
 `host` → `laptop`, `session` → `history`, `worktree` → `tree`, `bash` → `terminal`, `shell` → `terminal`, `python` →
 `app-python`, `edit` → `pen`, `write` → `pen`, `read` → `doc`, `web` → `globe`, `url` → `link`, `todo` → `list`,
@@ -591,9 +591,39 @@ decoded off the main thread and painted with a 6px radius and a faint `--l1` rin
 most 256 KiB) is mounted as real SVG elements, so your sheets can style and animate it.
 
 **Sizing.** `w`/`h` give the natural size in px (and so the aspect ratio); one of them alone is completed from the
-decoded ratio; neither uses the decoded size. The image fills at most the available width and keeps its ratio as
-it shrinks. `max.h` bounds the height (`"10lines"` or `"40ch"`; a fraction is ignored); `max.w` bounds the width
-through the common props.
+decoded ratio; neither uses the decoded size. Raster and SVG previews shrink both axes together to fit the
+available width and height bounds. `max.h` bounds the height (`"10lines"` or `"40ch"`; a fraction is ignored);
+`max.w` bounds the width through the common props.
+
+**Fit and scaling.** Raster pixels are placed in that box by `object-fit`, always centered: `contain` (the default,
+so a declared size or CSS dimensions that differ from the source ratio never stretch the image), `cover` (fill the
+box, cropping the overflow), `fill` (stretch to the box), `none` (the decoded size, one image pixel per CSS px,
+cropped to the box) or `scale-down` (`none`, or `contain` when that is smaller). `image-rendering: pixelated` (or
+`crisp-edges`) scales with the nearest pixel, keeping pixel art's hard edges; `auto`, `smooth` and `high-quality`
+filter smoothly. Set both on the node, e.g. `.sf-image[data-role='sprite'] { object-fit: cover; image-rendering:
+pixelated }`; `object-position` is not supported.
+
+**Animation.** An animated GIF, APNG or animated WebP plays on its own: each frame for its delay (delays of 10 ms or
+less play at 100 ms, as browsers do), as many times as the file's loop count says (forever when it says so), then
+holds its last frame. It starts when the image first draws and runs on the window's animation clock, so it pauses
+with the clock and skips ahead to the right frame after being scrolled out of view, where it costs no frames. An
+animation over 1024 frames or 64 MiB of decoded pixels shows its first frame, still.
+
+**Children.** An image's children are drawn over it, in a layer (`.sf-img-over`) covering the node's box: the
+picture's height and the node's width. The layer is a column like `col`, so a sprite over a background is an `image`
+inside an `image`, placed with a `row`/`col` or your own CSS; no absolute positioning is needed. Only the children take
+the pointer: a click on the picture around them still zooms it, a click on a child does not.
+
+```lua
+-- an animated sprite standing at the bottom right of a background, its pixels scaled hard-edged
+ui.node("image", { blob = state.meadow, alt = "Meadow", role = "meadow" }, {
+	ui.node("col", { grow = 1 }),
+	ui.node("row", { justify = "end" }, {
+		ui.node("image", { blob = state.pikachu, alt = "Pikachu", role = "sprite", w = 96, h = 96 }),
+	}),
+})
+-- your sheet: .sf-image[data-role='sprite'] { image-rendering: pixelated }
+```
 
 **While missing.** Until the blob arrives, while it decodes, or when it is not an image Tern can decode, the node
 shows a dashed placeholder card with an image icon and `alt` (or "Image loading" / "Image unavailable"), with a
@@ -630,7 +660,7 @@ views only.
 | `title` | string | none | Common prop: the tooltip. The zoom viewer also uses it as the name when there is no `alt` |
 | `href`, `path` | string | none | Read by the zoom viewer, which may offer to open that file or page (`href` first) |
 
-**Children:** none (ignored).
+**Children:** any nodes, drawn over the picture (see **Children** above).
 
 **Events:** none of its own. A click on a zoomable image runs the `zoom` action (it shows the viewer; your block
 receives nothing). Your own `actions` work as on any node and take precedence for `click`.
@@ -641,10 +671,12 @@ receives nothing). Your own `actions` work as on any node and take precedence fo
 <!-- raster -->
 <div class="sf sf-image sf-zoom" data-id="…">
 	<img class="sf-img-frame" alt="Build graph">
+	<div class="sf-img-over">…children…</div>
 </div>
 <!-- SVG -->
 <div class="sf sf-image sf-zoom" data-id="…">
 	<svg class="sf-img-svg" role="img" aria-label="Build graph" viewBox="…">…</svg>
+	<div class="sf-img-over">…children…</div>
 </div>
 <!-- missing or loading -->
 <div class="sf sf-image missing" data-id="…">
@@ -652,6 +684,7 @@ receives nothing). Your own `actions` work as on any node and take precedence fo
 		<span class="sf-img-ic"><svg class="ico">…</svg></span>
 		<span class="sf-img-alt">Build graph</span>
 	</div>
+	<div class="sf-img-over">…children…</div>
 </div>
 ```
 
@@ -662,6 +695,7 @@ receives nothing). Your own `actions` work as on any node and take precedence fo
 | Not drawn (absent, loading, undecodable) | `.sf-image.missing` |
 | Raster frame | `.sf-img-frame` (inner, may change) |
 | Inline SVG | `.sf-img-svg` (inner) and your own classes inside it |
+| The children's layer | `.sf-img-over` (inner, may change) |
 | Placeholder | `.sf-img-card`, `.sf-img-ic`, `.sf-img-alt` (inner, may change); `[aria-busy='true']` while loading |
 
 The frame's ring brightens to `--l3` on hover and dims to 85% opacity while pressed. The placeholder card is
@@ -688,8 +722,8 @@ tern.block.define("graph", {
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-data-image.light.png" srcset="../figures/elements-data-image.light.png 2x" alt="A bar chart PNG with rounded corners and a faint ring, its height capped at ten lines, above a dashed placeholder card with an image icon reading Coverage chart">
-<img class="tn-dark" src="../figures/elements-data-image.dark.png" srcset="../figures/elements-data-image.dark.png 2x" alt="A bar chart PNG with rounded corners and a faint ring, its height capped at ten lines, above a dashed placeholder card with an image icon reading Coverage chart">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-data-image.light.png" srcset="../figures/elements-data-image.light.png 2x" alt="A bar chart PNG with rounded corners and a faint ring, its height capped at ten lines, above a dashed placeholder card with an image icon reading Coverage chart">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-data-image.dark.png" srcset="../figures/elements-data-image.dark.png 2x" alt="A bar chart PNG with rounded corners and a faint ring, its height capped at ten lines, above a dashed placeholder card with an image icon reading Coverage chart">
 <figcaption>A 480×240 PNG under <code>max.h = "10lines"</code> keeps its ratio as it shrinks; <code>state.coverage</code> names a blob that never arrived, so its node shows the placeholder.</figcaption>
 </figure>
 

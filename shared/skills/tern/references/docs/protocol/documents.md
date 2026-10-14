@@ -82,8 +82,8 @@ a folded card and a shimmer:
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/protocol-documents-before.light.png" srcset="../figures/protocol-documents-before.light.png 2x" alt="A line reading Checking the build, a folded card cargo check with a Running chip, and a Working label">
-<img class="tn-dark" src="../figures/protocol-documents-before.dark.png" srcset="../figures/protocol-documents-before.dark.png 2x" alt="A line reading Checking the build, a folded card cargo check with a Running chip, and a Working label">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/protocol-documents-before.light.png" srcset="../figures/protocol-documents-before.light.png 2x" alt="A line reading Checking the build, a folded card cargo check with a Running chip, and a Working label">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/protocol-documents-before.dark.png" srcset="../figures/protocol-documents-before.dark.png 2x" alt="A line reading Checking the build, a folded card cargo check with a Running chip, and a Working label">
 <figcaption>After frame 1.</figcaption>
 </figure>
 
@@ -99,8 +99,8 @@ removes the shimmer and adds a closing line:
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/protocol-documents-after.light.png" srcset="../figures/protocol-documents-after.light.png 2x" alt="The line now reads Checking the build, then the tests; the card shows Done and its output; the Working label is gone and All 42 tests pass follows">
-<img class="tn-dark" src="../figures/protocol-documents-after.dark.png" srcset="../figures/protocol-documents-after.dark.png 2x" alt="The line now reads Checking the build, then the tests; the card shows Done and its output; the Working label is gone and All 42 tests pass follows">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/protocol-documents-after.light.png" srcset="../figures/protocol-documents-after.light.png 2x" alt="The line now reads Checking the build, then the tests; the card shows Done and its output; the Working label is gone and All 42 tests pass follows">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/protocol-documents-after.dark.png" srcset="../figures/protocol-documents-after.dark.png 2x" alt="The line now reads Checking the build, then the tests; the card shows Done and its output; the Working label is gone and All 42 tests pass follows">
 <figcaption>After frame 2: one draw, no intermediate state.</figcaption>
 </figure>
 

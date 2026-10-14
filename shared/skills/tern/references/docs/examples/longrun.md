@@ -23,16 +23,16 @@ that uses both halves for one feature, with a module they share.
 
 ## Install
 
-From where you unpacked [the SDK](../index.md#the-sdk):
-
 ```sh
-tern plugin install tern-sdk/examples/longrun
+tern plugin install github.com/stencil-hq/tern-sdk/plugins/examples/longrun
 ```
 
-While you change it, link it instead so Tern reloads it on every save:
+While you change it, clone the SDK and link the folder instead, so Tern
+reloads it on every save:
 
 ```sh
-tern plugin link tern-sdk/examples/longrun
+git clone https://github.com/stencil-hq/tern-sdk
+tern plugin link tern-sdk/plugins/examples/longrun
 ```
 
 The timings come from shell integration's prompt marks, so panes need it on

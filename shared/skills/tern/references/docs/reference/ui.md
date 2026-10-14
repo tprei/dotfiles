@@ -32,7 +32,7 @@ Props every node takes:
 
 | Prop | Meaning |
 | --- | --- |
-| `key` | Identity among its siblings: keeps the node's id, and Tern's view state (scroll, focus, collapsed), across reorders. Siblings must not share a key |
+| `key` | Identity among its siblings: keeps the node's id across reorders. Local state is remembered by this key under its parent, not surface-wide, and survives deleting and adding a node with a new id and the same key under the same parent. Without a key, local state uses the node's id. Siblings must not share a key; the same key under another parent has independent state |
 | `tone` | Semantic color: `accent`, `success`, `warning`, `error`, `info`, `muted`, … |
 | `role` | A role string exposed as `data-role` for CSS |
 | `collapsible` | On `card` and `section`, `true` enables the header's disclosure control |

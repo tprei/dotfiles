@@ -27,16 +27,15 @@ Ways to open it:
 
 ## Install
 
-From where you unpacked the SDK:
-
 ```sh
-tern plugin install tern-sdk/examples/jsonx
+tern plugin install github.com/stencil-hq/tern-sdk/plugins/examples/jsonx
 ```
 
-or, to load it in place and reload on every save:
+or, to load a clone in place and reload on every save:
 
 ```sh
-tern plugin link tern-sdk/examples/jsonx
+git clone https://github.com/stencil-hq/tern-sdk
+tern plugin link tern-sdk/plugins/examples/jsonx
 ```
 
 Walkthrough: <https://docs.stencil.so/tern/examples/jsonx.html>.

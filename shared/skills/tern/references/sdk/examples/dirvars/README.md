@@ -24,16 +24,15 @@ approved files up.
 
 ## Install
 
-From where you unpacked the SDK:
-
 ```sh
-tern plugin install tern-sdk/examples/dirvars
+tern plugin install github.com/stencil-hq/tern-sdk/plugins/examples/dirvars
 ```
 
-or, to load it in place and reload on every save:
+or, to load a clone in place and reload on every save:
 
 ```sh
-tern plugin link tern-sdk/examples/dirvars
+git clone https://github.com/stencil-hq/tern-sdk
+tern plugin link tern-sdk/plugins/examples/dirvars
 ```
 
 ## Approve a project

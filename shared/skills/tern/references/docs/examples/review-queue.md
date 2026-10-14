@@ -25,17 +25,18 @@ by a background process, and for a window command that opens a block.
 
 The block runs `gh` on the machine that runs your panes (the daemon's
 host), so install the [GitHub CLI](https://cli.github.com) there and sign
-in with `gh auth login`. Then, from where you unpacked
-[the SDK](../index.md#the-sdk):
+in with `gh auth login`. Then:
 
 ```sh
-tern plugin install tern-sdk/examples/review-queue
+tern plugin install github.com/stencil-hq/tern-sdk/plugins/examples/review-queue
 ```
 
-While you change it, link it instead so Tern reloads it on every save:
+While you change it, clone the SDK and link the folder instead, so Tern
+reloads it on every save:
 
 ```sh
-tern plugin link tern-sdk/examples/review-queue
+git clone https://github.com/stencil-hq/tern-sdk
+tern plugin link tern-sdk/plugins/examples/review-queue
 ```
 
 Press `alt+shift+cmd+r`, or run **Open review queue** from the palette.

@@ -72,7 +72,8 @@ Sources: `references/docs/guides/distribution.md#remote-hosts`, `references/docs
 | Manifest, directories, ids | `references/docs/concepts/packages.md`, `references/docs/reference/manifest.md` |
 | CLI, errors, limits | `references/docs/reference/cli.md`, `references/docs/reference/errors.md`, `references/docs/reference/limits.md` |
 | Native UI from any program | `references/docs/protocol/` |
+| Scripted windows, screenshots and harness commands | `references/docs/scripts/` |
 
 ## Refresh
 
-Run `python3 scripts/sync_docs.py` from this skill's directory. It reads the site's table of contents, re-downloads every page and `tern-sdk.tar.gz`, and rewrites `references/docs/`, `references/sdk/`, and `references/toc.md`. `references/cookbook.md` is hand-written; re-check its citations after a refresh.
+Run `python3 scripts/sync_docs.py` from this skill's directory. It reads the site's table of contents, re-downloads every page, resolves `stencil-hq/tern-sdk`'s default-branch head commit through the GitHub API, and unpacks only that commit archive's `plugins/` contents (`tern.d.luau`, `examples/`) into `references/sdk/`. It rewrites `references/docs/`, `references/sdk/`, and `references/toc.md`. `references/cookbook.md` is hand-written; re-check its citations after a refresh.

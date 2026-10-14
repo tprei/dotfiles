@@ -37,8 +37,8 @@ ui.col({
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-index-overview.light.png" srcset="../figures/elements-index-overview.light.png 2x" alt="A Deploy card holding a key/value list and a progress bar, a row with an accent badge, a green check icon, ⌘ K keycaps and a dots spinner, a labeled rule and a highlighted Rust snippet">
-<img class="tn-dark" src="../figures/elements-index-overview.dark.png" srcset="../figures/elements-index-overview.dark.png 2x" alt="A Deploy card holding a key/value list and a progress bar, a row with an accent badge, a green check icon, ⌘ K keycaps and a dots spinner, a labeled rule and a highlighted Rust snippet">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-index-overview.light.png" srcset="../figures/elements-index-overview.light.png 2x" alt="A Deploy card holding a key/value list and a progress bar, a row with an accent badge, a green check icon, ⌘ K keycaps and a dots spinner, a labeled rule and a highlighted Rust snippet">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-index-overview.dark.png" srcset="../figures/elements-index-overview.dark.png 2x" alt="A Deploy card holding a key/value list and a progress bar, a row with an accent badge, a green check icon, ⌘ K keycaps and a dots spinner, a labeled rule and a highlighted Rust snippet">
 <figcaption>Eleven kinds from one builder call: col, card, kv, progress, row, badge, icon, kbd, spinner, rule and code.</figcaption>
 </figure>
 
@@ -71,7 +71,7 @@ these pages describe is in [Styling Views](../styles/index.md).
 | `badge` | [Data](data.md#badge) | `badge` | none | A pill chip |
 | `kbd` | [Data](data.md#kbd) | `node` | none | Keycaps |
 | `icon` | [Data](data.md#icon) | `node` | none | A named icon |
-| `image` | [Data](data.md#image) | `node` | none | An image from a blob |
+| `image` | [Data](data.md#image) | `node` | over the picture | An image from a blob (animations play) |
 | `list` | [Lists, Tabs and Pickers](lists.md#list) | `list` | its `item`s | A selectable list |
 | `item` | [Lists, Tabs and Pickers](lists.md#item) | `list` | none | One list row |
 | `tabs` | [Lists, Tabs and Pickers](lists.md#tabs) | `node` | none | A tab strip |
@@ -114,7 +114,7 @@ These work on every kind, in addition to the kind's own props.
 
 | Prop | Type | Effect |
 | --- | --- | --- |
-| `key` | string | Identity among siblings in a block view. It keeps the node's id, and with it Tern's view state for the node (collapsed, scroll, control state), across reorders. Two siblings with the same key are an error (`duplicate child key`) |
+| `key` | string | Identity among siblings in a block view. It keeps the node's id across reorders. Tern remembers local state by this key among the node's siblings, not across the whole surface: deleting and adding a node with a new id and the same key under the same parent preserves that state. The same key under another parent has independent state. Without a key, local state uses the node's id. Two siblings with the same key are an error (`duplicate child key`) |
 | `role` | string | A name of yours, exposed to CSS as `data-role`. Use names under your plugin id (`myplugin.row`) |
 | `tone` | `neutral`, `accent`, `info`, `success`, `warning`, `error`, `pending`, `muted`, `user` | The semantic color of the node's chrome (a card's ring, a badge's pill, a spinner, a progress fill, a list row's icon). Exposed as `data-tone`, which sets the tone color `--tc` on the element; other values are ignored |
 | `hidden` | boolean | Keeps the node mounted but not laid out (class `sf-hidden`, `display: none`). Cheaper than removing and adding it again |
@@ -148,8 +148,8 @@ return ui.col(rows)
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-index-tones.light.png" srcset="../figures/elements-index-tones.light.png 2x" alt="Nine rows, one per tone, each a tinted badge, a dots spinner and a progress bar in that tone's color, then success, error and info cards with rings in their tone">
-<img class="tn-dark" src="../figures/elements-index-tones.dark.png" srcset="../figures/elements-index-tones.dark.png 2x" alt="Nine rows, one per tone, each a tinted badge, a dots spinner and a progress bar in that tone's color, then success, error and info cards with rings in their tone">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-index-tones.light.png" srcset="../figures/elements-index-tones.light.png 2x" alt="Nine rows, one per tone, each a tinted badge, a dots spinner and a progress bar in that tone's color, then success, error and info cards with rings in their tone">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-index-tones.dark.png" srcset="../figures/elements-index-tones.dark.png 2x" alt="Nine rows, one per tone, each a tinted badge, a dots spinner and a progress bar in that tone's color, then success, error and info cards with rings in their tone">
 <figcaption>A <code>neutral</code> badge is a gray chip and a <code>neutral</code> progress bar fills with the accent.</figcaption>
 </figure>
 

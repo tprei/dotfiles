@@ -153,8 +153,8 @@ When the pane narrows, `clock` goes first, then `branch`; `path` truncates to
 12 cells before `errors` would drop.
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-chrome-status.light.png" srcset="../figures/elements-chrome-status.light.png 2x" alt="Two status strips in the dock: the full bar with branch, path, a red warning count and a clock; below it a narrower copy where the clock is gone and the path ends in an ellipsis">
-<img class="tn-dark" src="../figures/elements-chrome-status.dark.png" srcset="../figures/elements-chrome-status.dark.png 2x" alt="Two status strips in the dock: the full bar with branch, path, a red warning count and a clock; below it a narrower copy where the clock is gone and the path ends in an ellipsis">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-chrome-status.light.png" srcset="../figures/elements-chrome-status.light.png 2x" alt="Two status strips in the dock: the full bar with branch, path, a red warning count and a clock; below it a narrower copy where the clock is gone and the path ends in an ellipsis">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-chrome-status.dark.png" srcset="../figures/elements-chrome-status.dark.png 2x" alt="Two status strips in the dock: the full bar with branch, path, a red warning count and a clock; below it a narrower copy where the clock is gone and the path ends in an ellipsis">
 <figcaption>The bar with <code>errors = 2</code>, and below it the same bar capped at 45% of the dock (<code>max = { w = 0.45 }</code>): <code>clock</code> dropped, <code>path</code> truncated.</figcaption>
 </figure>
 
@@ -165,12 +165,18 @@ A transient notice. The node's own element is empty and hidden
 kit's toast layer: a glass notice with 12 px corners fixed at the bottom
 center of the window (28 px from the bottom), sized to its text and wrapping
 past 560 px (or the window width less 32 px), under `<body>` rather than in
-your surface. It shows when the node is first drawn and again whenever its
-`text`, `sub`, `tone` or `ttl` changes; other prop changes don't re-show it.
-One toast shows at a time in the whole window, so a new one (yours or
-Tern's) replaces the one up. It stays 2.2 s (success) or 5.2 s (info, error),
+your surface. While your dock holds something on screen (a composer), the
+toast rises to 12 px above it instead, so it never covers your input. It
+shows when the node is first drawn and again whenever its `text`, `sub`,
+`tone` or `ttl` changes; other prop changes don't re-show it, and neither
+does the node scrolling out of a long transcript and back. One toast shows at
+a time in the whole window, so a new one (yours or Tern's) replaces the one
+up, in place: a toast updated in quick succession changes its text without
+animating in again. It stays 2.2 s (success) or 5.2 s (info, error),
 then fades over 260 ms; `ttl` takes it down earlier (fading over 200 ms, at
-once under reduced motion). Removing the node removes a toast still showing.
+once under reduced motion). Removing the node removes a toast still showing,
+scrolled out of the transcript or not, and a node added later under the same
+id is a new toast: it shows even with the same props.
 
 To show a notice from a handler without keeping a node, use `cx:toast` (see
 [Host API](../reference/api-host.md)).
@@ -230,8 +236,8 @@ With `state.notice = "Save failed"`, `state.failed = true` and
 of the window:
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-chrome-toast.light.png" srcset="../figures/elements-chrome-toast.light.png 2x" alt="An error toast at the bottom center of the window: a warning icon, Save failed, and a mono detail disk full: /Users/me/notes, in a glass notice with a red ring">
-<img class="tn-dark" src="../figures/elements-chrome-toast.dark.png" srcset="../figures/elements-chrome-toast.dark.png 2x" alt="An error toast at the bottom center of the window: a warning icon, Save failed, and a mono detail disk full: /Users/me/notes, in a glass notice with a red ring">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-chrome-toast.light.png" srcset="../figures/elements-chrome-toast.light.png 2x" alt="An error toast at the bottom center of the window: a warning icon, Save failed, and a mono detail disk full: /Users/me/notes, in a glass notice with a red ring">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-chrome-toast.dark.png" srcset="../figures/elements-chrome-toast.dark.png 2x" alt="An error toast at the bottom center of the window: a warning icon, Save failed, and a mono detail disk full: /Users/me/notes, in a glass notice with a red ring">
 </figure>
 
 ## `overlay`
@@ -388,8 +394,8 @@ end
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-chrome-overlay-modal.light.png" srcset="../figures/elements-chrome-overlay-modal.light.png 2x" alt="A small glass dialog titled Delete 3 notes? centered over a dimmed view, with the line This can't be undone and Cancel and Delete buttons">
-<img class="tn-dark" src="../figures/elements-chrome-overlay-modal.dark.png" srcset="../figures/elements-chrome-overlay-modal.dark.png 2x" alt="A small glass dialog titled Delete 3 notes? centered over a dimmed view, with the line This can't be undone and Cancel and Delete buttons">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-chrome-overlay-modal.light.png" srcset="../figures/elements-chrome-overlay-modal.light.png 2x" alt="A small glass dialog titled Delete 3 notes? centered over a dimmed view, with the line This can't be undone and Cancel and Delete buttons">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-chrome-overlay-modal.dark.png" srcset="../figures/elements-chrome-overlay-modal.dark.png 2x" alt="A small glass dialog titled Delete 3 notes? centered over a dimmed view, with the line This can't be undone and Cancel and Delete buttons">
 <figcaption>A <code>modal</code>, <code>sm</code> overlay with a <code>head</code>: the backdrop dims the view under it.</figcaption>
 </figure>
 
@@ -410,8 +416,8 @@ layer = ui.col({
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-chrome-overlay-caret.light.png" srcset="../figures/elements-chrome-overlay-caret.light.png 2x" alt="A glass completion list of /review, /revert and /rename floating just above the caret of a one-line editor at the bottom of the view">
-<img class="tn-dark" src="../figures/elements-chrome-overlay-caret.dark.png" srcset="../figures/elements-chrome-overlay-caret.dark.png 2x" alt="A glass completion list of /review, /revert and /rename floating just above the caret of a one-line editor at the bottom of the view">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-chrome-overlay-caret.light.png" srcset="../figures/elements-chrome-overlay-caret.light.png 2x" alt="A glass completion list of /review, /revert and /rename floating just above the caret of a one-line editor at the bottom of the view">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-chrome-overlay-caret.dark.png" srcset="../figures/elements-chrome-overlay-caret.dark.png 2x" alt="A glass completion list of /review, /revert and /rename floating just above the caret of a one-line editor at the bottom of the view">
 <figcaption>There is more room above the dock's editor than below it, so the card flips above the caret (<code>.above</code>).</figcaption>
 </figure>
 

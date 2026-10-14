@@ -26,17 +26,17 @@ chain.
 ## Install
 
 The block runs `gh` on the machine that runs your panes, so install and
-sign in to the GitHub CLI there (`gh auth login`). Then, from where you
-unpacked the SDK:
+sign in to the GitHub CLI there (`gh auth login`). Then:
 
 ```sh
-tern plugin install tern-sdk/examples/review-queue
+tern plugin install github.com/stencil-hq/tern-sdk/plugins/examples/review-queue
 ```
 
-or, to load it in place and reload on every save:
+or, to load a clone in place and reload on every save:
 
 ```sh
-tern plugin link tern-sdk/examples/review-queue
+git clone https://github.com/stencil-hq/tern-sdk
+tern plugin link tern-sdk/plugins/examples/review-queue
 ```
 
 Walkthrough: <https://docs.stencil.so/tern/examples/review-queue.html>.

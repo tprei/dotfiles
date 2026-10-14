@@ -147,8 +147,8 @@ return ui.col({
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-motion-spinner.light.png" srcset="../figures/elements-motion-spinner.light.png 2x" alt="The four spinner styles, braille, starburst, dots and orbit, each with its name as label, in the accent color; below, an info-toned dots spinner labeled Syncing 3 repos">
-<img class="tn-dark" src="../figures/elements-motion-spinner.dark.png" srcset="../figures/elements-motion-spinner.dark.png 2x" alt="The four spinner styles, braille, starburst, dots and orbit, each with its name as label, in the accent color; below, an info-toned dots spinner labeled Syncing 3 repos">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-motion-spinner.light.png" srcset="../figures/elements-motion-spinner.light.png 2x" alt="The four spinner styles, braille, starburst, dots and orbit, each with its name as label, in the accent color; below, an info-toned dots spinner labeled Syncing 3 repos">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-motion-spinner.dark.png" srcset="../figures/elements-motion-spinner.dark.png 2x" alt="The four spinner styles, braille, starburst, dots and orbit, each with its name as label, in the accent color; below, an info-toned dots spinner labeled Syncing 3 repos">
 <figcaption>Every style, caught at one instant of its loop, and a toned spinner with a styled label.</figcaption>
 </figure>
 
@@ -216,8 +216,8 @@ return ui.node("shimmer", {
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-motion-shimmer.light.png" srcset="../figures/elements-motion-shimmer.light.png 2x" alt="The text Deploying to staging… in muted gray, with the info and accent colors of the sweep passing over its last word">
-<img class="tn-dark" src="../figures/elements-motion-shimmer.dark.png" srcset="../figures/elements-motion-shimmer.dark.png 2x" alt="The text Deploying to staging… in muted gray, with the info and accent colors of the sweep passing over its last word">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-motion-shimmer.light.png" srcset="../figures/elements-motion-shimmer.light.png 2x" alt="The text Deploying to staging… in muted gray, with the info and accent colors of the sweep passing over its last word">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-motion-shimmer.dark.png" srcset="../figures/elements-motion-shimmer.dark.png 2x" alt="The text Deploying to staging… in muted gray, with the info and accent colors of the sweep passing over its last word">
 <figcaption>One instant of the sweep: characters ahead of and behind the highlight sit at the low color.</figcaption>
 </figure>
 
@@ -281,8 +281,8 @@ return ui.col({
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-motion-elapsed.light.png" srcset="../figures/elements-motion-elapsed.light.png 2x" alt="Three rows: build 13.8s, tests 18.4s, retry in 0:28">
-<img class="tn-dark" src="../figures/elements-motion-elapsed.dark.png" srcset="../figures/elements-motion-elapsed.dark.png 2x" alt="Three rows: build 13.8s, tests 18.4s, retry in 0:28">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-motion-elapsed.light.png" srcset="../figures/elements-motion-elapsed.light.png 2x" alt="Three rows: build 13.8s, tests 18.4s, retry in 0:28">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-motion-elapsed.dark.png" srcset="../figures/elements-motion-elapsed.dark.png 2x" alt="Three rows: build 13.8s, tests 18.4s, retry in 0:28">
 <figcaption>Drawn about 1.5 s after the frame arrived: the running timer and the countdown have moved on from their ages; the stopped one hasn't.</figcaption>
 </figure>
 
@@ -376,8 +376,8 @@ return ui.col({
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-motion-progress.light.png" srcset="../figures/elements-motion-progress.light.png 2x" alt="Three progress bars: an accent fill at 40%, a green success fill at 85%, and an indeterminate bar whose short fill sits near the start of the track, labeled Preparing…">
-<img class="tn-dark" src="../figures/elements-motion-progress.dark.png" srcset="../figures/elements-motion-progress.dark.png 2x" alt="Three progress bars: an accent fill at 40%, a green success fill at 85%, and an indeterminate bar whose short fill sits near the start of the track, labeled Preparing…">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-motion-progress.light.png" srcset="../figures/elements-motion-progress.light.png 2x" alt="Three progress bars: an accent fill at 40%, a green success fill at 85%, and an indeterminate bar whose short fill sits near the start of the track, labeled Preparing…">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-motion-progress.dark.png" srcset="../figures/elements-motion-progress.dark.png 2x" alt="Three progress bars: an accent fill at 40%, a green success fill at 85%, and an indeterminate bar whose short fill sits near the start of the track, labeled Preparing…">
 <figcaption>Determinate, toned and indeterminate. Each track takes the width its label leaves.</figcaption>
 </figure>
 
@@ -512,8 +512,8 @@ return ui.col({
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-motion-meter.light.png" srcset="../figures/elements-motion-meter.light.png 2x" alt="A bar meter at 84% drawn in the warning color with a warning tick at 90%, labeled 84% 512G; below, a small ring split into a blue used part and a gray hatched cache part labeled 50%, a 20-cell block grid with 12 cells lit labeled 60%, and a row of five slim stepped bars with three lit">
-<img class="tn-dark" src="../figures/elements-motion-meter.dark.png" srcset="../figures/elements-motion-meter.dark.png 2x" alt="A bar meter at 84% drawn in the warning color with a warning tick at 90%, labeled 84% 512G; below, a small ring split into a blue used part and a gray hatched cache part labeled 50%, a 20-cell block grid with 12 cells lit labeled 60%, and a row of five slim stepped bars with three lit">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-motion-meter.light.png" srcset="../figures/elements-motion-meter.light.png 2x" alt="A bar meter at 84% drawn in the warning color with a warning tick at 90%, labeled 84% 512G; below, a small ring split into a blue used part and a gray hatched cache part labeled 50%, a 20-cell block grid with 12 cells lit labeled 60%, and a row of five slim stepped bars with three lit">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-motion-meter.dark.png" srcset="../figures/elements-motion-meter.dark.png 2x" alt="A bar meter at 84% drawn in the warning color with a warning tick at 90%, labeled 84% 512G; below, a small ring split into a blue used part and a gray hatched cache part labeled 50%, a 20-cell block grid with 12 cells lit labeled 60%, and a row of five slim stepped bars with three lit">
 <figcaption>A bar past its <code>warn</code> threshold with a mark, a ring of two parts, a <code>sm</code> block grid (20 cells) and <code>steps = 5</code>.</figcaption>
 </figure>
 
@@ -571,8 +571,8 @@ return ui.col({
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-motion-chart.light.png" srcset="../figures/elements-motion-chart.light.png 2x" alt="A small bar chart of seven accent-colored bars of varying height; below, a green sparkline of fifteen thin bars with the summary p95 latency, last 15 min">
-<img class="tn-dark" src="../figures/elements-motion-chart.dark.png" srcset="../figures/elements-motion-chart.dark.png 2x" alt="A small bar chart of seven accent-colored bars of varying height; below, a green sparkline of fifteen thin bars with the summary p95 latency, last 15 min">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-motion-chart.light.png" srcset="../figures/elements-motion-chart.light.png 2x" alt="A small bar chart of seven accent-colored bars of varying height; below, a green sparkline of fifteen thin bars with the summary p95 latency, last 15 min">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-motion-chart.dark.png" srcset="../figures/elements-motion-chart.dark.png 2x" alt="A small bar chart of seven accent-colored bars of varying height; below, a green sparkline of fifteen thin bars with the summary p95 latency, last 15 min">
 <figcaption>A <code>sm</code> bar chart and a spark with a <code>token</code> and a <code>summary</code>.</figcaption>
 </figure>
 
@@ -632,8 +632,8 @@ return ui.node("chart", {
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-motion-heatmap.light.png" srcset="../figures/elements-motion-heatmap.light.png 2x" alt="A heatmap of 7 rows by 20 columns in four shades of green over empty gray cells, with month labels Sep to Jan above, row labels Mon, Wed and Fri at the left, and the summary 412 deploys below; the last two cells of the final column are missing">
-<img class="tn-dark" src="../figures/elements-motion-heatmap.dark.png" srcset="../figures/elements-motion-heatmap.dark.png 2x" alt="A heatmap of 7 rows by 20 columns in four shades of green over empty gray cells, with month labels Sep to Jan above, row labels Mon, Wed and Fri at the left, and the summary 412 deploys below; the last two cells of the final column are missing">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-motion-heatmap.light.png" srcset="../figures/elements-motion-heatmap.light.png 2x" alt="A heatmap of 7 rows by 20 columns in four shades of green over empty gray cells, with month labels Sep to Jan above, row labels Mon, Wed and Fri at the left, and the summary 412 deploys below; the last two cells of the final column are missing">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-motion-heatmap.dark.png" srcset="../figures/elements-motion-heatmap.dark.png 2x" alt="A heatmap of 7 rows by 20 columns in four shades of green over empty gray cells, with month labels Sep to Jan above, row labels Mon, Wed and Fri at the left, and the summary 412 deploys below; the last two cells of the final column are missing">
 <figcaption>Twenty weeks at the default <code>md</code> size. A <code>null</code> cell (<code>data-l="n"</code>) draws nothing, as in the last column.</figcaption>
 </figure>
 
@@ -718,8 +718,8 @@ return ui.node("row", { gap = "lg" }, cells)
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-motion-effort.light.png" srcset="../figures/elements-motion-effort.light.png 2x" alt="Eight 14 px effort glyphs, each over its level name: off is an empty ring; minimal through xhigh fill one to five sixths in gray, teal, blue, amber and red; max is an orange ring with flames rising off it and an ember inside; auto is a dashed empty ring">
-<img class="tn-dark" src="../figures/elements-motion-effort.dark.png" srcset="../figures/elements-motion-effort.dark.png 2x" alt="Eight 14 px effort glyphs, each over its level name: off is an empty ring; minimal through xhigh fill one to five sixths in gray, teal, blue, amber and red; max is an orange ring with flames rising off it and an ember inside; auto is a dashed empty ring">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-motion-effort.light.png" srcset="../figures/elements-motion-effort.light.png 2x" alt="Eight 14 px effort glyphs, each over its level name: off is an empty ring; minimal through xhigh fill one to five sixths in gray, teal, blue, amber and red; max is an orange ring with flames rising off it and an ember inside; auto is a dashed empty ring">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-motion-effort.dark.png" srcset="../figures/elements-motion-effort.dark.png 2x" alt="Eight 14 px effort glyphs, each over its level name: off is an empty ring; minimal through xhigh fill one to five sixths in gray, teal, blue, amber and red; max is an orange ring with flames rising off it and an ember inside; auto is a dashed empty ring">
 <figcaption>Every rung, and <code>auto</code> as an unresolved level.</figcaption>
 </figure>
 

@@ -1,5 +1,6 @@
 import concurrent.futures
 import io
+import json
 import os
 import re
 import shutil
@@ -9,6 +10,8 @@ import urllib.request
 from pathlib import Path
 
 BASE = "https://docs.stencil.so/tern/"
+SDK_REPO_API = "https://api.github.com/repos/stencil-hq/tern-sdk"
+SDK_ARCHIVE = "https://github.com/stencil-hq/tern-sdk/archive/{sha}.tar.gz"
 REFERENCES = Path(__file__).resolve().parent.parent / "references"
 DOCS_DIR = REFERENCES / "docs"
 SDK_DIR = REFERENCES / "sdk"
@@ -74,16 +77,24 @@ def render_toc(entries: list[tuple[str, str, str]], pages: dict[str, str]) -> st
     return "\n".join(lines) + "\n"
 
 
-def extract_sdk(archive: bytes, destination: Path) -> None:
+def resolve_sdk_commit() -> str:
+    branch = json.loads(get(SDK_REPO_API)[1])["default_branch"]
+    return json.loads(get(f"{SDK_REPO_API}/commits/{branch}")[1])["sha"]
+
+
+def extract_sdk(archive: bytes, root: str, destination: Path) -> None:
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as tar:
         members = []
         for member in tar.getmembers():
             name = member.name.removeprefix("./")
-            if name == "tern-sdk":
+            if name == root:
                 continue
-            if not name.startswith("tern-sdk/"):
+            if not name.startswith(root + "/"):
                 raise RuntimeError(f"unexpected SDK archive member {member.name}")
-            member.name = name.removeprefix("tern-sdk/")
+            inside = name.removeprefix(root + "/")
+            if not inside.startswith("plugins/"):
+                continue
+            member.name = inside.removeprefix("plugins/")
             members.append(member)
         tar.extractall(destination, members=members, filter="data")
 
@@ -93,7 +104,8 @@ def main() -> None:
     paths = [path for _, path, _ in entries]
     with concurrent.futures.ThreadPoolExecutor(16) as pool:
         pages = dict(zip(paths, pool.map(fetch_page, paths)))
-    _, sdk_archive = get(BASE + "tern-sdk.tar.gz")
+    sha = resolve_sdk_commit()
+    _, sdk_archive = get(SDK_ARCHIVE.format(sha=sha))
 
     with tempfile.TemporaryDirectory(dir=REFERENCES) as staging_dir:
         staging = Path(staging_dir)
@@ -101,14 +113,14 @@ def main() -> None:
             target = staging / "docs" / path
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(body, encoding="utf-8")
-        extract_sdk(sdk_archive, staging / "sdk")
+        extract_sdk(sdk_archive, f"tern-sdk-{sha}", staging / "sdk")
         (staging / "toc.md").write_text(render_toc(entries, pages), encoding="utf-8")
         for current in (DOCS_DIR, SDK_DIR):
             if current.exists():
                 shutil.rmtree(current)
             os.replace(staging / current.name, current)
         os.replace(staging / "toc.md", TOC_FILE)
-    print(f"{len(pages)} pages -> {DOCS_DIR}, SDK -> {SDK_DIR}, index -> {TOC_FILE}")
+    print(f"{len(pages)} pages -> {DOCS_DIR}, SDK {sha} -> {SDK_DIR}, index -> {TOC_FILE}")
 
 
 if __name__ == "__main__":

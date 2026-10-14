@@ -70,7 +70,10 @@ The command line ended (OSC 133;D). It fires only after a
 
 The pane's shell reported a new working directory (OSC 7). Repeated reports
 of the same directory don't fire it; a report with no usable path doesn't
-either.
+either. A pane running a command whose shell reports none (an agent block)
+follows its program instead: Tern reads where the program works every couple
+of seconds and when it sets its title, and fires `cwd` when that moved
+(macOS and Linux).
 
 | Field | Meaning |
 | --- | --- |
@@ -186,10 +189,9 @@ See [Host Hooks and the Spawn Filter](../guides/hooks.md).
 | `command_finished` | `(ev, cx)` | `{pane: number, line: string, status: number, took_ms: number}` |
 | `cwd` | `(ev, cx)` | `{pane: number, path: string}` |
 | `title` | `(ev, cx)` | `{pane: number, title: string}` |
+| `canvas_action` | `(ev, cx) -> boolean?` | `CanvasAction`: `{pane, owner, act, node, value?, mods?, text?, title?, about?}` |
 
-Any other name raises ``tern.on: unknown window event `<name>` ``. `title`
-is missing from the event list in `tern.d.luau`'s documentation but is
-accepted and delivered.
+Any other name raises ``tern.on: unknown window event `<name>` ``.
 
 ### `window_start`
 
@@ -252,6 +254,29 @@ by the window, from the start report it saw to the finish report.
 
 As the host events of the same name, for every pane in this window's
 sessions. A remote pane's `path` is a path on its host.
+
+### `canvas_action`
+
+A click on a node with a custom `actions` name in a canvas this plugin owns
+([Canvas cx](api-window.md#canvas-cx)), in the clicking window only. Only the
+owner's handlers run, in registration order, and the first truthy return
+consumes the click; with none, the window toasts `Nothing handles “<act>”
+here`. `cx.session:event(pane, {ev = "action", id = node, act = name})`
+delivers the same action without a pointer, after the calling handler
+returns; `id` is the node's id as a click reports it, and `text`, `title`
+and `about` are read from the canvas as the call left it, updates made just
+before included. Toggle, selection and Tern's own actions (`copy`, `open`,
+`zoom`) never arrive.
+
+| Field | Meaning |
+| --- | --- |
+| `pane` | The canvas pane |
+| `owner` | The plugin id that opened it |
+| `act`, `value` | The action name up to its first `=`, and the rest |
+| `node` | The clicked node's id |
+| `mods` | Modifiers held, when any |
+| `text` | The clicked node's text |
+| `title`, `about` | The canvas's title and purpose |
 
 ### Delivery and ordering
 
