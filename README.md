@@ -39,9 +39,21 @@ just usage                # provider usage report
 - Control sends Command outside terminals and stays Control inside them.
 - Tern counts as a terminal. After editing the rule, remove and re-add it in Karabiner's Complex Modifications; the enabled copy lives in `karabiner.json`.
 - `Control-Space` sends `Command-Space` in terminals, for Raycast.
-- Option sends Command; Command sends Option.
+- Option sends right Command; Command sends Option.
+- Option plus an AeroSpace key sends Ctrl+Option+Command plus that key, so Control+K reaches apps as Command+K instead of AeroSpace.
 
 Disable macOS **Input sources** shortcuts on `Control-Space`. Re-record Raycast with physical `Control-Space` (it should show `Command-Space`) and AltTab with physical `Command-Tab` (it should see `Option-Tab`).
+
+## AeroSpace
+
+`aerospace/.aerospace.toml` binds only Ctrl+Option+Command chords, which the Karabiner rule sends for physical Option, so Herdr keeps its Alt chords and Control keeps app shortcuts. AeroSpace can't tell left from right Command, so the rule does it. Without a config file, AeroSpace's default Alt bindings shadow Herdr's.
+
+- Option+h/j/k/l focuses, Option+Shift+h/j/k/l moves, Option+-/=/0 shrinks, grows, and balances, Option+Shift+F fullscreens, and Option+Shift+Space toggles floating.
+- Option+/ and Option+, switch to tiles and accordion; pressing again toggles horizontal and vertical.
+- Option+1–5 switch workspaces and return to the previous one when already there; Option+Tab jumps back, and Option+Shift+1–5 move the window.
+- Option+Z toggles workspace Z, where new Zoom windows open. Finder, System Settings, and Calculator open floating.
+- Option+Shift+; enters service mode: `Esc` reloads the config and `r` flattens the workspace tree.
+- AeroSpace starts at login with 6-pixel inner and 3-pixel outer gaps. Turn on **Group windows by application** under **Desktop & Dock** > **Mission Control** so Mission Control doesn't shrink windows parked on hidden workspaces.
 
 ## Agents
 

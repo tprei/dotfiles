@@ -1,40 +1,72 @@
 config-version = 2
 
+start-at-login = true
+
 persistent-workspaces = ["1", "2", "3", "4", "5"]
 
 [key-mapping]
     preset = 'qwerty'
 
+[gaps]
+    inner.horizontal = 6
+    inner.vertical = 6
+    outer.left = 3
+    outer.bottom = 3
+    outer.top = 3
+    outer.right = 3
+
 [mode.main.binding]
-    cmd-h = 'focus left'
-    cmd-j = 'focus down'
-    cmd-k = 'focus up'
-    cmd-l = 'focus right'
+    ctrl-alt-cmd-h = 'focus left'
+    ctrl-alt-cmd-j = 'focus down'
+    ctrl-alt-cmd-k = 'focus up'
+    ctrl-alt-cmd-l = 'focus right'
 
-    cmd-shift-h = 'move left'
-    cmd-shift-j = 'move down'
-    cmd-shift-k = 'move up'
-    cmd-shift-l = 'move right'
+    ctrl-alt-cmd-shift-h = 'move left'
+    ctrl-alt-cmd-shift-j = 'move down'
+    ctrl-alt-cmd-shift-k = 'move up'
+    ctrl-alt-cmd-shift-l = 'move right'
 
-    cmd-minus = 'resize smart -50'
-    cmd-equal = 'resize smart +50'
-    cmd-shift-f = 'fullscreen'
+    ctrl-alt-cmd-minus = 'resize smart -50'
+    ctrl-alt-cmd-equal = 'resize smart +50'
+    ctrl-alt-cmd-0 = 'balance-sizes'
+    ctrl-alt-cmd-shift-f = 'fullscreen'
+    ctrl-alt-cmd-shift-space = 'layout floating tiling'
 
-    cmd-1 = 'workspace 1'
-    cmd-2 = 'workspace 2'
-    cmd-3 = 'workspace 3'
-    cmd-4 = 'workspace 4'
-    cmd-5 = 'workspace 5'
+    ctrl-alt-cmd-slash = 'layout tiles horizontal vertical'
+    ctrl-alt-cmd-comma = 'layout accordion horizontal vertical'
 
-    cmd-shift-1 = 'move-node-to-workspace 1'
-    cmd-shift-2 = 'move-node-to-workspace 2'
-    cmd-shift-3 = 'move-node-to-workspace 3'
-    cmd-shift-4 = 'move-node-to-workspace 4'
-    cmd-shift-5 = 'move-node-to-workspace 5'
+    ctrl-alt-cmd-1 = 'workspace --auto-back-and-forth 1'
+    ctrl-alt-cmd-2 = 'workspace --auto-back-and-forth 2'
+    ctrl-alt-cmd-3 = 'workspace --auto-back-and-forth 3'
+    ctrl-alt-cmd-4 = 'workspace --auto-back-and-forth 4'
+    ctrl-alt-cmd-5 = 'workspace --auto-back-and-forth 5'
+    ctrl-alt-cmd-z = 'workspace --auto-back-and-forth Z'
+    ctrl-alt-cmd-tab = 'workspace-back-and-forth'
 
-    cmd-shift-semicolon = 'mode service'
+    ctrl-alt-cmd-shift-1 = 'move-node-to-workspace 1'
+    ctrl-alt-cmd-shift-2 = 'move-node-to-workspace 2'
+    ctrl-alt-cmd-shift-3 = 'move-node-to-workspace 3'
+    ctrl-alt-cmd-shift-4 = 'move-node-to-workspace 4'
+    ctrl-alt-cmd-shift-5 = 'move-node-to-workspace 5'
+
+    ctrl-alt-cmd-shift-semicolon = 'mode service'
 
 [mode.service.binding]
     esc = ['reload-config', 'mode main']
     r = ['flatten-workspace-tree', 'mode main']
-    f = ['layout floating tiling', 'mode main']
+
+[[on-window-detected]]
+    if.app-id = 'us.zoom.xos'
+    run = 'move-node-to-workspace Z'
+
+[[on-window-detected]]
+    if.app-id = 'com.apple.finder'
+    run = 'layout floating'
+
+[[on-window-detected]]
+    if.app-id = 'com.apple.systempreferences'
+    run = 'layout floating'
+
+[[on-window-detected]]
+    if.app-id = 'com.apple.calculator'
+    run = 'layout floating'
