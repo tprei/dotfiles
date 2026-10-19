@@ -90,8 +90,8 @@ name as `act` and the same `values`. The CLI closes with `keep`, which leaves
 the form, as last drawn, in the scrollback:
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/protocol-index-session.light.png" srcset="../figures/protocol-index-session.light.png 2x" alt="A bordered form reading Which size?, with radios Small, Medium and Large, Large checked, and a blue Create button">
-<img class="tn-dark" src="../figures/protocol-index-session.dark.png" srcset="../figures/protocol-index-session.dark.png 2x" alt="A bordered form reading Which size?, with radios Small, Medium and Large, Large checked, and a blue Create button">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/protocol-index-session.light.png" srcset="../figures/protocol-index-session.light.png 2x" alt="A bordered form reading Which size?, with radios Small, Medium and Large, Large checked, and a blue Create button">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/protocol-index-session.dark.png" srcset="../figures/protocol-index-session.dark.png 2x" alt="A bordered form reading Which size?, with radios Small, Medium and Large, Large checked, and a blue Create button">
 <figcaption>The form the session leaves behind, Large checked by the click.</figcaption>
 </figure>
 
@@ -108,6 +108,7 @@ A fuller form is in [HTML Elements](../elements/el.md#recipe-a-styled-form).
 | [Input and Events](input.md) | Keys, native editing, pointer actions, every event Tern sends |
 | [Palette, Stylesheets and Icons](theme.md) | The program palette, program stylesheets, icon glyphs |
 | [Flow Control, Persistence and Security](operations.md) | Credits, retention, snapshots, debugging, limits |
+| [SDKs](sdks.md) | Libraries for Rust, Python, Go and TypeScript that speak all of the above |
 
 The node vocabulary, every kind with its props, is in [Elements](../elements/index.md),
 and styling in [Styling Views](../styles/index.md).

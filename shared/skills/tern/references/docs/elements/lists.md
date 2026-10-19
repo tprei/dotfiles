@@ -155,8 +155,8 @@ return {
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-lists-list.light.png" srcset="../figures/elements-lists-list.light.png 2x" alt="A list of four branch rows filtered by log: the selected fix-login row has an accent tint and a leading bar, each label marks log, a warning row has an amber icon and the branch without upstream is dimmed">
-<img class="tn-dark" src="../figures/elements-lists-list.dark.png" srcset="../figures/elements-lists-list.dark.png 2x" alt="A list of four branch rows filtered by log: the selected fix-login row has an accent tint and a leading bar, each label marks log, a warning row has an amber icon and the branch without upstream is dimmed">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-lists-list.light.png" srcset="../figures/elements-lists-list.light.png 2x" alt="A list of four branch rows filtered by log: the selected fix-login row has an accent tint and a leading bar, each label marks log, a warning row has an amber icon and the branch without upstream is dimmed">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-lists-list.dark.png" srcset="../figures/elements-lists-list.dark.png 2x" alt="A list of four branch rows filtered by log: the selected fix-login row has an accent tint and a leading bar, each label marks log, a warning row has an amber icon and the branch without upstream is dimmed">
 <figcaption>Selection, <code>filter</code> marks, a <code>warning</code> tone and a disabled row.</figcaption>
 </figure>
 
@@ -304,8 +304,8 @@ ui.node("tabs", {
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-lists-tabs.light.png" srcset="../figures/elements-lists-tabs.light.png 2x" alt="A tab strip with Files active, underlined in the accent, and Commits 12 and Checks dimmed over a hairline">
-<img class="tn-dark" src="../figures/elements-lists-tabs.dark.png" srcset="../figures/elements-lists-tabs.dark.png 2x" alt="A tab strip with Files active, underlined in the accent, and Commits 12 and Checks dimmed over a hairline">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-lists-tabs.light.png" srcset="../figures/elements-lists-tabs.light.png 2x" alt="A tab strip with Files active, underlined in the accent, and Commits 12 and Checks dimmed over a hairline">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-lists-tabs.dark.png" srcset="../figures/elements-lists-tabs.dark.png 2x" alt="A tab strip with Files active, underlined in the accent, and Commits 12 and Checks dimmed over a hairline">
 <figcaption>The strip with <code>active = "files"</code>.</figcaption>
 </figure>
 
@@ -350,6 +350,9 @@ selectable list in your own layout use [`list`](#list).
   change while the selection was visible. A list the reader scrolled away
   from stays put through updates.
 - **Fact columns** hide lowest `priority` first until the label keeps 260px.
+  A `text` column grows to fit its widest value (up to 320px) out of the
+  room the label leaves, narrowing back to its default before any column
+  hides; a value still cut short shows whole as the fact's tooltip.
 - **Head `esc`.** The head's `esc` keycap shows only when no action has
   `"esc"` or `"escape"` in its `keys`; that action's bar button stands in
   for it.
@@ -427,7 +430,7 @@ builder.
 | --- | --- | --- | --- |
 | `id` | `string` | required | The `facts` key |
 | `head` | `string` | `""` | Head label. With any head, heads ride on the first group header and the sticky header, or on their own `.pk-colhead` row when the list does not start with a group |
-| `format` | `"text"` \| `"num"` \| `"price"` \| `"bar"` \| `"time"` \| `"elapsed"` \| `"dim"` | `"text"` | Class `f-<format>` and default width: text 96, num 52, price 76, bar 44, time 44, elapsed 52, dim 64 px. It styles the column but does not format values: outside `bar` a number shows compact (`3`, not `$3`), so send prices and times as text |
+| `format` | `"text"` \| `"num"` \| `"price"` \| `"bar"` \| `"time"` \| `"elapsed"` \| `"dim"` | `"text"` | Class `f-<format>` and default width: text 96 (growing to fit its values when there is room), num 52, price 76, bar 44, time 44, elapsed 52, dim 64 px. It styles the column but does not format values: outside `bar` a number shows compact (`3`, not `$3`), so send prices and times as text |
 | `priority` | `number` | `100` | Lower hides first when the list is narrow |
 | `min` | `number` | none | Minimum width in characters |
 
@@ -597,8 +600,8 @@ return {
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-lists-picker.light.png" srcset="../figures/elements-lists-picker.light.png 2x" alt="An md picker sheet over a dimmed, blurred block: head with the Model title and the query cl, an Anthropic group header carrying the Context and $/M column heads, three model rows with the sonnet row selected and opus checked as current, a Local group with a dimmed disabled row, and a Cancel esc and primary Use action bar">
-<img class="tn-dark" src="../figures/elements-lists-picker.dark.png" srcset="../figures/elements-lists-picker.dark.png 2x" alt="An md picker sheet over a dimmed, blurred block: head with the Model title and the query cl, an Anthropic group header carrying the Context and $/M column heads, three model rows with the sonnet row selected and opus checked as current, a Local group with a dimmed disabled row, and a Cancel esc and primary Use action bar">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-lists-picker.light.png" srcset="../figures/elements-lists-picker.light.png 2x" alt="An md picker sheet over a dimmed, blurred block: head with the Model title and the query cl, an Anthropic group header carrying the Context and $/M column heads, three model rows with the sonnet row selected and opus checked as current, a Local group with a dimmed disabled row, and a Cancel esc and primary Use action bar">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-lists-picker.dark.png" srcset="../figures/elements-lists-picker.dark.png 2x" alt="An md picker sheet over a dimmed, blurred block: head with the Model title and the query cl, an Anthropic group header carrying the Context and $/M column heads, three model rows with the sonnet row selected and opus checked as current, a Local group with a dimmed disabled row, and a Cancel esc and primary Use action bar">
 <figcaption>An <code>md</code> sheet in the <code>layer</code> region. At this width (under 640px) the count is hidden.</figcaption>
 </figure>
 

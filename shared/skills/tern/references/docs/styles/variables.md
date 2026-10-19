@@ -104,8 +104,8 @@ To get a translucent version of a token, use a relative color. Don't use a secon
 Defined on `:root` in `theme.css`. These are the tokens you will use most.
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/styles-variables-kit.light.png" srcset="../figures/styles-variables-kit.light.png 2x" alt="Swatches of the kit color tokens: text and line steps, accent and status colors, the fills that carry white text, and the surface backgrounds">
-<img class="tn-dark" src="../figures/styles-variables-kit.dark.png" srcset="../figures/styles-variables-kit.dark.png 2x" alt="Swatches of the kit color tokens: text and line steps, accent and status colors, the fills that carry white text, and the surface backgrounds">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/styles-variables-kit.light.png" srcset="../figures/styles-variables-kit.light.png 2x" alt="Swatches of the kit color tokens: text and line steps, accent and status colors, the fills that carry white text, and the surface backgrounds">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/styles-variables-kit.dark.png" srcset="../figures/styles-variables-kit.dark.png 2x" alt="Swatches of the kit color tokens: text and line steps, accent and status colors, the fills that carry white text, and the surface backgrounds">
 <figcaption>Each cell is <code>background: var(--name)</code> in a surface: the kit defaults, light and dark. A Tern theme replaces the layer 2 values.</figcaption>
 </figure>
 
@@ -257,8 +257,8 @@ The ANSI colors are the theme's real palette. To make a plugin color match what 
 print in "red", use `var(--ansi1)`.
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/styles-variables-terminal.light.png" srcset="../figures/styles-variables-terminal.light.png 2x" alt="Swatches of the terminal tokens and the sixteen ANSI colors">
-<img class="tn-dark" src="../figures/styles-variables-terminal.dark.png" srcset="../figures/styles-variables-terminal.dark.png 2x" alt="Swatches of the terminal tokens and the sixteen ANSI colors">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/styles-variables-terminal.light.png" srcset="../figures/styles-variables-terminal.light.png 2x" alt="Swatches of the terminal tokens and the sixteen ANSI colors">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/styles-variables-terminal.dark.png" srcset="../figures/styles-variables-terminal.dark.png 2x" alt="Swatches of the terminal tokens and the sixteen ANSI colors">
 <figcaption>The <code>--tv-*</code> and <code>--ansi*</code> defaults from <code>termview.css</code>. Under a Tern theme they hold the theme's colors.</figcaption>
 </figure>
 
@@ -413,8 +413,8 @@ with a fallback of `rgb(from var(--accent) r g b/16%)`. `typo` draws spelling do
 `--spelling-error-color` (fallback `#ff3b30`). `code` and `key` add `--chip-bg`/`--l1` fills.
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/styles-variables-surface.light.png" srcset="../figures/styles-variables-surface.light.png 2x" alt="Swatches of --tc for the nine tones and of the fourteen --sf-c span token colors">
-<img class="tn-dark" src="../figures/styles-variables-surface.dark.png" srcset="../figures/styles-variables-surface.dark.png 2x" alt="Swatches of --tc for the nine tones and of the fourteen --sf-c span token colors">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/styles-variables-surface.light.png" srcset="../figures/styles-variables-surface.light.png 2x" alt="Swatches of --tc for the nine tones and of the fourteen --sf-c span token colors">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/styles-variables-surface.dark.png" srcset="../figures/styles-variables-surface.dark.png 2x" alt="Swatches of --tc for the nine tones and of the fourteen --sf-c span token colors">
 <figcaption>Top: <code>var(--tc)</code> on an <code>el</code> with each <code>tone</code>. Bottom: <code>var(--sf-c-&lt;token&gt;)</code>; <code>--sf-c-code</code> is <code>currentColor</code>, the region's text color.</figcaption>
 </figure>
 
@@ -487,8 +487,8 @@ t;{"sf":"s1",
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/styles-variables-palette.light.png" srcset="../figures/styles-variables-palette.light.png 2x" alt="The same tone and span token swatches recolored by a program palette, plus the tint, selection and program token variables it defines">
-<img class="tn-dark" src="../figures/styles-variables-palette.dark.png" srcset="../figures/styles-variables-palette.dark.png 2x" alt="The same tone and span token swatches recolored by a program palette, plus the tint, selection and program token variables it defines">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/styles-variables-palette.light.png" srcset="../figures/styles-variables-palette.light.png 2x" alt="The same tone and span token swatches recolored by a program palette, plus the tint, selection and program token variables it defines">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/styles-variables-palette.dark.png" srcset="../figures/styles-variables-palette.dark.png 2x" alt="The same tone and span token swatches recolored by a program palette, plus the tint, selection and program token variables it defines">
 <figcaption>The swatches of the figure above under this palette, plus <code>--sf-tint-*</code>, <code>--sf-sel</code>, <code>--sf-mark-bg</code>, <code>--sf-status-bg</code> and four <code>--sf-p-*</code> tokens. Neutral, info, pending and user keep Tern's colors; dark <code>mdLink</code> and <code>syntaxType</code> come out contrast-corrected.</figcaption>
 </figure>
 
@@ -561,8 +561,8 @@ end
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/styles-variables-deploy.light.png" srcset="../figures/styles-variables-deploy.light.png 2x" alt="A card headed Deploy v1.4.2 with the version in bold accent ink and a green live badge">
-<img class="tn-dark" src="../figures/styles-variables-deploy.dark.png" srcset="../figures/styles-variables-deploy.dark.png 2x" alt="A card headed Deploy v1.4.2 with the version in bold accent ink and a green live badge">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/styles-variables-deploy.light.png" srcset="../figures/styles-variables-deploy.light.png 2x" alt="A card headed Deploy v1.4.2 with the version in bold accent ink and a green live badge">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/styles-variables-deploy.dark.png" srcset="../figures/styles-variables-deploy.dark.png 2x" alt="A card headed Deploy v1.4.2 with the version in bold accent ink and a green live badge">
 <figcaption>The view with <code>state.version = "v1.4.2"</code> and <code>state.ok = true</code>.</figcaption>
 </figure>
 

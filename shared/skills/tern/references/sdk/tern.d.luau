@@ -34,7 +34,7 @@ export type PluginInfo = {
 export type RuntimeInfo = {
 	--- Operating system: `"macos"`, `"linux"`, `"windows"` or `"ios"`.
 	os: string,
-	--- True when Luau native codegen is active (false on iOS and where unsupported).
+	--- True when Luau native codegen is active (false on iOS, in development builds and where unsupported).
 	jit: boolean,
 }
 
@@ -281,6 +281,9 @@ export type BlockDef<S> = {
 	key: ((state: S, key: Key, cx: BlockCx) -> boolean?)?,
 	--- Handles an event from the view's nodes.
 	event: ((state: S, ev: UiEvent, cx: BlockCx) -> ())?,
+	--- Opts into native editing of the view's editor/input fields: "edit" (a click places the caret, drag/⇧-arrows
+	--- select, edits arrive as `edit` events) and "undo" (⌃Z/⌘Z arrives as an `undo` event, not a key).
+	features: { "edit" | "undo" }?,
 	--- Called when the pane resizes to `cols` × `rows` cells, then the block renders and saves; without it the block
 	--- still re-renders (no save), with `cx.cols`/`cx.rows` updated.
 	resize: ((state: S, cols: number, rows: number, cx: BlockCx) -> ())?,
@@ -344,14 +347,14 @@ export type SpawnSpec = {
 	--- Working directory (always set; only the daemon expands a leading `~` in a returned one).
 	cwd: string,
 	--- Only the variables the daemon sets for the pane (`TERN_IDENTITY`, `TERN_PANE`, `TERN_PANE_SOCKET`,
-	--- `TERN_WINDOW_KEY`, `TERN_WINDOW_SOCKET`, `TERN_LENSES`, `TERN_COMPLETE`); the pane's base environment is the
+	--- `TERN_WINDOW_KEY`, `TERN_WINDOW_SOCKET`, `TERN_LENSES`, `TERN_COMPLETE`, `TERN_BLOB_DIR`); the pane's base environment is the
 	--- login environment, not the daemon's (`tern.getenv` here reads the daemon's).
 	env: { [string]: string },
 }
 
 --- Native pane kinds; agent and plugin blocks are programs with terminal surfaces.
 export type PaneKind = "terminal" | "agent" | "plugin" | "browser" | "file" | "git"
-	| "database" | "notebook" | "board" | "procs" | "screen" | "profile"
+	| "database" | "notebook" | "board" | "canvas" | "procs" | "screen" | "profile" | "carly"
 
 --- A pane from host listing or window inspection; native blocks have no shell-state fields.
 export type PaneInfo = {
@@ -368,9 +371,10 @@ export type PaneInfo = {
 	--- Window only: native block kind and containing tab.
 	kind: PaneKind?,
 	tab: number?,
-	--- Window only: focus and floating picture state.
+	--- Window only: focus, floating picture and parked state (a parked pane has no tab).
 	focused: boolean?,
 	floating: boolean?,
+	parked: boolean?,
 	--- Window terminal/agent only: prompt/listening state.
 	at_prompt: boolean?,
 	--- Window terminal/agent only: current command and elapsed milliseconds.
@@ -560,7 +564,7 @@ export type HostSpec = number | string
 --- A machine's real connection and identity metadata, with its sessions and panes.
 export type ManagedHost = {
 	id: number, name: string, kind: "local" | "remote", address: string?,
-	state: "connecting" | "connected" | "verify" | "reconnecting" | "failed",
+	state: "connecting" | "connected" | "stalled" | "verify" | "reconnecting" | "failed",
 	detail: { fingerprint: string?, attempt: number?, error: string? }?,
 	identity: { [string]: any }?, current: boolean, rtt_ms: number?,
 	sessions: { number }, panes: { number },
@@ -605,10 +609,21 @@ export type AgentMessage = {
 	role: "user" | "assistant", text: string, tools: { { [string]: any } },
 }
 
---- Window only: agent conversations; targets are pane ids or session resolve specs.
+--- Window only: an agent block `cx.agents:get` found; it keeps working after the call that got it.
+export type Agent = {
+	--- Pane id.
+	pane: number,
+	--- Sends Carly `message` as a scheduled run when the agent's turn ends (done, failed, exited or
+	--- closed), once, within 12 hours; the task id cancels it (`tern.carly.cancel`).
+	tocarly: (self: Agent, event: "finished", message: string) -> number,
+}
+
+--- Window only: agent conversations; targets are pane ids, session resolve specs or `Agent` handles.
 declare extern type AgentsCx with
 	--- Synchronously lists agent blocks across all sessions, with progress/input state and last assistant text.
 	function list(self): { AgentBlock }
+	--- The agent block a pane id or resolve spec names; errors when none does or the pane runs no agent.
+	function get(self, agent: number | string): Agent
 	--- Synchronously opens an agent; the window retains prompt until its composer reports sendable=true.
 	--- Omitted command/how use agent settings; queued prompts survive a Carly/plugin VM reset.
 	--- cwd "~"/"~/…" expands using the launch host's home. Native omp requires TSP send.
@@ -619,18 +634,18 @@ declare extern type AgentsCx with
 	--- Synchronously queues/submits one prompt; native omp uses one atomic TSP send event.
 	--- Native prompts queue until sendable=true, even if already editable/focused; bootstrap false is not an error.
 	--- Blank/concurrent pending prompts or unsupported native omp error.
-	function ask(self, agent: number | string, text: string): ()
+	function ask(self, agent: number | string | Agent, text: string): ()
 	--- Desktop async: resolves with last assistant text when idle; timeout is ms (default 30000).
 	--- Queued/newly submitted prompts are not idle; delivery errors reject the awaitable.
 	--- Carly uses await(...); plugins use :next(function(message, err, cx) ... end).
-	function wait(self, agent: number | string, opts: { timeout: number? }?): Awaitable<string?>
+	function wait(self, agent: number | string | Agent, opts: { timeout: number? }?): Awaitable<string?>
 	--- Last messages in chronological order (default 50, max 1000); last=0 returns none.
 	--- Reads the omp.session TSP chat, excluding chrome/thinking; non-omp agents return {}.
-	function transcript(self, agent: number | string, opts: { last: number? }?): { AgentMessage }
+	function transcript(self, agent: number | string | Agent, opts: { last: number? }?): { AgentMessage }
 	--- Sends Ctrl-C to interrupt the current turn without closing its block.
-	function interrupt(self, agent: number | string): ()
+	function interrupt(self, agent: number | string | Agent): ()
 	--- Closes the agent block and ends its program, without an interactive confirmation.
-	function stop(self, agent: number | string): ()
+	function stop(self, agent: number | string | Agent): ()
 end
 
 --- A palette action, including unavailable commands and plugin registrations.
@@ -905,9 +920,10 @@ export type TabTree = { pane: number?, split: ("right" | "down")?, ratio: number
 export type Float = { pane: number, over: number, corner: Corner }
 --- A tab's current tree, floats, zoom and focused block.
 export type TabLayout = { tab: number, root: TabTree, floats: { Float }, zoomed: boolean, focus: number }
---- Every tab's arrangement, not programs; restore refuses after blocks open or close.
+--- Every tab's arrangement and parked panes, not programs; restore refuses after blocks open or close.
 declare extern type LayoutSnapshot with end
---- A regrouping target; blocks may be ids or resolve specs, empty means rename-only.
+--- A regrouping target; blocks may be ids or resolve specs (parked blocks are dealt into it), empty
+--- means rename-only.
 export type TabGroup = {
 	tab: (number | string)?,
 	name: string?,
@@ -1101,6 +1117,15 @@ export type FocusEvent = {
 	tab: number,
 }
 
+--- Window only: `agent_finished` payload: an agent's turn ended, or the agent did. A turn that ends while a
+--- prompt waits for the agent is not reported.
+export type AgentFinishedEvent = {
+	--- Pane id.
+	pane: number,
+	--- "done" or "failed" as it reported, "exited" when its program exited, "closed" when its block closed.
+	result: "done" | "failed" | "exited" | "closed",
+}
+
 --- Window only: `pane_created` / `pane_closed` payload.
 export type PaneEvent = {
 	--- Pane id.
@@ -1272,16 +1297,145 @@ declare extern type DocsCx with
 	function search(self, path: string, query: string): Awaitable<{DocMatch}>
 end
 
---- Persistent native canvases, capped at 256 KiB per update, 2000 nodes and depth 32.
+--- Persistent panels of UI nodes (`tern.canvas` blocks), capped at 256 KiB per update, 2000 nodes
+--- and depth 32. Not whiteboards: canvas blocks (kind `canvas`) are `cx.whiteboard`'s.
 declare extern type CanvasCx with
-	--- Opens an owner-tagged canvas; unavailable hosts return nil and an error.
+	--- Opens an owner-tagged canvas; unavailable hosts return nil and an error. Unknown fields raise.
 	function open(self, spec: CanvasSpec): (number?, string?)
-	--- Validates and updates an owned canvas.
+	--- Validates and updates an owned canvas; unknown fields and an empty change raise.
 	function set(self, pane: number, change: CanvasChange): ()
 	--- Reads any owner's canvas from this window's replica.
 	function get(self, pane: number): CanvasInfo?
 	--- Lists canvas metadata without view or dock.
 	function list(self): { CanvasInfo }
+end
+
+--- A whiteboard page area in page units (one view px at 100%).
+export type WhiteboardArea = { x: number, y: number, w: number, h: number }
+
+--- What `cx.whiteboard:read` lists: shapes by id (with what is inside them) or meeting `area`.
+export type WhiteboardQuery = {
+	ids: { string }?,
+	area: WhiteboardArea?,
+	--- Most shapes listed (default 200, at most 2000).
+	max_shapes: number?,
+}
+
+--- One whiteboard shape as read; fields at their default are left out.
+export type WhiteboardShape = {
+	--- 16 hex digits.
+	id: string,
+	--- rect, ellipse, diamond, triangle, text, arrow, line, polygon, curve, ink, highlight, image or group.
+	type: string,
+	--- The page box of its frame.
+	x: number, y: number, w: number, h: number,
+	--- Clockwise degrees.
+	rotation: number?,
+	text: string?,
+	--- Palette name (`blue`, `pale slate`) or `#rrggbb`; fill `none` when cleared.
+	color: string?, fill: string?,
+	width: number?, dash: string?, font_size: number?, size: number?, opacity: number?,
+	start_head: string?, end_head: string?, route: string?,
+	--- Arrow and line ends: the shape an end attaches to, else its page point {x, y}.
+	from_shape: string?, to_shape: string?, from_point: { number }?, to_point: { number }?,
+	--- Point count of a polygon, curve or ink stroke.
+	points: number?,
+	closed: boolean?,
+	--- A group's child count.
+	children: number?,
+	--- The group the shape is in.
+	group: string?,
+	locked: boolean?,
+}
+
+--- A whiteboard as read.
+export type WhiteboardState = {
+	--- Pane id.
+	block: number,
+	look: string,
+	paper: string,
+	--- The page area the user sees now, and its zoom (1 is 100%).
+	view: { x: number, y: number, w: number, h: number, zoom: number },
+	--- Selected shape ids.
+	selection: { string },
+	--- The style new shapes take.
+	new_shapes: { [string]: any },
+	--- Steps undo and redo can take.
+	undo: number, redo: number,
+	--- Shapes the query matched, and how many of them `max_shapes` left out.
+	total: number, more: number,
+	--- Back to front, each group before what is inside it.
+	shapes: { WhiteboardShape },
+}
+
+--- One whiteboard edit: `op` decides which fields it takes, and any other field fails it.
+export type WhiteboardEdit = {
+	--- add, move, resize, rotate, text, style, delete, lock, unlock, group, ungroup, duplicate, order,
+	--- align, distribute, layout, flip, look, paper or show.
+	op: string,
+	--- add: rect, ellipse, diamond, triangle (x, y, w, h, text); text (x, y, text; w wraps it); arrow
+	--- (from_shape or from_point, to_shape or to_point, text); line (from_point, to_point); polygon
+	--- (points, text); curve (points, closed); ink, highlight (points); image (path, x, y; w).
+	type: string?,
+	--- Names the one shape add, group or duplicate makes, for later edits of the same call.
+	ref: string?,
+	--- Shape ids or refs; `id` for one.
+	ids: { string }?, id: string?,
+	--- layout: lists of ids, each list placed as one (instead of `ids`).
+	groups: { { string } }?,
+	--- Page top-left and size (add, resize, layout, show); move by dx, dy or to x, y.
+	x: number?, y: number?, w: number?, h: number?, dx: number?, dy: number?,
+	--- rotate: clockwise.
+	degrees: number?,
+	--- add's label, or text's new text.
+	text: string?,
+	--- image: a local file.
+	path: string?,
+	--- Arrow ends: a shape id or ref to attach to, or a page point {x, y}; a line takes points.
+	from_shape: string?, to_shape: string?, from_point: { number }?, to_point: { number }?,
+	points: { { number } }?,
+	closed: boolean?,
+	--- order: front, forward, backward or back.
+	to: string?,
+	--- align: left, center, right, top, middle or bottom; layout: where a row (top, middle, bottom)
+	--- or column (left, center, right) lines up across it, default the middle.
+	edge: string?,
+	--- distribute, layout, flip: horizontal or vertical.
+	axis: string?,
+	--- distribute: two or more exactly this far apart after the first; layout: default 40.
+	gap: number?,
+	--- layout: a grid of this many columns, filled row by row, each shape centered in its cell.
+	cols: number?,
+	--- look: clean, mono or sketch; paper: dots, grid, lines or none.
+	look: string?, paper: string?,
+	--- Style (add, style): palette name or #rrggbb (fill "none" clears it), outline width, dash,
+	--- opacity 0-1, font size, text align and valign, ink size, arrow heads, route
+	--- straight|curve|elbow.
+	color: string?, fill: string?, width: number?, dash: string?, opacity: number?,
+	font_size: number?, align: string?, valign: string?, bold: boolean?, italic: boolean?,
+	underline: boolean?, size: number?, start_head: string?, end_head: string?, route: string?,
+}
+
+--- What a whiteboard edit did: refs given, the shapes touched as read, those removed, and notes
+--- (style fields no shape took, arrows whose two shapes touch and so draw short).
+export type WhiteboardResult = {
+	refs: { [string]: string },
+	shapes: { WhiteboardShape },
+	removed: { string }?,
+	notes: { string }?,
+}
+
+--- Window only (desktop): whiteboards, the canvas blocks of kind `canvas` (shapes, arrows, text and
+--- ink on a page, in page units). Not `cx.canvas`, whose panels show UI nodes. A nil `pane` is the
+--- focused whiteboard, else the only one open.
+declare extern type WhiteboardCx with
+	--- Opens an empty whiteboard (how defaults to beside, focus to true); resolves to its pane once
+	--- it can be read and edited.
+	function open(self, opts: { how: How?, focus: boolean? }?): Awaitable<number>
+	--- Its shapes back to front with page boxes and style, and the page area the user sees now.
+	function read(self, pane: (number | string)?, query: WhiteboardQuery?): WhiteboardState
+	--- Applies `edits` in order as one undo step; a failing edit raises, naming it, and none land.
+	function edit(self, pane: (number | string)?, edits: { WhiteboardEdit }): WhiteboardResult
 end
 
 --- Window only: `cx.session`, the window's panes and tabs.
@@ -1304,9 +1458,10 @@ declare extern type SessionCx with
 	function surface(self, pane: number | string, opts: SurfaceOpts?): (SurfaceTree | string)?
 	--- Tern's block UI accessibility subtree; nil when hidden or not mounted.
 	function view(self, pane: number | string, opts: SurfaceOpts?): (ViewNode | string)?
-	--- Sends a TSP event such as {ev = "action", id = "main.button", act = "click"}.
+	--- Sends a TSP event such as {ev = "action", id = "main.button", act = "click"}; a canvas takes
+	--- only action events and delivers them to its owner as clicks once the caller returns.
 	function event(self, pane: number | string, ev: { [string]: any }): ()
-	--- Every pane.
+	--- Every pane, parked ones included.
 	function panes(self): { PaneInfo }
 	--- Every tab.
 	function tabs(self): { TabInfo }
@@ -1345,6 +1500,11 @@ declare extern type LayoutCx with
 	function float(self, pane: number, over: number?, corner: Corner?, reveal: Reveal?): (boolean, string?)
 	--- Docks a floating block; defaults to its original split, else beside its owner.
 	function dock(self, pane: number, target: number?, dir: Dir?, reveal: Reveal?): (boolean, string?)
+	--- Parks pane in its session's deck, its program still running; its split collapses, or its tab
+	--- closes when it was the only pane.
+	function park(self, pane: number): (boolean, string?)
+	--- Deals a parked pane into the current tab beside its focused block; reveals by default.
+	function unpark(self, pane: number, reveal: Reveal?): (boolean, string?)
 	--- Gives the tab's tiled blocks equal shares.
 	function even(self, tab: number): ()
 	--- Names a tab; nil or blank restores its pane's label.
@@ -1355,7 +1515,7 @@ declare extern type LayoutCx with
 	function order_tab(self, tab: number, position: number): ()
 	--- Renames a session; blank and unknown sessions return false with a reason.
 	function rename_session(self, session: number, name: string): (boolean, string?)
-	--- Captures all trees, floats, names, colors and tab order.
+	--- Captures all trees, floats, names, colors, tab order and parked panes.
 	function snapshot(self): LayoutSnapshot
 	--- Restores a snapshot, refusing if blocks opened or closed since.
 	function restore(self, snap: LayoutSnapshot): (boolean, string?)
@@ -1421,8 +1581,10 @@ declare extern type WindowCx with
 	hosts: HostsCx
 	--- Pane and tab arrangement.
 	layout: LayoutCx
-	--- Owner-tagged persistent native canvases.
+	--- Owner-tagged persistent panels of UI nodes (`tern.canvas`), not whiteboards.
 	canvas: CanvasCx
+	--- Whiteboards (canvas blocks): shapes read and edited by id (desktop only).
+	whiteboard: WhiteboardCx
 	--- Desktop text/Markdown files and session-owned notes.
 	docs: DocsCx
 	--- Desktop Markdown task boards, lanes and stable card references.
@@ -1459,11 +1621,56 @@ declare extern type WindowCx with
 	function action(self, name: string): ()
 	--- Opens Carly and asks a shown question from a plugin callback.
 	function ask_carly(self, text: string): ()
+	--- Asks the user to choose one of `opts.items` in a picker over the focused pane; resolves with
+	--- the chosen item (the table passed in), nil when the user dismissed the picker.
+	function pick(self, opts: PickOptions): Awaitable<PickItem?>
+	--- Asks the user to type a line in a field over the focused pane; resolves with the text,
+	--- nil when the user dismissed it.
+	function prompt(self, opts: PromptOptions?): Awaitable<string?>
 	--- Shows a toast; `sub` is a secondary line.
 	function toast(self, level: ToastLevel, text: string, sub: string?): ()
 	--- Copies `text` to the clipboard.
 	function copy(self, text: string): ()
 end
+
+--- Window only: one choice of `cx:pick`. Other fields ride along to the answer.
+export type PickItem = {
+	--- What the row says; typing filters on it.
+	label: string,
+	--- Dim text after the label.
+	detail: string?,
+	--- Heading over a run of consecutive items with the same group.
+	group: string?,
+	--- A Tern icon name (default: the picker's icon).
+	icon: string?,
+	--- Shows a check: the current choice.
+	current: boolean?,
+	[string]: any,
+}
+
+--- Window only: what `cx:pick` asks.
+export type PickOptions = {
+	--- The choices, listed in this order; at least one.
+	items: { PickItem },
+	--- The empty field's hint, also the picker's accessible name.
+	placeholder: string?,
+	--- The field's Tern icon name (default `puzzle`).
+	icon: string?,
+	--- What ↵ does, in the key legend (default `select`).
+	action: string?,
+}
+
+--- Window only: what `cx:prompt` asks.
+export type PromptOptions = {
+	--- The text the field starts with, selected.
+	value: string?,
+	--- The empty field's hint, also the field's accessible name.
+	placeholder: string?,
+	--- The field's Tern icon name (default `puzzle`).
+	icon: string?,
+	--- What ↵ does, in the key legend (default `confirm`).
+	action: string?,
+}
 
 --- Desktop window only: durable Carly task. Exactly one of when/on is required.
 export type TaskSpec = {
@@ -1474,7 +1681,7 @@ export type TaskSpec = {
 	--- Intervals >= 5 minutes for model turns; >= 1 minute for promptless checks.
 	when: string?,
 	--- Window event: command_finished, command_started, pane_closed, pane_created,
-	--- tab_created, tab_closed, title, cwd or focus. Needs a check or pane.
+	--- tab_created, tab_closed, title, cwd, focus or agent_finished. Needs a check or pane.
 	on: string?,
 	--- Luau source returning function(ev, cx, state), never a saved closure.
 	--- nil is quiet; false ends the task; string/table escalates with prompt.
@@ -1508,16 +1715,20 @@ export type TaskInfo = TaskSpec & {
 	runs: { TaskRun }, -- last ten runs
 }
 
+--- The marker `ExportCall:wait` returns: an export returns it to answer from a later callback.
+declare extern type ExportWait with end
+
 --- Callback-safe handle for one Carly export; retained after its scoped cx expires.
 declare extern type ExportCall with
 	--- True after cancellation, expiry, reply or plugin reload.
 	cancelled: boolean
-	--- Answers once; JSON-safe values only, at most 16 KiB; false after completion.
+	--- Answers once; JSON-safe values only, at most 1 MiB encoded (a longer string is cut and ends with
+	--- `[… N bytes cut]`); false after completion.
 	function reply(self, value: any): boolean
 	--- Fails once; false after completion.
 	function fail(self, message: string): boolean
 	--- Return this marker to answer from a later callback (default 30000, max 120000 ms).
-	function wait(self, ms: number?): userdata
+	function wait(self, ms: number?): ExportWait
 end
 
 --- Signature and purpose shown by help("plugins.<id>").
@@ -1581,6 +1792,15 @@ declare tern: {
 		null: JsonNull,
 	},
 
+	--- Base64 conversion of binary strings.
+	base64: {
+		--- Encodes `bytes` in the standard alphabet with padding; `url = true` uses the URL-safe alphabet without padding.
+		encode: (bytes: string, opts: { url: boolean? }?) -> string,
+		--- Decodes the standard or URL-safe alphabet, padding optional, ASCII whitespace ignored;
+		--- invalid input raises `tern.base64.decode: <reason>`.
+		decode: (text: string) -> string,
+	},
+
 	--- Monotonic milliseconds (fractional).
 	now: () -> number,
 
@@ -1602,6 +1822,16 @@ declare tern: {
 		get: (key: string) -> any,
 		--- Stores `value` under `key`; nil deletes it.
 		set: (key: string, value: any) -> (),
+	},
+
+	--- Window only (plugin halves, not Carly's VM): this plugin's secrets in the system keychain, account
+	--- `plugin.<id>.<name>`; headless sessions keep them in memory. Names match [a-z0-9][a-z0-9._-]{0,63}.
+	--- Bad names, values over 64 KiB and store failures fail the awaitable.
+	secrets: {
+		--- The secret stored under `name` (any bytes), or nil.
+		get: (name: string) -> Awaitable<string?>,
+		--- Stores `value` under `name`, replacing any; nil deletes it.
+		set: (name: string, value: string?) -> Awaitable<nil>,
 	},
 
 	--- Synchronous file access on this context's machine; relative paths resolve against the plugin dir, failures raise.
@@ -1740,7 +1970,7 @@ declare tern: {
 	--- Host: `spawn(spec: SpawnSpec) -> SpawnSpec?` (sync filter) and `(ev, cx: EffectCx)` for `command_started`,
 	--- `command_finished`, `cwd`, `title`, `pane_exited`. Window: `window_start(cx: WindowCx)` and `(ev, cx: WindowCx)`
 	--- for `focus`, `pane_created`, `pane_closed`, `tab_created`, `tab_closed`, `command_started`, `command_finished`, `cwd`,
-	--- `title` and `canvas_action(ev: CanvasAction, cx) -> boolean?` (truthy consumes the owner's click).
+	--- `title`, `agent_finished` and `canvas_action(ev: CanvasAction, cx) -> boolean?` (truthy consumes the owner's click).
 	--- `window_start` runs once per plugin per window. The `spawn` wait (50 ms) counts from when the request is queued.
 	on: (name: string, fn: (...any) -> ...any) -> (),
 

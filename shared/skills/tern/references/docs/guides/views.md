@@ -100,7 +100,7 @@ styling hooks.
 
 | Prop | Meaning |
 | --- | --- |
-| `key` | Identity among siblings in a block view (see [Blocks](blocks.md#regions-node-ids-and-keys)) |
+| `key` | Identity among siblings in a block view (see [Blocks](blocks.md#regions-node-ids-and-keys)). Local state is remembered by this key under the same parent, not surface-wide, even after deleting and adding the node with a new id; without a key, it uses the node's id |
 | `tone` | Semantic color of the node's chrome (below) |
 | `role` | A name of yours, exposed to CSS as `data-role` |
 | `collapsible` | On `card` and `section`, `true` enables the header's disclosure control |

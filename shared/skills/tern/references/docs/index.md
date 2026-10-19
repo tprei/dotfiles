@@ -53,22 +53,25 @@ quitting. The window half sees and changes one window. See
 - **Look up a node kind or a style hook:** [Elements](elements/index.md)
   documents every kind a view can hold, and [Styling Views](styles/index.md)
   every class, attribute and variable a sheet can use.
+- **Script Tern:** [scripts](scripts/index.md) drive a window or a headless
+  run command by command, from opening panes to screenshots.
 
 Start with [Getting Started](guides/getting-started.md), then read the
 [example plugins](examples/index.md): each is a complete, realistic plugin.
 
 ## The SDK
 
-[`tern-sdk.tar.gz`](https://docs.stencil.so/tern/tern-sdk.tar.gz) unpacks
-into `tern-sdk/`: `examples/` holds the [example plugins](examples/index.md),
-one installable folder each, and `tern.d.luau` the definitions they
-type-check against.
+The SDK is the [stencil-hq/tern-sdk](https://github.com/stencil-hq/tern-sdk)
+repository. In it, `plugins/examples/` holds the
+[example plugins](examples/index.md), one installable folder each, and
+`plugins/tern.d.luau` the definitions they type-check against; the
+[Surface Protocol SDKs](protocol/sdks.md) sit beside them.
 
 ```sh
-curl -fsSL https://docs.stencil.so/tern/tern-sdk.tar.gz | tar -xz
+git clone https://github.com/stencil-hq/tern-sdk
 ```
 
-The bundled `tern.d.luau` matches these docs; `tern plugin types DIR`
+The repository's `tern.d.luau` matches these docs; `tern plugin types DIR`
 writes the one your Tern ships.
 
 ## Documentation conventions

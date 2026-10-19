@@ -1,7 +1,7 @@
 # Example Plugins
 
 Seven complete plugins ship in [the SDK](../index.md#the-sdk) under
-`tern-sdk/examples/`.
+[`plugins/examples/`](https://github.com/stencil-hq/tern-sdk/tree/main/plugins/examples).
 Each one solves a real problem end to end and is written against the
 current API, so it doubles as a reference for how the pieces fit together.
 Every page explains the design decisions and then includes the full
@@ -35,18 +35,18 @@ source.
 ## Trying one
 
 Each example is a plugin folder with a `plugin.toml`, its Luau files and a
-`README.md`. From where you unpacked [the SDK](../index.md#the-sdk), install
-a copy:
+`README.md`. Install a copy straight from [the SDK](../index.md#the-sdk):
 
 ```sh
-tern plugin install tern-sdk/examples/jsonx
+tern plugin install github.com/stencil-hq/tern-sdk/plugins/examples/jsonx
 ```
 
-or link the folder so Tern reloads the plugin every time you save a file
-in it:
+or clone the SDK and link the folder, so Tern reloads the plugin every time
+you save a file in it:
 
 ```sh
-tern plugin link tern-sdk/examples/jsonx
+git clone https://github.com/stencil-hq/tern-sdk
+tern plugin link tern-sdk/plugins/examples/jsonx
 ```
 
 `tern plugin list` shows whether it loaded, and `tern plugin unlink jsonx`

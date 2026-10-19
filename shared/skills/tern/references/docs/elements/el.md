@@ -48,7 +48,7 @@ Every [common prop](index.md) applies too. On an `el` they matter like this:
 | `title` | `title="…"`: the hover tooltip |
 | `aria` | `aria-label="…"`: the element's accessible name |
 | `hidden` | adds `.sf-hidden` (`display: none`) |
-| `key` | the identity that keeps local state; a control's flips are kept under it |
+| `key` | identity among siblings; a control's local flips are remembered by this key under its parent, not surface-wide |
 | `actions` | makes the element a click target, with `.sf-act` while it has a `click` or `dblclick` (see [Actions](#actions-on-any-el)) |
 | `grow`, `shrink`, `basis`, `min`, `max` | inline flex and size styles, as on any node |
 
@@ -147,8 +147,8 @@ Notes:
 The text tags with only these defaults, inside one `div`:
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-el-text-tags.light.png" srcset="../figures/elements-el-text-tags.light.png 2x" alt="Headings h1 to h4 in decreasing sizes, a paragraph with strong, b, em, i, del, mark, code and kbd runs, a nested bulleted list with disc, circle and square markers, a numbered list, a description list with an indented definition, an indented blockquote, a pre line keeping its spaces, and a gray horizontal rule">
-<img class="tn-dark" src="../figures/elements-el-text-tags.dark.png" srcset="../figures/elements-el-text-tags.dark.png 2x" alt="Headings h1 to h4 in decreasing sizes, a paragraph with strong, b, em, i, del, mark, code and kbd runs, a nested bulleted list with disc, circle and square markers, a numbered list, a description list with an indented definition, an indented blockquote, a pre line keeping its spaces, and a gray horizontal rule">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-el-text-tags.light.png" srcset="../figures/elements-el-text-tags.light.png 2x" alt="Headings h1 to h4 in decreasing sizes, a paragraph with strong, b, em, i, del, mark, code and kbd runs, a nested bulleted list with disc, circle and square markers, a numbered list, a description list with an indented definition, an indented blockquote, a pre line keeping its spaces, and a gray horizontal rule">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-el-text-tags.dark.png" srcset="../figures/elements-el-text-tags.dark.png 2x" alt="Headings h1 to h4 in decreasing sizes, a paragraph with strong, b, em, i, del, mark, code and kbd runs, a nested bulleted list with disc, circle and square markers, a numbered list, a description list with an indented definition, an indented blockquote, a pre line keeping its spaces, and a gray horizontal rule">
 <figcaption>User-agent defaults in the terminal font. <code>mark</code> stays yellow on black in both themes; <code>code</code>, <code>kbd</code> and <code>pre</code> change nothing until your sheet sets another font.</figcaption>
 </figure>
 
@@ -270,8 +270,11 @@ either: give a lens view `actions` instead, which reach its `event` handler.
 
 ### Local state and `checked`
 
-A click's flip is local state, kept under the node's `key` (else its id), the
-way a card's fold is. Your `checked` prop stays the owner:
+A click's flip is local state, remembered by the node's `key` among its
+siblings (else by its id), the way a card's fold is. Deleting and adding a
+node with a new id and the same key under the same parent preserves the
+flip; the same key under another parent has independent state.
+Your `checked` prop stays the owner:
 
 - **A change of `checked` wins.** When a node arrives with a `checked`
   different from the one last drawn, Tern drops the local flip and draws your
@@ -350,16 +353,18 @@ user clicks `l` and `b`, Go sends `values = {size = "l", notify = true, tags =
 ### Actions on any `el`
 
 `actions` work on every `el`, not only `button`: a `div` row, an `li`, a
-`td`. `{click = "open"}` sends `{ev = "action", id, act = "open"}`, with
+`td`. `{click = "show"}` sends `{ev = "action", id, act = "show"}`, with
 `mods` when modifier keys were held and `values` inside a form. The
 triggers are `click` and `dblclick` (one action id each) and `menu` (a list
 of action ids for the right-click menu, which gets a Copy item unless it
 lists `copy`); see [Views](../guides/views.md) and the [common
-props](index.md). A `button` is the natural choice: it reads as a button to
+props](index.md). Tern keeps `toggle`, `copy`, `open` and `zoom` for itself
+and sends `select` and `activate` as their own events; pick another name for
+an action of yours. A `button` is the natural choice: it reads as a button to
 assistive technology.
 
 ```lua
-ui.el("li", { class = "file", text = path, actions = { click = "open", dblclick = "edit" } })
+ui.el("li", { class = "file", text = path, actions = { click = "show", dblclick = "edit" } })
 ```
 
 ### Accessibility
@@ -404,8 +409,8 @@ ui.el("label", {}, {
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-el-controls.light.png" srcset="../figures/elements-el-controls.light.png 2x" alt="A checkbox column and a radio column: unchecked, checked with an accent fill and white check or dot, disabled and faded, and checked and disabled, faded">
-<img class="tn-dark" src="../figures/elements-el-controls.dark.png" srcset="../figures/elements-el-controls.dark.png 2x" alt="A checkbox column and a radio column: unchecked, checked with an accent fill and white check or dot, disabled and faded, and checked and disabled, faded">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-el-controls.light.png" srcset="../figures/elements-el-controls.light.png 2x" alt="A checkbox column and a radio column: unchecked, checked with an accent fill and white check or dot, disabled and faded, and checked and disabled, faded">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-el-controls.dark.png" srcset="../figures/elements-el-controls.dark.png 2x" alt="A checkbox column and a radio column: unchecked, checked with an accent fill and white check or dot, disabled and faded, and checked and disabled, faded">
 <figcaption>Checkboxes and radios with no stylesheet of yours: unchecked, checked, disabled, checked and disabled.</figcaption>
 </figure>
 
@@ -600,8 +605,8 @@ Tern's, so `attrs` can't set it.
 On first open (staging picked, migrations on, notify disabled):
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-el-form.light.png" srcset="../figures/elements-el-form.light.png 2x" alt="A card titled Deploy with the hint Pick where the build goes, radios Staging (checked, accent text) and Production, a checked Run migrations checkbox in accent text, a faded disabled Notify the channel checkbox, and an accent Deploy button beside an outlined Cancel button">
-<img class="tn-dark" src="../figures/elements-el-form.dark.png" srcset="../figures/elements-el-form.dark.png 2x" alt="A card titled Deploy with the hint Pick where the build goes, radios Staging (checked, accent text) and Production, a checked Run migrations checkbox in accent text, a faded disabled Notify the channel checkbox, and an accent Deploy button beside an outlined Cancel button">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-el-form.light.png" srcset="../figures/elements-el-form.light.png 2x" alt="A card titled Deploy with the hint Pick where the build goes, radios Staging (checked, accent text) and Production, a checked Run migrations checkbox in accent text, a faded disabled Notify the channel checkbox, and an accent Deploy button beside an outlined Cancel button">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-el-form.dark.png" srcset="../figures/elements-el-form.dark.png 2x" alt="A card titled Deploy with the hint Pick where the build goes, radios Staging (checked, accent text) and Production, a checked Run migrations checkbox in accent text, a faded disabled Notify the channel checkbox, and an accent Deploy button beside an outlined Cancel button">
 </figure>
 
 ## Recipe: a segmented control
@@ -681,8 +686,8 @@ flex column (`main`, a `ui.col`), which would otherwise stretch it.
 With `state.view = "grid"`:
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-el-segmented.light.png" srcset="../figures/elements-el-segmented.light.png 2x" alt="A segmented control on a gray track with List, Grid and Tree; Grid is a raised white segment">
-<img class="tn-dark" src="../figures/elements-el-segmented.dark.png" srcset="../figures/elements-el-segmented.dark.png 2x" alt="A segmented control on a gray track with List, Grid and Tree; Grid is a raised white segment">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-el-segmented.light.png" srcset="../figures/elements-el-segmented.light.png 2x" alt="A segmented control on a gray track with List, Grid and Tree; Grid is a raised white segment">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-el-segmented.dark.png" srcset="../figures/elements-el-segmented.dark.png 2x" alt="A segmented control on a gray track with List, Grid and Tree; Grid is a raised white segment">
 </figure>
 
 ## Recipe: a key/value grid
@@ -728,8 +733,8 @@ grid({
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-el-grid.light.png" srcset="../figures/elements-el-grid.light.png 2x" alt="Two columns: dim keys Branch, Commit and Status; values main, 4f2a9c1 and failing in red">
-<img class="tn-dark" src="../figures/elements-el-grid.dark.png" srcset="../figures/elements-el-grid.dark.png 2x" alt="Two columns: dim keys Branch, Commit and Status; values main, 4f2a9c1 and failing in red">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-el-grid.light.png" srcset="../figures/elements-el-grid.light.png 2x" alt="Two columns: dim keys Branch, Commit and Status; values main, 4f2a9c1 and failing in red">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-el-grid.dark.png" srcset="../figures/elements-el-grid.dark.png 2x" alt="Two columns: dim keys Branch, Commit and Status; values main, 4f2a9c1 and failing in red">
 </figure>
 
 For a plain key/value list with Tern's look and copy, the

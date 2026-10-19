@@ -50,6 +50,7 @@ tern-keys: tern-plugin
 tern-plugin:
     tern plugin link "{{ justfile_directory() }}/tern/nav"
     tern plugin link "{{ justfile_directory() }}/tern/extrakto"
+    tern plugin link "{{ justfile_directory() }}/tern/copymode"
 
 # Prove the omp package is linked into $HOME and not shadowed by real files.
 omp-verify:

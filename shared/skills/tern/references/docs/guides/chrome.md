@@ -196,6 +196,82 @@ using them keeps a plugin's styles right in light and dark themes. Paint
 white text or glyphs on `--accent-fill`, the theme's accent darkened until
 white reads on it; `--accent` itself is for rings, tints and borders.
 
+### Images: `url()`
+
+A global sheet's `url()` names a file of the plugin: a path relative to the
+plugin's directory (the one holding `plugin.toml`, whatever file of `styles`
+the rule is in), such as `url(icons/ts.svg)` or `url('./icons/ts.svg')`.
+Tern resolves it when it installs the sheet, in manifest `styles` and
+`tern.css` sheets alike, and loads it once per image however many rules and
+rows use it.
+
+- `background-image` paints SVG, PNG, JPEG, GIF, WebP, BMP, ICO and TIFF
+  files (an animation's first frame), up to 4096 px a side. An SVG is
+  rasterized at the display's scale; a raster's CSS size is its pixel size.
+  `background-size`, `-position` and `-repeat` apply as usual.
+- `data:` URLs (`data:image/svg+xml,…`, base64 or percent-encoded) work
+  anywhere, also in a remote host's sheets; `url(#id)` filter references
+  stay as written.
+- Refused, and logged once per URL as `plugin style sheet url() …` with the
+  plugin id: absolute paths, other schemes (`https:`, `file:`), `..`, links
+  that lead out of the plugin's directory, missing files, and any file
+  `url()` in a remote host's sheets (their files are on that host). A
+  refused `url()` paints nothing; the rest of its rule applies.
+- The path is literal: no percent-decoding, and `?query` or `#fragment`
+  is ignored.
+- `url()` also works inside custom properties (`--icon: url(a.svg)` then
+  `background-image: var(--icon)`): it resolves where the property is
+  declared.
+- `mask-image` takes gradients only: a `url()` there parses but masks
+  nothing, so tint monochrome icons by shipping them in their color.
+
+### File icons
+
+The Files pane's rows name their entry so a sheet can give each one its own
+icon, the way VS Code icon themes do. Each row, `.ft-row`, and its icon box,
+`.ft-ic` (14×14 px, holding the stock `svg.ico`), carry:
+
+| Attribute | Value |
+| --- | --- |
+| `data-name` | The entry's name, lowercased: `cargo.lock`, `.env`, `foo.test.ts`. A compact folder chain's row (`crates/tern/src`) names its last folder. |
+| `data-ext` | The text after the name's last dot, lowercased, without the dot: `lock`, `ts`, `gz` for `archive.tar.gz`. Empty for folders, for dotfiles such as `.env`, and for names without a dot (`justfile`) or ending in one. |
+| `data-kind` | `dir` or `file` (a link counts as what it points at). |
+| `data-open` | Folders only: `true` while expanded, `false` while collapsed. |
+
+These hold for local and remote roots alike and follow the rows as they
+scroll. `.ft-ic` has `background-repeat: no-repeat`, `background-position:
+center` and `background-size: contain`, so a theme sets `background-image`
+and hides the stock glyph:
+
+```css
+/* every file without a better match */
+.ft-ic[data-kind='file'] { background-image: url(icons/file.svg); }
+/* by extension */
+.ft-ic[data-kind='file'][data-ext='ts'] { background-image: url(icons/typescript.svg); }
+/* by a multi-part extension: a suffix match */
+.ft-ic[data-kind='file'][data-name$='.test.ts'] { background-image: url(icons/test-ts.svg); }
+/* by exact name */
+.ft-ic[data-kind='file'][data-name='cargo.lock'] { background-image: url(icons/lock.svg); }
+/* folders, collapsed and expanded, by name */
+.ft-ic[data-kind='dir'] { background-image: url(icons/folder.svg); }
+.ft-ic[data-kind='dir'][data-open='true'] { background-image: url(icons/folder-open.svg); }
+.ft-ic[data-kind='dir'][data-name='src'] { background-image: url(icons/folder-src.svg); }
+.ft-ic[data-kind='dir'][data-name='src'][data-open='true'] { background-image: url(icons/folder-src-open.svg); }
+/* hide the stock glyph wherever the theme paints */
+.ft-ic[data-kind] > svg.ico { display: none; }
+```
+
+Specificity decides between matches, so order a theme from general to
+specific as above, the way VS Code resolves one: exact name
+(`fileNames`, `folderNames` / `folderNamesExpanded`), then the longest
+matching suffix (`$=` on `data-name`), then the extension
+(`fileExtensions`), then the default (`file`, `folder` / `folderExpanded`).
+Each attribute adds the same specificity, so give a more specific rule an
+extra attribute (`[data-kind='file']`) or put it later in the sheet. Match
+names lowercased: the attributes are. Generating the sheet from an icon
+theme's JSON is a loop over its maps; a theme of a thousand rules costs only
+the icons the visible rows use.
+
 ## Worked examples
 
 ### Tab and window titles

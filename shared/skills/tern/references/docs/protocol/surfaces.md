@@ -71,8 +71,8 @@ live surface of each mode per screen buffer.
   ```
 
   <figure class="tn-figure">
-  <img class="tn-light" src="../figures/protocol-surfaces-ls.light.png" srcset="../figures/protocol-surfaces-ls.light.png 2x" alt="A three-row table of file names with their sizes right-aligned, kept in the pane as command output">
-  <img class="tn-dark" src="../figures/protocol-surfaces-ls.dark.png" srcset="../figures/protocol-surfaces-ls.dark.png 2x" alt="A three-row table of file names with their sizes right-aligned, kept in the pane as command output">
+  <img class="tn-light" loading="lazy" decoding="async" src="../figures/protocol-surfaces-ls.light.png" srcset="../figures/protocol-surfaces-ls.light.png 2x" alt="A three-row table of file names with their sizes right-aligned, kept in the pane as command output">
+  <img class="tn-dark" loading="lazy" decoding="async" src="../figures/protocol-surfaces-ls.dark.png" srcset="../figures/protocol-surfaces-ls.dark.png 2x" alt="A three-row table of file names with their sizes right-aligned, kept in the pane as command output">
   <figcaption>The closed flow surface: the table spans the pane like the rows around it.</figcaption>
   </figure>
 
@@ -209,8 +209,8 @@ ESC _ tsp;f;{"sf":"s1","s":1,"ops":[
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/protocol-surfaces-regions.light.png" srcset="../figures/protocol-surfaces-regions.light.png 2x" alt="An inline surface: four transcript lines in main, an editor and a status strip docked at the bottom, and an overlay card floating over the transcript">
-<img class="tn-dark" src="../figures/protocol-surfaces-regions.dark.png" srcset="../figures/protocol-surfaces-regions.dark.png 2x" alt="An inline surface: four transcript lines in main, an editor and a status strip docked at the bottom, and an overlay card floating over the transcript">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/protocol-surfaces-regions.light.png" srcset="../figures/protocol-surfaces-regions.light.png 2x" alt="An inline surface: four transcript lines in main, an editor and a status strip docked at the bottom, and an overlay card floating over the transcript">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/protocol-surfaces-regions.dark.png" srcset="../figures/protocol-surfaces-regions.dark.png 2x" alt="An inline surface: four transcript lines in main, an editor and a status strip docked at the bottom, and an overlay card floating over the transcript">
 <figcaption>One inline surface: <code>main</code> above, <code>dock</code> at the bottom, the <code>layer</code>'s overlay over both.</figcaption>
 </figure>
 
@@ -230,6 +230,7 @@ go straight into the region element. Style the regions through these:
 | Any region | `.sf-region` |
 | One region | `.sf-main`, `.sf-dock`, `.sf-layer` |
 | By the `o` `role` | `[data-surface='omp.session']` (all three regions) |
+| By the program's `hello` `app` | `[data-app='hermes']` (all three regions) |
 | By the region node's `role` prop | `.sf-main[data-role='…']` |
 | Under a modal or full overlay, or a `picker` | `.sf-main.sf-covered`, `.sf-dock.sf-covered` |
 

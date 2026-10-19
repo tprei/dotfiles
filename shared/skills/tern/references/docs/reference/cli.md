@@ -161,6 +161,7 @@ no configuration directory.
 ```sh
 tern plugin install ./my-plugin
 tern plugin install github.com/me/tern-k8s
+tern plugin install github.com/stencil-hq/tern-sdk/plugins/examples/jsonx
 tern plugin install https://example.com/me/tern-k8s.git --force
 ```
 
@@ -168,13 +169,14 @@ Copies a package into the plugins folder as `<plugins>/<id>`, named after
 the manifest id, then reloads.
 
 `SRC` is a git source when it starts with `https://`, `http://`, `git@` or
-`ssh://`, or is `github.com/OWNER/REPO` (cloned as `https://github.com/…`).
+`ssh://`, or is `github.com/OWNER/REPO[/PATH]` (`https://github.com/OWNER/REPO`
+is cloned, and the package is its directory `PATH`).
 Git sources are cloned with `git clone --depth 1 --quiet` into a temporary
 directory, with `GIT_TERMINAL_PROMPT=0` so a private repository fails instead
 of asking for a password. Anything else is a local directory, relative to
 the current directory; a leading `~` or `~/` is the home directory (so a
 quoted `~/src/plugin`, or one typed in Preferences, works). The package must
-be at the root of the source.
+be at the root of the source, or of `PATH`.
 
 The source is checked before anything is copied, by the loader's own check:
 the manifest passes every
@@ -205,6 +207,8 @@ Output: `installed ID VERSION → DIR`. `--json` prints
 | `DIR is not a plugin: styles are larger than 256 KiB` | The style sheets together are too large |
 | `installing from git needs git` | `git` is not on `PATH` |
 | `git clone URL failed: <git's stderr>` | The clone failed |
+| `no directory PATH in URL` | The clone has no `PATH` |
+| `PATH is not a directory in URL` | `PATH` is a file, or leads out of the clone (through `..` or a symbolic link) |
 
 ## `tern plugin remove`
 

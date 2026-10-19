@@ -735,6 +735,9 @@ Only `action` events reach the owner in the clicking window. Register
 `tern.on("canvas_action", function(ev, cx) ... end)` in a plugin. The
 first truthy return consumes the click; no handler or all falsy returns
 toast `Nothing handles “<act>” here`. Toggle and selection are local.
+`cx.session:event(pane, {ev = "action", id = node, act = name})` delivers
+the same action without a pointer, after the calling handler returns, for
+example from a test command.
 
 Carly registers `tern.carly.on_canvas(fn)` in her conversation VM, with
 the same payload, a fresh ordinary-capability context and a 50 ms budget.
@@ -756,7 +759,11 @@ end)
 The complete window-only Canvas Dashboard package in
 [the SDK](../index.md#the-sdk) has a palette command that finds an existing
 owned canvas after reload and a keyed status update handler. Install it
-with `tern plugin install tern-sdk/examples/canvas`.
+with:
+
+```sh
+tern plugin install github.com/stencil-hq/tern-sdk/plugins/examples/canvas
+```
 
 For headless inspection, `carly last` displays the last tool result or
 queued canvas Action prompt; `carly last "<contains>"` also asserts that
@@ -862,7 +869,10 @@ Nodes use TSP wire form `{id, k, p?, c?, more?}`; `more` counts omitted descenda
 (default all, max 64), and `max_chars`. `view` takes the same caps and returns
 Tern's accessibility subtree `{role, name?, value?, states?, children?, more?}`
 without ids or bounds; hidden or unmounted blocks return `nil`.
-`event` sends a TSP event to the pane's program for plugins and Carly.
+`event` sends a TSP event to the pane's program for plugins and Carly. A
+canvas has no program: there it takes only `action` events (anything else
+raises) and delivers each as a click on node `id`, after the calling handler
+returns ([Canvas cx](#canvas-cx)).
 
 ```lua
 return cx.session:read("@focused", {as = "text", rows = 10})
@@ -1042,7 +1052,8 @@ local pane = await(cx.git:open(repo, {how = "tab"}))
 
 ### Settings cx
 
-The complete `settings.json` preference tree is available through `cx.settings`.
+Every preference `settings.json` can hold is available through `cx.settings`,
+defaults included (the file keeps only the changed ones).
 Root field names are canonical; `terminal.font_size` aliases `font_size`.
 Dotted paths name nested fields (`carly.model`, `sqlite.drop.quoted`);
 `get` can also read entire subtrees.

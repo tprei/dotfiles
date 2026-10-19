@@ -1,0 +1,13 @@
+schema = 1
+id = "copymode"
+name = "Copy Mode"
+version = "0.1.0"
+description = "Vim-style copy mode over a pane's full captured scrollback."
+host = "host.luau"
+window = "window.luau"
+styles = ["copymode.css"]
+
+[[blocks]]
+id = "copy"
+title = "Copy Mode"
+palette = false

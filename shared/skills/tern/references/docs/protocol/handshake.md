@@ -50,7 +50,7 @@ window restart.
   "tool","checklist","agent","chart","meter","block","effort","el"],
  "features":["blobs","settle","adopt","dock","program-palette","reduce-motion","aside","scroll","styles","flow"],
  "apc":65536,"credits":2,
- "cols":120,"cell":{"w":8,"h":17},"dark":true,"reduceMotion":false}
+ "cols":120,"cell":{"w":8,"h":17},"dark":true,"reduceMotion":false,"hour12":false}
 ```
 
 | Field | Meaning |
@@ -64,6 +64,7 @@ window restart.
 | `cols`, `cell` | The pane's width in columns and its cell size in pixels. You only need them for `rows` fallback and ANSI-width decisions; `resize` events update them. |
 | `dark` | Whether the terminal shows its dark appearance (`theme` events update it). |
 | `reduceMotion` | Whether Reduce Motion is on (`motion` events update it). You may drop motion-only nodes then. |
+| `hour12` | Whether the user's system reads a 12-hour clock (`3:05 PM`) rather than 24-hour (`15:05`): the window's regional settings (macOS's 24-Hour Time, Windows' short time format, GNOME's or Cinnamon's clock format, else `LC_TIME`, on Linux), even when your program runs on another machine. Format the times you show with it (`hour12` in JavaScript's `toLocaleTimeString`); your own process's locale may not know. |
 
 Terminal features:
 
@@ -105,7 +106,7 @@ Waiting for the reply delays the first paint by a round trip. When the
 environment names Tern (`TERM_PROGRAM=tern`) and you aren't inside a
 multiplexer, you may send `o` and your first `f` at once, on assumed v1
 capabilities: every kind, `apc` 65536 and `credits` 2, `cols` from the
-terminal size, `reduceMotion` false. Switch the tty to raw input before the
+terminal size, `reduceMotion` and `hour12` false. Switch the tty to raw input before the
 query goes out, so Tern's events aren't echoed by a cooked tty. The reply
 still decides when it arrives: its `kinds`, `apc`, `credits` and appearance
 replace the assumptions. If DA1 answers without a reply, or none arrives

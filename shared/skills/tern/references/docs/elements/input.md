@@ -109,15 +109,44 @@ character, each with its `text`.
 ## `editor`
 
 A multi-line field. Text soft-wraps (`white-space: pre-wrap`, breaking
-anywhere), so a long line never scrolls sideways. Without `maxLines` it grows
-with its text; with `maxLines = N` it grows to N lines and then scrolls inside
-itself, keeping the caret in view after each frame. With `lang`, the text is
-code: Tern's highlighter colors it in the background (an edited line keeps its
-old colors until the new ones land, so typing never flashes plain) and the
-field adds `.code`. Every surface already draws in the mono face, so `lang`
-changes the colors, not the font.
+anywhere), so a long line never scrolls sideways; `nowrap` clips a long line
+instead, like a terminal row. Without `maxLines` it grows with its text; with
+`maxLines = N` it grows to N lines and then scrolls inside itself, keeping the
+caret in view after each frame; a `topline` puts the scroll in the program's
+hands (that line at the top, the caret no longer moving it). `gutter` spans
+(line numbers, signs) draw at each line's start and `virt` spans (inlay hints,
+diagnostics) at each line's end; both are laid out with the text but are not
+part of it, so `cursor`, `decor` and native editing never see them. With
+`lang`, the text is code: Tern's highlighter colors it in the background (an
+edited line keeps its old colors until the new ones land, so typing never
+flashes plain) and the field adds `.code`. Every surface already draws in the
+mono face, so `lang` changes the colors, not the font.
 
 **Build it:** `tern.ui.node("editor", { text = …, cursor = … })`.
+
+For a program-owned code viewport, send the whole text and index `gutter`
+and `virt` by logical line (each entry is a string or an array of spans):
+
+```lua
+tern.ui.node("editor", {
+	text = "local answer = 42\nprint(answer)\n",
+	cursor = 6,
+	lang = "lua",
+	highlight = false,
+	decor = { { from = 6, to = 12, s = "syntaxVariable" } },
+	gutter = { "1 │ ", "2 │ ", "3 │ " },
+	virt = { "  : number", "", "" },
+	nowrap = true,
+	maxLines = 2,
+	topline = 1,
+})
+```
+
+`topline` is zero-based; convert a one-based buffer line number before
+sending it. Omitting `topline` with `followCursor = false` preserves the
+existing scroll without pinning a particular line. Colors in `decor`,
+`gutter` and `virt` use the same span tokens and
+[program palette](../protocol/theme.md#program-palette) as ordinary text.
 
 | Prop | Type | Default | Meaning |
 | --- | --- | --- | --- |
@@ -129,10 +158,16 @@ changes the colors, not the font.
 | `placeholder` | string | `""` | Dim text shown while `text` is empty (and no `ghost`); also `aria-placeholder` |
 | `prompt` | spans | none | Spans before the first line (`> `, a shell prompt) |
 | `mode` | string | none | A vim mode label: shows it in a mode chip (`title` `Mode: <label>`) and sets `data-mode` (lowercased) on the field and the chip; turns native editing off. The chip is a neutral pill; an `insert` chip is tinted accent. The caret keeps its beam in every mode |
-| `lang` | string | none | The text is code in this language: highlighted, `.code` |
+| `lang` | string | none | The text is code in this language: highlighted unless `highlight` is false, `.code` |
+| `highlight` | boolean | `true` | Set false to use your program's `decor` colors without Tern's syntax highlighter, keeping `lang`'s code presentation |
 | `readonly` | boolean | `false` | Not editable: hides the caret unless focused, default cursor, `aria-readonly`, no `focus` event on click, no native editing, no `send` |
 | `sendable` | boolean | `false` | The owner accepts an atomic `send` into this field ([Sending](../protocol/input.md#native-editing), with the `send` hello feature). Tern drops a `send` to a field that isn't `sendable: true` or is `readonly`, `disabled` or `hidden`. Plugin blocks don't advertise `send`, so it has no effect from a block |
 | `maxLines` | number | none | Cap the height at N lines (`calc(N * var(--sf-lh))`) and scroll inside; adds `.capped`. `0` or absent: no cap |
+| `nowrap` | boolean | `false` | A long line clips like a terminal row instead of soft-wrapping (`white-space: pre`); adds `.nowrap`. A capped field still scrolls vertically |
+| `topline` | number (0-based line) | none | The program owns the scroll: that line sits at the top and the caret no longer scrolls the field. Absent: Tern keeps the caret in view (with `maxLines`) |
+| `followCursor` | boolean | `true` | Set false to leave scrolling alone when the caret moves. A supplied `topline` is authoritative regardless of this flag |
+| `gutter` | `{ TspText }` (one per line) | `{}` | Spans in a shared, nonwrapping gutter column aligned to each logical line's first visual row, even when text wraps (`span.sf-ed-gutter`, `aria-hidden`). The widest entry determines the column width. Not part of `text`; missing entries draw nothing |
+| `virt` | `{ TspText }` (one per line) | `{}` | End-of-line spans drawn at each line's end (`span.sf-ed-virt`), for inlay hints and diagnostics; the last line's entry draws too. Not part of `text`; missing entries draw nothing |
 | `aria` | string | `"Message"` | Accessible name (common prop) |
 
 Common props (`role`, `tone`, `hidden`, `grow`, `min`, `max`, `actions`, …)
@@ -152,12 +187,14 @@ work as on any node.
 	<div class="sf-ed-scroll">
 		<div class="sf-ed-text">
 			<span class="sf-ed-prompt">…</span>
+			<span class="sf-ed-gutter" aria-hidden="true">12 </span>
 			plain run
 			<span class="sf-ed-sel"><span class="tk-keyword">sel</span></span>
 			<span class="sf-t-accent">@file</span>
 			<span class="sf-caret"></span>
 			<span class="sf-ed-ghost">suggested suffix</span>
 			rest of the text
+			<span class="sf-ed-virt" aria-hidden="true">◀ hint</span>
 		</div>
 	</div>
 	<span class="sf-ed-mode on" data-mode="insert" title="Mode: INSERT">INSERT</span>
@@ -165,7 +202,9 @@ work as on any node.
 ```
 
 `span.sf-ed-ph` replaces the ghost when the text is empty and there is no
-ghost.
+ghost. While an IME composes in the focused field, its marked text draws at
+the caret in `span.sf-ed-preedit` (underlined) in place of both, the caret at
+the input method's caret inside it; the commit reaches you as typed text.
 
 | Target | Selector |
 | --- | --- |
@@ -175,17 +214,21 @@ ghost.
 | Empty text | `.sf-editor.empty` |
 | Code (`lang`) | `.sf-editor.code` |
 | Height capped (`maxLines`) | `.sf-editor.capped` |
+| Never wraps (`nowrap`) | `.sf-editor.nowrap` |
 | A native selection showing | `.sf-editor.selecting` (never in a plugin block) |
 | Vim mode | `.sf-editor[data-mode='normal']` |
 | Scroller | `.sf-ed-scroll` (inner, may change) |
 | Text flow | `.sf-ed-text` (inner, may change) |
 | Prompt | `.sf-ed-prompt` (inner, may change) |
+| Gutter run | `.sf-ed-gutter` (inner, may change) |
+| End-of-line virtual text | `.sf-ed-virt` (inner, may change) |
 | Selected run | `.sf-ed-sel` (inner, may change) |
 | Decoration run | `.sf-t-<token>` (stable token classes, see [Text](text.md)) |
 | Highlighted code run | `.tk-<token>` (kit highlighter) |
 | Caret | `.sf-caret` (inner, may change) |
 | Ghost suffix | `.sf-ed-ghost` (inner, may change) |
 | Placeholder | `.sf-ed-ph` (inner, may change) |
+| IME composition | `.sf-ed-preedit` (inner, may change) |
 | Mode chip | `.sf-ed-mode.on`, `.sf-ed-mode[data-mode='insert']` (inner, may change) |
 
 Stable hooks are `.sf-editor`, `[data-id]`, `[data-role]`, `[data-tone]` and
@@ -247,8 +290,8 @@ Before the first key the field shows its prompt, the dimmed caret and the
 placeholder:
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-input-placeholder.light.png" srcset="../figures/elements-input-placeholder.light.png 2x" alt="An empty editor: a dim › prompt, a dimmed caret and the placeholder Write a note, Enter to save in faint text">
-<img class="tn-dark" src="../figures/elements-input-placeholder.dark.png" srcset="../figures/elements-input-placeholder.dark.png 2x" alt="An empty editor: a dim › prompt, a dimmed caret and the placeholder Write a note, Enter to save in faint text">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-input-placeholder.light.png" srcset="../figures/elements-input-placeholder.light.png 2x" alt="An empty editor: a dim › prompt, a dimmed caret and the placeholder Write a note, Enter to save in faint text">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-input-placeholder.dark.png" srcset="../figures/elements-input-placeholder.dark.png 2x" alt="An empty editor: a dim › prompt, a dimmed caret and the placeholder Write a note, Enter to save in faint text">
 </figure>
 
 This example treats offsets as bytes, which is right for ASCII text only.
@@ -280,8 +323,8 @@ ui.node("editor", {
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-input-editor.light.png" srcset="../figures/elements-input-editor.light.png 2x" alt="A focused editor with an accent ring: the text Ship the notes after @review with @review in the accent color, a solid caret after it and the ghost suffix signs off in faint text">
-<img class="tn-dark" src="../figures/elements-input-editor.dark.png" srcset="../figures/elements-input-editor.dark.png 2x" alt="A focused editor with an accent ring: the text Ship the notes after @review with @review in the accent color, a solid caret after it and the ghost suffix signs off in faint text">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-input-editor.light.png" srcset="../figures/elements-input-editor.light.png 2x" alt="A focused editor with an accent ring: the text Ship the notes after @review with @review in the accent color, a solid caret after it and the ghost suffix signs off in faint text">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-input-editor.dark.png" srcset="../figures/elements-input-editor.dark.png 2x" alt="A focused editor with an accent ring: the text Ship the notes after @review with @review in the accent color, a solid caret after it and the ghost suffix signs off in faint text">
 <figcaption>The focus ring and full-strength caret come from the focus op, not from a prop.</figcaption>
 </figure>
 
@@ -328,8 +371,8 @@ ui.col({
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-input-input.light.png" srcset="../figures/elements-input-input.light.png 2x" alt="Two input fields: an idle one in a tinted well showing a / prompt and the placeholder Filter, and a focused one with an accent ring, the word deploy selected and the caret after it">
-<img class="tn-dark" src="../figures/elements-input-input.dark.png" srcset="../figures/elements-input-input.dark.png 2x" alt="Two input fields: an idle one in a tinted well showing a / prompt and the placeholder Filter, and a focused one with an accent ring, the word deploy selected and the caret after it">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-input-input.light.png" srcset="../figures/elements-input-input.light.png 2x" alt="Two input fields: an idle one in a tinted well showing a / prompt and the placeholder Filter, and a focused one with an accent ring, the word deploy selected and the caret after it">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-input-input.dark.png" srcset="../figures/elements-input-input.dark.png 2x" alt="Two input fields: an idle one in a tinted well showing a / prompt and the placeholder Filter, and a focused one with an accent ring, the word deploy selected and the caret after it">
 </figure>
 
 **Children:** none (ignored).
@@ -352,7 +395,7 @@ ui.col({
 | --- | --- |
 | The node | `.sf-input` |
 | States | `.sf-input.focused`, `.readonly`, `.empty`, `.code`, `.selecting`, `[data-mode]` |
-| Parts | `.sf-ed-scroll`, `.sf-ed-text`, `.sf-ed-prompt`, `.sf-ed-sel`, `.sf-caret`, `.sf-ed-ghost`, `.sf-ed-ph`, `.sf-ed-mode` (inner, may change) |
+| Parts | `.sf-ed-scroll`, `.sf-ed-text`, `.sf-ed-prompt`, `.sf-ed-sel`, `.sf-caret`, `.sf-ed-ghost`, `.sf-ed-ph`, `.sf-ed-preedit`, `.sf-ed-mode` (inner, may change) |
 
 A filter field above a list, with the query's matches marked in the list:
 
@@ -392,8 +435,8 @@ Restyle the field from your sheet:
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-input-restyle.light.png" srcset="../figures/elements-input-restyle.light.png 2x" alt="The two filter fields restyled as bare underlined lines: the idle one with a hairline under it, the focused one with a 2 px accent underline and an accent caret">
-<img class="tn-dark" src="../figures/elements-input-restyle.dark.png" srcset="../figures/elements-input-restyle.dark.png 2x" alt="The two filter fields restyled as bare underlined lines: the idle one with a hairline under it, the focused one with a 2 px accent underline and an accent caret">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-input-restyle.light.png" srcset="../figures/elements-input-restyle.light.png 2x" alt="The two filter fields restyled as bare underlined lines: the idle one with a hairline under it, the focused one with a 2 px accent underline and an accent caret">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-input-restyle.dark.png" srcset="../figures/elements-input-restyle.dark.png 2x" alt="The two filter fields restyled as bare underlined lines: the idle one with a hairline under it, the focused one with a 2 px accent underline and an accent caret">
 </figure>
 
 The first rule outranks Tern's `.sf-input.focused` (same specificity, later

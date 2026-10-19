@@ -91,8 +91,8 @@ return { main = ui.col(rows) }
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-layout-gaps.light.png" srcset="../figures/elements-layout-gaps.light.png 2x" alt="Five rows of three badges, spaced 0, 2, 6, 10 and 16 pixels apart">
-<img class="tn-dark" src="../figures/elements-layout-gaps.dark.png" srcset="../figures/elements-layout-gaps.dark.png 2x" alt="Five rows of three badges, spaced 0, 2, 6, 10 and 16 pixels apart">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-layout-gaps.light.png" srcset="../figures/elements-layout-gaps.light.png 2x" alt="Five rows of three badges, spaced 0, 2, 6, 10 and 16 pixels apart">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-layout-gaps.dark.png" srcset="../figures/elements-layout-gaps.dark.png 2x" alt="Five rows of three badges, spaced 0, 2, 6, 10 and 16 pixels apart">
 <figcaption>The five gaps, on rows; a column spaces its children the same way.</figcaption>
 </figure>
 
@@ -169,8 +169,8 @@ return { main = ui.node("col", { gap = "lg" }, rows) }
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-layout-align.light.png" srcset="../figures/elements-layout-align.light.png 2x" alt="Four rows: the label and badge sit at the top, middle, bottom and first-line baseline of a two-line column">
-<img class="tn-dark" src="../figures/elements-layout-align.dark.png" srcset="../figures/elements-layout-align.dark.png 2x" alt="Four rows: the label and badge sit at the top, middle, bottom and first-line baseline of a two-line column">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-layout-align.light.png" srcset="../figures/elements-layout-align.light.png 2x" alt="Four rows: the label and badge sit at the top, middle, bottom and first-line baseline of a two-line column">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-layout-align.dark.png" srcset="../figures/elements-layout-align.dark.png 2x" alt="Four rows: the label and badge sit at the top, middle, bottom and first-line baseline of a two-line column">
 </figure>
 
 **Children:** drawn in order, directly inside the element. Size them with the [common flex props](#common-props-on-layout-nodes).
@@ -204,8 +204,8 @@ return ui.node("row", { gap = "md", align = "baseline" }, {
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-layout-row.light.png" srcset="../figures/elements-layout-row.light.png 2x" alt="A row with the bold name api at the left and a green healthy badge pushed to the right edge">
-<img class="tn-dark" src="../figures/elements-layout-row.dark.png" srcset="../figures/elements-layout-row.dark.png 2x" alt="A row with the bold name api at the left and a green healthy badge pushed to the right edge">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-layout-row.light.png" srcset="../figures/elements-layout-row.light.png 2x" alt="A row with the bold name api at the left and a green healthy badge pushed to the right edge">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-layout-row.dark.png" srcset="../figures/elements-layout-row.dark.png 2x" alt="A row with the bold name api at the left and a green healthy badge pushed to the right edge">
 </figure>
 
 ## `card`
@@ -257,8 +257,8 @@ return { main = ui.node("row", { gap = "sm", wrap = true }, cards) }
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-layout-card-tones.light.png" srcset="../figures/elements-layout-card-tones.light.png 2x" alt="Ten cards in two columns, one per tone, each ring tinted by its tone; five carry Running, Done, Failed, Pending and Canceled chips">
-<img class="tn-dark" src="../figures/elements-layout-card-tones.dark.png" srcset="../figures/elements-layout-card-tones.dark.png 2x" alt="Ten cards in two columns, one per tone, each ring tinted by its tone; five carry Running, Done, Failed, Pending and Canceled chips">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-layout-card-tones.light.png" srcset="../figures/elements-layout-card-tones.light.png 2x" alt="Ten cards in two columns, one per tone, each ring tinted by its tone; five carry Running, Done, Failed, Pending and Canceled chips">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-layout-card-tones.dark.png" srcset="../figures/elements-layout-card-tones.dark.png 2x" alt="Ten cards in two columns, one per tone, each ring tinted by its tone; five carry Running, Done, Failed, Pending and Canceled chips">
 <figcaption>Without a program palette the fill stays <code>--sf-card-bg</code>; the tone shows in the ring.</figcaption>
 </figure>
 
@@ -296,13 +296,15 @@ return {
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-layout-card-fold.light.png" srcset="../figures/elements-layout-card-fold.light.png 2x" alt="Three collapsible cards: open with five log lines, collapsed to its head row, and collapsed to two faded lines over a 3 more lines button">
-<img class="tn-dark" src="../figures/elements-layout-card-fold.dark.png" srcset="../figures/elements-layout-card-fold.dark.png 2x" alt="Three collapsible cards: open with five log lines, collapsed to its head row, and collapsed to two faded lines over a 3 more lines button">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-layout-card-fold.light.png" srcset="../figures/elements-layout-card-fold.light.png 2x" alt="Three collapsible cards: open with five log lines, collapsed to its head row, and collapsed to two faded lines over a 3 more lines button">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-layout-card-fold.dark.png" srcset="../figures/elements-layout-card-fold.dark.png 2x" alt="Three collapsible cards: open with five log lines, collapsed to its head row, and collapsed to two faded lines over a 3 more lines button">
 <figcaption>The chevron points down when open and right when collapsed; <code>lens.build</code> implies the hammer icon.</figcaption>
 </figure>
 
-**Collapse state is local.** A flip by the user takes effect at once, without a round trip, and is remembered under
-the node's `key` (its id without one), so it survives rebuilds that give the card a new id. The `collapsed` prop sets
+**Collapse state is local.** A flip by the user takes effect at once, without a round trip, and is remembered by
+the node's `key` among its siblings (its id without one), not surface-wide. Deleting and adding a card with a new
+id and the same key under the same parent preserves the fold; the same key under another parent has independent
+state. The `collapsed` prop sets
 the starting state; once the user flips it, the local state wins until your view sends a *different* `collapsed`
 value, which resets it (sending the same value again changes nothing). The program hears a `toggle` event.
 
@@ -322,7 +324,7 @@ or `tern.ui.node("card", { head = …, status = "running", collapsible = true },
 | `collapsible` | boolean | `false` | The head flips the fold; adds `collapsible` and shows the chevron |
 | `collapsed` | boolean | `false` | Starting fold state (needs `collapsible`); adds `collapsed` |
 | `preview` | `"auto"` or `{ lines = n }` | none | Lines shown while collapsed. `"auto"` is 10; a fractional `lines` is truncated, and anything below 1 or of another shape means no preview |
-| `key` | string | none | Identity, and the key local collapse is kept under |
+| `key` | string | none | Identity among siblings; local collapse is remembered by this key under the same parent (by node id without a key) |
 | `selected` | boolean | `false` | Class `selected`: an accent ring and a soft 3px accent halo |
 | `inset` | boolean | `false` | Class `inset`: the body has no padding (`0 0 1px`) and its children get the card's bottom corners, so a `code`, `diff` or `table` fills the card edge to edge |
 | `variant` | `"bare"` | none | Class `bare`: no ring, fill or rounding; the head is a plain line-height row with no padding and the body indents by 24px. Keeps head, status, fold and preview. For grouped and compact presentations, such as a group of rows or one file inside a larger card |
@@ -343,8 +345,8 @@ return {
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-layout-card-variants.light.png" srcset="../figures/elements-layout-card-variants.light.png 2x" alt="A selected card with a blue ring and halo, an inset card whose code block fills it edge to edge, a bare card with no frame, and a card with no head row">
-<img class="tn-dark" src="../figures/elements-layout-card-variants.dark.png" srcset="../figures/elements-layout-card-variants.dark.png 2x" alt="A selected card with a blue ring and halo, an inset card whose code block fills it edge to edge, a bare card with no frame, and a card with no head row">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-layout-card-variants.light.png" srcset="../figures/elements-layout-card-variants.light.png 2x" alt="A selected card with a blue ring and halo, an inset card whose code block fills it edge to edge, a bare card with no frame, and a card with no head row">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-layout-card-variants.dark.png" srcset="../figures/elements-layout-card-variants.dark.png 2x" alt="A selected card with a blue ring and halo, an inset card whose code block fills it edge to edge, a bare card with no frame, and a card with no head row">
 </figure>
 
 **Children:** the `head` child (if `head` names one) goes into `div.sf-head`; every other child goes into
@@ -431,7 +433,7 @@ A lighter disclosure group with no frame: a head row of a chevron and the head c
 past a 1px rule on its left (`box-shadow: inset 1px 0 0 var(--l2)`). Body children sit `--sf-inner-gap` apart.
 
 `head`, `collapsible`, `collapsed` and `key` work exactly as on [`card`](#card): the head as spans or a child's id,
-the head as a button with Enter/Space and `aria-expanded` when collapsible, local collapse state kept by `key`, and
+the head as a button with Enter/Space and `aria-expanded` when collapsible, local collapse state kept by `key` among siblings, and
 the `toggle` event. Collapsed, the body is hidden. A section has no role icon, status chip, preview clamp, "more"
 button, `selected`, `inset` or `variant`; those props are ignored. The chevron always shows, pointing down while
 open, even on a section that is not collapsible.
@@ -444,7 +446,7 @@ open, even on a section that is not collapsible.
 | `head` | spans, string, or a child's id | none | Head content |
 | `collapsible` | boolean | `false` | The head flips the fold; adds `collapsible` |
 | `collapsed` | boolean | `false` | Starting fold state (needs `collapsible`); adds `collapsed` and `nopreview` (the body hides; a `preview` prop is ignored) |
-| `key` | string | none | Identity, and the key local collapse is kept under |
+| `key` | string | none | Identity among siblings; local collapse is remembered by this key under the same parent (by node id without a key) |
 
 **Children:** the `head` child into `div.sf-head`, the rest into `div.sf-section-body`.
 
@@ -493,8 +495,8 @@ return { main = ui.col({ env("env", false), env("env2", true) }) }
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-layout-section.light.png" srcset="../figures/elements-layout-section.light.png 2x" alt="An open section, chevron down, over PATH and HOME indented past a hairline; below it the same section collapsed to its head, chevron right">
-<img class="tn-dark" src="../figures/elements-layout-section.dark.png" srcset="../figures/elements-layout-section.dark.png 2x" alt="An open section, chevron down, over PATH and HOME indented past a hairline; below it the same section collapsed to its head, chevron right">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-layout-section.light.png" srcset="../figures/elements-layout-section.light.png 2x" alt="An open section, chevron down, over PATH and HOME indented past a hairline; below it the same section collapsed to its head, chevron right">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-layout-section.dark.png" srcset="../figures/elements-layout-section.dark.png 2x" alt="An open section, chevron down, over PATH and HOME indented past a hairline; below it the same section collapsed to its head, chevron right">
 </figure>
 
 ## `rule`
@@ -538,8 +540,8 @@ return {
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-layout-rule.light.png" srcset="../figures/elements-layout-rule.light.png 2x" alt="A labeled rule with Yesterday centered between two hairlines, and below it an unlabeled full-width hairline">
-<img class="tn-dark" src="../figures/elements-layout-rule.dark.png" srcset="../figures/elements-layout-rule.dark.png 2x" alt="A labeled rule with Yesterday centered between two hairlines, and below it an unlabeled full-width hairline">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-layout-rule.light.png" srcset="../figures/elements-layout-rule.light.png 2x" alt="A labeled rule with Yesterday centered between two hairlines, and below it an unlabeled full-width hairline">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-layout-rule.dark.png" srcset="../figures/elements-layout-rule.dark.png 2x" alt="A labeled rule with Yesterday centered between two hairlines, and below it an unlabeled full-width hairline">
 </figure>
 
 ## `spacer`
@@ -592,8 +594,8 @@ return { main = ui.node("row", { gap = "lg", align = "start" }, cols) }
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-layout-spacer.light.png" srcset="../figures/elements-layout-spacer.light.png 2x" alt="Five pairs of stacked badges, none, xs, sm, md and lg, the gap inside each pair growing from 0 to 20 pixels">
-<img class="tn-dark" src="../figures/elements-layout-spacer.dark.png" srcset="../figures/elements-layout-spacer.dark.png 2x" alt="Five pairs of stacked badges, none, xs, sm, md and lg, the gap inside each pair growing from 0 to 20 pixels">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-layout-spacer.light.png" srcset="../figures/elements-layout-spacer.light.png 2x" alt="Five pairs of stacked badges, none, xs, sm, md and lg, the gap inside each pair growing from 0 to 20 pixels">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-layout-spacer.dark.png" srcset="../figures/elements-layout-spacer.dark.png 2x" alt="Five pairs of stacked badges, none, xs, sm, md and lg, the gap inside each pair growing from 0 to 20 pixels">
 </figure>
 
 ## Stable hooks

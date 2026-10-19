@@ -22,16 +22,15 @@ marks.
 
 ## Install
 
-From where you unpacked the SDK:
-
 ```sh
-tern plugin install tern-sdk/examples/longrun
+tern plugin install github.com/stencil-hq/tern-sdk/plugins/examples/longrun
 ```
 
-or, to load it in place and reload on every save:
+or, to load a clone in place and reload on every save:
 
 ```sh
-tern plugin link tern-sdk/examples/longrun
+git clone https://github.com/stencil-hq/tern-sdk
+tern plugin link tern-sdk/plugins/examples/longrun
 ```
 
 The threshold is stored in the plugin's `kv.json` as `threshold_ms`; the

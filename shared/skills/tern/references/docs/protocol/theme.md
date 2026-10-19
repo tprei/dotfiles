@@ -78,14 +78,14 @@ The same document drawn in Tern's theme, then with omp's palette (60 tokens
 per variant, sent as one `t` after the first frame):
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/protocol-theme-tern.light.png" srcset="../figures/protocol-theme-tern.light.png 2x" alt="A success card holding a path, a diff count, a model name and Rust code, and an error card with a warning, in Tern's own colors">
-<img class="tn-dark" src="../figures/protocol-theme-tern.dark.png" srcset="../figures/protocol-theme-tern.dark.png 2x" alt="A success card holding a path, a diff count, a model name and Rust code, and an error card with a warning, in Tern's own colors">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/protocol-theme-tern.light.png" srcset="../figures/protocol-theme-tern.light.png 2x" alt="A success card holding a path, a diff count, a model name and Rust code, and an error card with a warning, in Tern's own colors">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/protocol-theme-tern.dark.png" srcset="../figures/protocol-theme-tern.dark.png 2x" alt="A success card holding a path, a diff count, a model name and Rust code, and an error card with a warning, in Tern's own colors">
 <figcaption>No palette: Tern's theme.</figcaption>
 </figure>
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/protocol-theme-palette.light.png" srcset="../figures/protocol-theme-palette.light.png 2x" alt="The same two cards with omp's palette: accent, path, model, syntax colors and the card tints change">
-<img class="tn-dark" src="../figures/protocol-theme-palette.dark.png" srcset="../figures/protocol-theme-palette.dark.png 2x" alt="The same two cards with omp's palette: accent, path, model, syntax colors and the card tints change">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/protocol-theme-palette.light.png" srcset="../figures/protocol-theme-palette.light.png 2x" alt="The same two cards with omp's palette: accent, path, model, syntax colors and the card tints change">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/protocol-theme-palette.dark.png" srcset="../figures/protocol-theme-palette.dark.png 2x" alt="The same two cards with omp's palette: accent, path, model, syntax colors and the card tints change">
 <figcaption>With omp's palette: <code>accent</code>, <code>path</code> (<code>statusLinePath</code>), <code>statusLineModel</code>, <code>code</code> (<code>mdCode</code>), the <code>syntax*</code> colors and the card tints change.</figcaption>
 </figure>
 
@@ -148,8 +148,8 @@ it can reach because they sit inside the surface:
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/protocol-theme-sheet.light.png" srcset="../figures/protocol-theme-sheet.light.png 2x" alt="A card with square corners holding an accent question and two checkbox rows, laid out by the program's sheet">
-<img class="tn-dark" src="../figures/protocol-theme-sheet.dark.png" srcset="../figures/protocol-theme-sheet.dark.png 2x" alt="A card with square corners holding an accent question and two checkbox rows, laid out by the program's sheet">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/protocol-theme-sheet.light.png" srcset="../figures/protocol-theme-sheet.light.png 2x" alt="A card with square corners holding an accent question and two checkbox rows, laid out by the program's sheet">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/protocol-theme-sheet.dark.png" srcset="../figures/protocol-theme-sheet.dark.png 2x" alt="A card with square corners holding an accent question and two checkbox rows, laid out by the program's sheet">
 </figure>
 
 The hooks to target, the cascade and recipes are in

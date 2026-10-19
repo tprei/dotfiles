@@ -87,8 +87,8 @@ ui.node("col", { gap = "sm" }, {
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-work-tool.light.png" srcset="../figures/elements-work-tool.light.png 2x" alt="Four tool steps: a pending Deploy with a prod badge, a running Build with a spinner, a live timer and its output, a done Edit of a path with a +8 −1 diff stat, and a failed Test with a red tint and bar, a 2 failed note, an exit 101 chip and an x-circle">
-<img class="tn-dark" src="../figures/elements-work-tool.dark.png" srcset="../figures/elements-work-tool.dark.png 2x" alt="Four tool steps: a pending Deploy with a prod badge, a running Build with a spinner, a live timer and its output, a done Edit of a path with a +8 −1 diff stat, and a failed Test with a red tint and bar, a 2 failed note, an exit 101 chip and an x-circle">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-work-tool.light.png" srcset="../figures/elements-work-tool.light.png 2x" alt="Four tool steps: a pending Deploy with a prod badge, a running Build with a spinner, a live timer and its output, a done Edit of a path with a +8 −1 diff stat, and a failed Test with a red tint and bar, a 2 failed note, an exit 101 chip and an x-circle">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-work-tool.dark.png" srcset="../figures/elements-work-tool.dark.png 2x" alt="Four tool steps: a pending Deploy with a prod badge, a running Build with a spinner, a live timer and its output, a done Edit of a path with a +8 −1 diff stat, and a failed Test with a red tint and bar, a 2 failed note, an exit 101 chip and an x-circle">
 <figcaption>Pending, running, done and error. The Edit's 640 ms is under a second, so its timer waits for a hover.</figcaption>
 </figure>
 
@@ -110,7 +110,10 @@ color), so `"+8 −1"` reads like a diff stat.
 
 **Collapse.** `collapsible: true` makes the head a button (Enter or Space flips it;
 a plain click flips it, a ⌘-click doesn't). The state is local and remembered by
-`key` (else id), like a card's. `collapsed` sets the initial state; changing the
+`key` among the node's siblings (else by id), like a card's, not surface-wide.
+Deleting and adding a node with a new id and the same key under the same parent
+preserves the fold; the same key under another parent has independent state.
+`collapsed` sets the initial state; changing the
 prop later resets the remembered state to it. While collapsed:
 
 - with `preview: { lines = N }` the body is clamped to its first N lines under a
@@ -137,8 +140,8 @@ ui.node("tool", {
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-work-tool-preview.light.png" srcset="../figures/elements-work-tool-preview.light.png 2x" alt="A collapsed tool with a tail preview: the head, a '3 earlier lines · Show all ⌃O' button, then the last three output lines under a top fade">
-<img class="tn-dark" src="../figures/elements-work-tool-preview.dark.png" srcset="../figures/elements-work-tool-preview.dark.png 2x" alt="A collapsed tool with a tail preview: the head, a '3 earlier lines · Show all ⌃O' button, then the last three output lines under a top fade">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-work-tool-preview.light.png" srcset="../figures/elements-work-tool-preview.light.png 2x" alt="A collapsed tool with a tail preview: the head, a '3 earlier lines · Show all ⌃O' button, then the last three output lines under a top fade">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-work-tool-preview.dark.png" srcset="../figures/elements-work-tool-preview.dark.png 2x" alt="A collapsed tool with a tail preview: the head, a '3 earlier lines · Show all ⌃O' button, then the last three output lines under a top fade">
 <figcaption>Collapsed with <code>preview = { tail = 3 }</code>. The chevron and the Copy and Rerun buttons show on hover.</figcaption>
 </figure>
 
@@ -178,7 +181,7 @@ the button. A click runs `id` as an action on the tool node: the built-ins
 | `collapsed` | boolean | none | Initial collapse state (only with `collapsible`). |
 | `preview` | `{ lines = N }` \| `{ tail = N }` | none | Clamp of the collapsed body. |
 | `tools` | array of `{ id, label?, keys? }` | `[]` | Hover action buttons. |
-| `key` | string | node id | Where the collapse state is remembered. |
+| `key` | string | node id | Identity among siblings; collapse is remembered by this key under the same parent. |
 
 **Children:** drawn in order in `.sf-tool-body` (any kinds). Nested `card` and
 `tool` children draw unframed.
@@ -307,7 +310,7 @@ set, it shows the tool's icon (same table as [`tool`](#tool)), its name, its int
 `tool.age`. The line hides when empty.
 
 **Collapse.** As with `tool`: `collapsible` makes the row a button (click,
-Enter, Space; ⌘-click doesn't flip), the state is local and keyed by `key` or id,
+Enter, Space; ⌘-click doesn't flip), the state is local and keyed by `key` among siblings (else by id),
 `collapsed` sets it, and `.collapsed` hides the children.
 
 **Depth.** `depth` (0–6) sets `--sf-depth` on the node; the sheet indents the row
@@ -332,8 +335,8 @@ ui.node("col", { gap = "xs" }, {
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-work-agent.light.png" srcset="../figures/elements-work-agent.light.png 2x" alt="Five agent rows: a running runner with a pulse, model chip, tool count, 40% ring, an amber context meter, cost and timer over a line naming the bash step it runs; a done runner with a check, tokens and cost; a failed runner with an x and a flaky badge; an indented crawler counting down a retry; an idle runner with a hollow ring">
-<img class="tn-dark" src="../figures/elements-work-agent.dark.png" srcset="../figures/elements-work-agent.dark.png 2x" alt="Five agent rows: a running runner with a pulse, model chip, tool count, 40% ring, an amber context meter, cost and timer over a line naming the bash step it runs; a done runner with a check, tokens and cost; a failed runner with an x and a flaky badge; an indented crawler counting down a retry; an idle runner with a hollow ring">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-work-agent.light.png" srcset="../figures/elements-work-agent.light.png 2x" alt="Five agent rows: a running runner with a pulse, model chip, tool count, 40% ring, an amber context meter, cost and timer over a line naming the bash step it runs; a done runner with a check, tokens and cost; a failed runner with an x and a flaky badge; an indented crawler counting down a retry; an idle runner with a hollow ring">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-work-agent.dark.png" srcset="../figures/elements-work-agent.dark.png 2x" alt="Five agent rows: a running runner with a pulse, model chip, tool count, 40% ring, an amber context meter, cost and timer over a line naming the bash step it runs; a done runner with a check, tokens and cost; a failed runner with an x and a flaky badge; an indented crawler counting down a retry; an idle runner with a hollow ring">
 <figcaption>The context meter turns amber at 75%. The model dot is gray here: this palette defines no <code>thinkingHigh</code>.</figcaption>
 </figure>
 
@@ -354,7 +357,7 @@ ui.node("col", { gap = "xs" }, {
 | `depth` | integer | `0` | Nesting depth, capped at 6. |
 | `collapsible` | boolean | `false` | Row toggles the children. |
 | `collapsed` | boolean | none | Initial collapse state. |
-| `key` | string | node id | Where the collapse state is remembered. |
+| `key` | string | node id | Identity among siblings; collapse is remembered by this key under the same parent. |
 
 **Children:** drawn in order in `.sf-agent-kids` (hidden when there are none, or
 while collapsed).
@@ -548,8 +551,8 @@ ui.node("col", { gap = "md" }, {
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-work-checklist.light.png" srcset="../figures/elements-work-checklist.light.png 2x" alt="The same todo list three ways: a full list with a folded, complete Build phase and an open Ship phase showing done, active, blocked, pending and dropped items; a HUD pill reading Tag the release 4/7; and a reminder line reading 3 todos still open, reminder 1/3">
-<img class="tn-dark" src="../figures/elements-work-checklist.dark.png" srcset="../figures/elements-work-checklist.dark.png 2x" alt="The same todo list three ways: a full list with a folded, complete Build phase and an open Ship phase showing done, active, blocked, pending and dropped items; a HUD pill reading Tag the release 4/7; and a reminder line reading 3 todos still open, reminder 1/3">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-work-checklist.light.png" srcset="../figures/elements-work-checklist.light.png 2x" alt="The same todo list three ways: a full list with a folded, complete Build phase and an open Ship phase showing done, active, blocked, pending and dropped items; a HUD pill reading Tag the release 4/7; and a reminder line reading 3 todos still open, reminder 1/3">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-work-checklist.dark.png" srcset="../figures/elements-work-checklist.dark.png 2x" alt="The same todo list three ways: a full list with a folded, complete Build phase and an open Ship phase showing done, active, blocked, pending and dropped items; a HUD pill reading Tag the release 4/7; and a reminder line reading 3 todos still open, reminder 1/3">
 <figcaption><code>full</code>, <code>hud</code> and <code>reminder</code> of the same phases. Build is complete, so it folds to its row.</figcaption>
 </figure>
 
@@ -562,7 +565,10 @@ inside it: Tern wraps your view in a `col` with id `native` and inserts it as th
 block's first child, before `raw` (an `ansi` node with the captured bytes).
 
 The block shows `native` when there is one, else `raw`. Native/Raw is a local,
-per-block choice remembered by `key` (else id); only the shown child is mounted, so
+per-block choice remembered by `key` among the node's siblings (else by id), not
+surface-wide. Deleting and adding a block with a new id and the same key under
+the same parent preserves the choice; the same key under another parent has
+independent state. Only the shown child is mounted, so
 switching redraws the block. The chrome stays quiet so the block reads as command
 output:
 
@@ -593,7 +599,7 @@ of the capture's width shows it.
 | `exit` | integer | none | Exit status; non-zero (once done) adds `.failed` and the exit badge. |
 | `took` | number (ms) | none | Duration in the foot (once done, over 1000 ms). |
 | `age` | number (ms) | none | Carried by Tern but not drawn by the block. |
-| `key` | string | node id | Where the Native/Raw choice is remembered. |
+| `key` | string | node id | Identity among siblings; the Native/Raw choice is remembered by this key under the same parent. |
 
 **Children:** `native` (your lens view inside a `col`, absent until the lens has a
 view) and `raw` (`ansi`). The raw child is the one with id `raw`, else the last
@@ -847,8 +853,8 @@ end
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/elements-work-prefs.light.png" srcset="../figures/elements-work-prefs.light.png 2x" alt="A settings page 560 pixels wide: an icon rail with the brand mark and three page icons, the General page header with its lead, and a Runs card with a switch, a focused Environment row showing a changed dot, Reset and Dev/Staging/Prod segments, a stepper at 4, a hidden token field, Slack and Email chips on and Pager off, and a Clear button">
-<img class="tn-dark" src="../figures/elements-work-prefs.dark.png" srcset="../figures/elements-work-prefs.dark.png 2x" alt="A settings page 560 pixels wide: an icon rail with the brand mark and three page icons, the General page header with its lead, and a Runs card with a switch, a focused Environment row showing a changed dot, Reset and Dev/Staging/Prod segments, a stepper at 4, a hidden token field, Slack and Email chips on and Pager off, and a Clear button">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/elements-work-prefs.light.png" srcset="../figures/elements-work-prefs.light.png 2x" alt="A settings page 560 pixels wide: an icon rail with the brand mark and three page icons, the General page header with its lead, and a Runs card with a switch, a focused Environment row showing a changed dot, Reset and Dev/Staging/Prod segments, a stepper at 4, a hidden token field, Slack and Email chips on and Pager off, and a Clear button">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/elements-work-prefs.dark.png" srcset="../figures/elements-work-prefs.dark.png 2x" alt="A settings page 560 pixels wide: an icon rail with the brand mark and three page icons, the General page header with its lead, and a Runs card with a switch, a focused Environment row showing a changed dot, Reset and Dev/Staging/Prod segments, a stepper at 4, a hidden token field, Slack and Email chips on and Pager off, and a Clear button">
 <figcaption>With <code>page = "general"</code>, <code>focus = "env"</code>, <code>env = "prod"</code>, <code>changed = 2</code>. At 560px the nav is an icon rail; the figure caps the page's height, which otherwise fills its host.</figcaption>
 </figure>
 

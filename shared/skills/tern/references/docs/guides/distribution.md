@@ -57,7 +57,7 @@ tern plugin install SRC [--force]
 | SRC | Treated as |
 | --- | --- |
 | Starts with `https://`, `http://`, `git@` or `ssh://` | A git URL, cloned as written. |
-| Starts with `github.com/` | `https://github.com/…`, cloned. |
+| Starts with `github.com/` | `github.com/OWNER/REPO`, cloned from `https://github.com/OWNER/REPO`; anything after `REPO` is the package's directory in it (`github.com/stencil-hq/tern-sdk/plugins/examples/jsonx`). |
 | Anything else | A directory, relative to the current directory. |
 
 A git source is cloned shallowly (`--depth 1`) from the default branch into

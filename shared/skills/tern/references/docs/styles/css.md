@@ -184,6 +184,9 @@ two or four components: `center`, `left 20%`, `30% 8px`, `right 8px bottom 4px`.
   `currentColor`.
 - The `repeating-` forms repeat their stop range: stripes along the gradient line, concentric rings outward
   from the center.
+- `url()` paints in `background-image` only: a `data:` image, or in a plugin's global sheets a file of the
+  plugin ([Chrome and Styling](../guides/chrome.md#images-url)). A view's own stylesheets drop `url()`, and
+  `mask-image` takes gradients.
 
 ```css
 .linear  { background: linear-gradient(135deg, var(--a1), var(--a2)); }
@@ -198,8 +201,8 @@ two or four components: `center`, `left 20%`, `30% 8px`, `right 8px bottom 4px`.
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/styles-css-gradients.light.png" srcset="../figures/styles-css-gradients.light.png 2x" alt="Five tiles: a diagonal blue linear gradient, blue diagonal stripes, a white-to-blue radial disc, blue concentric rings, and a green-to-blue gradient with a white highlight layered on top">
-<img class="tn-dark" src="../figures/styles-css-gradients.dark.png" srcset="../figures/styles-css-gradients.dark.png 2x" alt="Five tiles: a diagonal blue linear gradient, blue diagonal stripes, a white-to-blue radial disc, blue concentric rings, and a green-to-blue gradient with a white highlight layered on top">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/styles-css-gradients.light.png" srcset="../figures/styles-css-gradients.light.png 2x" alt="Five tiles: a diagonal blue linear gradient, blue diagonal stripes, a white-to-blue radial disc, blue concentric rings, and a green-to-blue gradient with a white highlight layered on top">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/styles-css-gradients.dark.png" srcset="../figures/styles-css-gradients.dark.png 2x" alt="Five tiles: a diagonal blue linear gradient, blue diagonal stripes, a white-to-blue radial disc, blue concentric rings, and a green-to-blue gradient with a white highlight layered on top">
 <figcaption>The five rules above, one tile each.</figcaption>
 </figure>
 
@@ -241,8 +244,8 @@ or height, and radius percentages of its shorter side:
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/styles-css-native.light.png" srcset="../figures/styles-css-native.light.png 2x" alt="Four tiles: soft overlapping color blobs, a four-corner mesh gradient, a perimeter gradient whose colors run around the edge, and two rounded rectangles merged into one smooth shape">
-<img class="tn-dark" src="../figures/styles-css-native.dark.png" srcset="../figures/styles-css-native.dark.png 2x" alt="Four tiles: soft overlapping color blobs, a four-corner mesh gradient, a perimeter gradient whose colors run around the edge, and two rounded rectangles merged into one smooth shape">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/styles-css-native.light.png" srcset="../figures/styles-css-native.light.png 2x" alt="Four tiles: soft overlapping color blobs, a four-corner mesh gradient, a perimeter gradient whose colors run around the edge, and two rounded rectangles merged into one smooth shape">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/styles-css-native.dark.png" srcset="../figures/styles-css-native.dark.png 2x" alt="Four tiles: soft overlapping color blobs, a four-corner mesh gradient, a perimeter gradient whose colors run around the edge, and two rounded rectangles merged into one smooth shape">
 <figcaption>The native image functions, and <code>-stencil-shape</code> (see <a href="#stencil-extensions">Stencil extensions</a>).</figcaption>
 </figure>
 
@@ -263,8 +266,8 @@ or height, and radius percentages of its shorter side:
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/styles-css-transforms.light.png" srcset="../figures/styles-css-transforms.light.png 2x" alt="Four dashed slots, each holding a gradient box: rotated, skewed, scaled down and shifted, and turned around its left edge in perspective">
-<img class="tn-dark" src="../figures/styles-css-transforms.dark.png" srcset="../figures/styles-css-transforms.dark.png 2x" alt="Four dashed slots, each holding a gradient box: rotated, skewed, scaled down and shifted, and turned around its left edge in perspective">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/styles-css-transforms.light.png" srcset="../figures/styles-css-transforms.light.png 2x" alt="Four dashed slots, each holding a gradient box: rotated, skewed, scaled down and shifted, and turned around its left edge in perspective">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/styles-css-transforms.dark.png" srcset="../figures/styles-css-transforms.dark.png 2x" alt="Four dashed slots, each holding a gradient box: rotated, skewed, scaled down and shifted, and turned around its left edge in perspective">
 <figcaption>Each box against its untransformed slot (dashed).</figcaption>
 </figure>
 
@@ -295,8 +298,8 @@ negatives); an empty function takes its default (`1` for amounts, `0` for `blur(
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/styles-css-shadows.light.png" srcset="../figures/styles-css-shadows.light.png 2x" alt="Top row: boxes with a soft drop shadow, a two-ring focus outline, an inset shadow and a glowing drop-shadow filter. Bottom row: a gradient box grayscaled, blurred, hue-rotated and darkened">
-<img class="tn-dark" src="../figures/styles-css-shadows.dark.png" srcset="../figures/styles-css-shadows.dark.png 2x" alt="Top row: boxes with a soft drop shadow, a two-ring focus outline, an inset shadow and a glowing drop-shadow filter. Bottom row: a gradient box grayscaled, blurred, hue-rotated and darkened">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/styles-css-shadows.light.png" srcset="../figures/styles-css-shadows.light.png 2x" alt="Top row: boxes with a soft drop shadow, a two-ring focus outline, an inset shadow and a glowing drop-shadow filter. Bottom row: a gradient box grayscaled, blurred, hue-rotated and darkened">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/styles-css-shadows.dark.png" srcset="../figures/styles-css-shadows.dark.png 2x" alt="Top row: boxes with a soft drop shadow, a two-ring focus outline, an inset shadow and a glowing drop-shadow filter. Bottom row: a gradient box grayscaled, blurred, hue-rotated and darkened">
 <figcaption>Top: <code>box-shadow</code> and <code>drop-shadow()</code>. Bottom: the same gradient through four filters.</figcaption>
 </figure>
 
@@ -403,6 +406,13 @@ comma-separated list.
 | `background-repeat` | (`repeat-x` \| `repeat-y` \| [`repeat` `no-repeat` `space` `round`]{1,2})# | `repeat` | no | no |
 | `background-origin` | (`border-box` `padding-box` `content-box`)# | `padding-box` | no | no |
 | `background-clip` | (`border-box` `padding-box` `content-box` `text`)# | `border-box` | no | no |
+| `object-fit` | `fill` `contain` `cover` `none` `scale-down` | `fill` | no | no |
+| `image-rendering` | `auto` `smooth` `high-quality` `pixelated` `crisp-edges` | `auto` | yes | no |
+
+`object-fit` places the pixels of an [`image` node](../elements/data.md#image) in its box, always centered
+(`object-position` is not supported); the node's frame inherits it, and Tern's sheet makes `contain` the image
+default. `image-rendering: pixelated` and `crisp-edges` scale images, `url()` backgrounds included, with the nearest
+pixel (hard pixel-art edges); the other values scale smoothly.
 
 ### Borders and outline
 
@@ -652,8 +662,8 @@ unplaced items flow into the next free cell, row by row:
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/styles-css-grid.light.png" srcset="../figures/styles-css-grid.light.png 2x" alt="A three-column grid: a fixed 120 px column holding a cell two rows tall, two equal 1fr cells beside it, and a cell spanning both fr columns below them">
-<img class="tn-dark" src="../figures/styles-css-grid.dark.png" srcset="../figures/styles-css-grid.dark.png 2x" alt="A three-column grid: a fixed 120 px column holding a cell two rows tall, two equal 1fr cells beside it, and a cell spanning both fr columns below them">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/styles-css-grid.light.png" srcset="../figures/styles-css-grid.light.png 2x" alt="A three-column grid: a fixed 120 px column holding a cell two rows tall, two equal 1fr cells beside it, and a cell spanning both fr columns below them">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/styles-css-grid.dark.png" srcset="../figures/styles-css-grid.dark.png 2x" alt="A three-column grid: a fixed 120 px column holding a cell two rows tall, two equal 1fr cells beside it, and a cell spanning both fr columns below them">
 </figure>
 
 ## Selectors
@@ -772,8 +782,8 @@ scoped sheet:
   `prefers-color-scheme`: use `light-dark()`.
 - No `@import`, `@layer`, `@supports`, `@container`, `@property`, `@scope` or `@starting-style`. `@font-face` is ignored.
 - No `revert`/`revert-layer`; `all` takes only `inherit`, `initial`, `unset`.
-- Missing properties include `text-shadow`, `text-indent`, `word-spacing`, `aspect-ratio`, `object-fit`,
-  `object-position`, `border-spacing`, `grid-template-areas`, `grid-auto-*`, `grid-area`, `grid-column-start` and
+- Missing properties include `text-shadow`, `text-indent`, `word-spacing`, `aspect-ratio`, `object-position`,
+  `border-spacing`, `grid-template-areas`, `grid-auto-*`, `grid-area`, `grid-column-start` and
   the other line longhands, `place-self`, `float`, `clear`, `background-attachment` (the `background` shorthand
   drops its keywords), `font-variant` (except `font-variant-numeric`), `font-feature-settings`,
   `text-underline-offset`, `resize`, `accent-color`, `appearance`, `counter-*`, `quotes`, `transition-behavior`,

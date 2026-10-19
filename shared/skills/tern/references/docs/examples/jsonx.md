@@ -23,16 +23,16 @@ file-backed block and for `tern.route.open`.
 
 ## Install
 
-From where you unpacked [the SDK](../index.md#the-sdk):
-
 ```sh
-tern plugin install tern-sdk/examples/jsonx
+tern plugin install github.com/stencil-hq/tern-sdk/plugins/examples/jsonx
 ```
 
-While you change it, link it instead so Tern reloads it on every save:
+While you change it, clone the SDK and link the folder instead, so Tern
+reloads it on every save:
 
 ```sh
-tern plugin link tern-sdk/examples/jsonx
+git clone https://github.com/stencil-hq/tern-sdk
+tern plugin link tern-sdk/plugins/examples/jsonx
 ```
 
 Open a `.json` file from the Files pane or the palette, or choose

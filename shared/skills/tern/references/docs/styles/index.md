@@ -454,8 +454,8 @@ local card = ui.node("card", { head = "Today", role = "todo.day" }, {
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/styles-index-card.light.png" srcset="../figures/styles-index-card.light.png 2x" alt="Two cards side by side: Tern's default card on the left, and the todo.day card on the right with rounder corners, a faint fill and a hairline ring">
-<img class="tn-dark" src="../figures/styles-index-card.dark.png" srcset="../figures/styles-index-card.dark.png 2x" alt="Two cards side by side: Tern's default card on the left, and the todo.day card on the right with rounder corners, a faint fill and a hairline ring">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/styles-index-card.light.png" srcset="../figures/styles-index-card.light.png 2x" alt="Two cards side by side: Tern's default card on the left, and the todo.day card on the right with rounder corners, a faint fill and a hairline ring">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/styles-index-card.dark.png" srcset="../figures/styles-index-card.dark.png 2x" alt="Two cards side by side: Tern's default card on the left, and the todo.day card on the right with rounder corners, a faint fill and a hairline ring">
 <figcaption>Left, a card without the role; right, the <code>todo.day</code> card.</figcaption>
 </figure>
 
@@ -477,8 +477,8 @@ local card = ui.node("card", { head = "Today", role = "todo.day" }, {
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/styles-index-table.light.png" srcset="../figures/styles-index-table.light.png 2x" alt="Two lens blocks with the same table: the default rows on the left, tighter header and rows in the disk.du block on the right">
-<img class="tn-dark" src="../figures/styles-index-table.dark.png" srcset="../figures/styles-index-table.dark.png 2x" alt="Two lens blocks with the same table: the default rows on the left, tighter header and rows in the disk.du block on the right">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/styles-index-table.light.png" srcset="../figures/styles-index-table.light.png 2x" alt="Two lens blocks with the same table: the default rows on the left, tighter header and rows in the disk.du block on the right">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/styles-index-table.dark.png" srcset="../figures/styles-index-table.dark.png 2x" alt="Two lens blocks with the same table: the default rows on the left, tighter header and rows in the disk.du block on the right">
 <figcaption>Left, another lens's table; right, the <code>disk.du</code> lens's.</figcaption>
 </figure>
 
@@ -494,8 +494,8 @@ on your own nodes:
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/styles-index-tone.light.png" srcset="../figures/styles-index-tone.light.png 2x" alt="A pending badge and progress bar in Tern's purple on the left, and the same pair in teal on the right">
-<img class="tn-dark" src="../figures/styles-index-tone.dark.png" srcset="../figures/styles-index-tone.dark.png 2x" alt="A pending badge and progress bar in Tern's purple on the left, and the same pair in teal on the right">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/styles-index-tone.light.png" srcset="../figures/styles-index-tone.light.png 2x" alt="A pending badge and progress bar in Tern's purple on the left, and the same pair in teal on the right">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/styles-index-tone.dark.png" srcset="../figures/styles-index-tone.dark.png 2x" alt="A pending badge and progress bar in Tern's purple on the left, and the same pair in teal on the right">
 <figcaption>Left, <code>pending</code> nodes without a <code>ci.</code> role; right, with one.</figcaption>
 </figure>
 
@@ -521,8 +521,8 @@ local badge = ui.node("badge", { text = "beta", tone = "accent", role = "todo.fl
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/styles-index-badge.light.png" srcset="../figures/styles-index-badge.light.png 2x" alt="An accent badge reading beta, and the todo.flag badge: a square, filled blue tag reading BETA in white">
-<img class="tn-dark" src="../figures/styles-index-badge.dark.png" srcset="../figures/styles-index-badge.dark.png 2x" alt="An accent badge reading beta, and the todo.flag badge: a square, filled blue tag reading BETA in white">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/styles-index-badge.light.png" srcset="../figures/styles-index-badge.light.png 2x" alt="An accent badge reading beta, and the todo.flag badge: a square, filled blue tag reading BETA in white">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/styles-index-badge.dark.png" srcset="../figures/styles-index-badge.dark.png 2x" alt="An accent badge reading beta, and the todo.flag badge: a square, filled blue tag reading BETA in white">
 <figcaption>Left, <code>ui.badge("beta", "accent")</code>; right, the <code>todo.flag</code> badge.</figcaption>
 </figure>
 
@@ -547,8 +547,8 @@ and target `[data-mark='done']`, which is stable.
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/styles-index-done.light.png" srcset="../figures/styles-index-done.light.png 2x" alt="Two checklists and two struck list items: on the right, the done items of the todo.steps checklist and the marked item are faded">
-<img class="tn-dark" src="../figures/styles-index-done.dark.png" srcset="../figures/styles-index-done.dark.png 2x" alt="Two checklists and two struck list items: on the right, the done items of the todo.steps checklist and the marked item are faded">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/styles-index-done.light.png" srcset="../figures/styles-index-done.light.png 2x" alt="Two checklists and two struck list items: on the right, the done items of the todo.steps checklist and the marked item are faded">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/styles-index-done.dark.png" srcset="../figures/styles-index-done.dark.png 2x" alt="Two checklists and two struck list items: on the right, the done items of the todo.steps checklist and the marked item are faded">
 <figcaption>Left, Tern's defaults; right, the <code>todo.steps</code> checklist and an item with <code>mark = "done"</code>.</figcaption>
 </figure>
 
@@ -565,8 +565,8 @@ and target `[data-mark='done']`, which is stable.
 ```
 
 <figure class="tn-figure">
-<img class="tn-light" src="../figures/styles-index-lens.light.png" srcset="../figures/styles-index-lens.light.png 2x" alt="Two make blocks: a running one with an accent left edge, and a failed one whose output sits on a faint red fill above an exit 2 badge">
-<img class="tn-dark" src="../figures/styles-index-lens.dark.png" srcset="../figures/styles-index-lens.dark.png 2x" alt="Two make blocks: a running one with an accent left edge, and a failed one whose output sits on a faint red fill above an exit 2 badge">
+<img class="tn-light" loading="lazy" decoding="async" src="../figures/styles-index-lens.light.png" srcset="../figures/styles-index-lens.light.png 2x" alt="Two make blocks: a running one with an accent left edge, and a failed one whose output sits on a faint red fill above an exit 2 badge">
+<img class="tn-dark" loading="lazy" decoding="async" src="../figures/styles-index-lens.dark.png" srcset="../figures/styles-index-lens.dark.png 2x" alt="Two make blocks: a running one with an accent left edge, and a failed one whose output sits on a faint red fill above an exit 2 badge">
 <figcaption>A running block, then one that exited 2 after 4.2 s.</figcaption>
 </figure>
 

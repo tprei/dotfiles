@@ -228,6 +228,9 @@ tern ctl --control /tmp/tern-ctl.sock css
 tern ctl --control /tmp/tern-ctl.sock tree "[data-surface='plugin.counter.counter']"
 ```
 
+[Scripts](../scripts/index.md) documents every command a script or `ctl` can
+send.
+
 `ctl` joins its words into one command line, so quote text that needs quotes
 for the scenario parser inside shell quotes. Other control commands help with
 styling: `css` lists the installed style sheets in cascade order (look for
