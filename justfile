@@ -1,7 +1,7 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 home := env_var("HOME")
-omp_src := env_var_or_default("OMP_SRC", home / ".worktrees/oh-my-pi-main-driver-no-agy")
+omp_src := env_var_or_default("OMP_SRC", home / ".worktrees/oh-my-pi-main-driver-no-agy-v18.12.4")
 packages := "aerospace alacritty borders claude codex ghostty herdr karabiner nvim omp pi starship tmux tools vim zsh"
 
 _default:
@@ -99,9 +99,8 @@ omp-config-check:
     python3 -c 'import sys, yaml; [yaml.safe_load(open(p)) for p in sys.argv[1:]]' "${configs[@]}"
     printf 'parsed %d yaml files\n' "${#configs[@]}"
     for ext in omp/.omp/agent/extensions/*.ts; do
-        bun build "$ext" --no-bundle --outdir /tmp/omp-ext-check >/dev/null
+        bun build "$ext" --no-bundle >/dev/null
     done
-    rm -rf /tmp/omp-ext-check
     echo "extensions compile"
     # Level-less `zai/glm-5.3:` keys under retry.fallbackChains name a failing
     # route, so only a populated non-max level is drift.

@@ -136,13 +136,15 @@ readlink -f ~/.omp/profiles/mix/agent/extensions/antigravity-cli.ts
 
 ### Patched OMP runtime
 
-`omp-runtime/` holds the patches this machine's `omp` is built from; the checkout lives outside the repo with no fork.
+`omp-runtime/` holds the patches this machine's `omp` is built from; the checkout lives outside the repo with no fork. The pinned source is upstream v18.12.4, bootstrapped into `~/.worktrees/oh-my-pi-main-driver-no-agy-v18.12.4` (`OMP_SRC` overrides the path). Running sessions keep the executable they started with; restart them to load the new runtime.
 
 - `PIN`: upstream release, baseline commit, tarball URL, ordered patch list.
 - `NNNN-*.patch`: `git format-patch` output above the baseline.
-- `0001` stops main sessions from selecting disabled providers. `0002` retries a dropped socket mid-answer when the turn's only committed output is text (upstream treats that as replay-unsafe). `0003` stops the legacy pi shim from resolving canonical `@oh-my-pi/*` specifiers, which recursed until Bun aborted with `NameTooLong` and broke `/login`.
+- `0001` scopes provider bans to the main driver and stays required: upstream's only knob, the global `disabledProviders` setting, also restricts subagents. Root, `mix`, and `china` bar `antigravity-cli` for the main driver through the patch's `mainAgent.disabledProviders` key while advisor, commit, surveyor, and git-commit-specialist subagents keep using it.
 
-`just omp-rebuild` works on any machine: it bootstraps the pinned tarball into `~/.worktrees/oh-my-pi-main-driver-no-agy` (or `OMP_SRC`), applies patches, builds, and relinks every launcher holding an `omp`. After committing in the checkout, run `just omp-runtime-export` then `just omp-rebuild`. `just omp-runtime-check` fails when a patch differs from its source commit (ignoring the sha line), is missing from `PIN`, or `PIN` names a missing file. Run it after upstream bumps.
+Upstream v18.12.4 ships a native `/effort` command that owns the slash picker and explicit levels, so the thinking-picker extension no longer registers its own; Alt+J still opens its direct effort picker. `/m` keeps fuzzy ranking and latest-version preference, and `/use` keeps session-only role lineups, unlike the persistent native `/modelpreset`.
+
+`just omp-rebuild` works on any machine: it bootstraps the pinned tarball into `~/.worktrees/oh-my-pi-main-driver-no-agy-v18.12.4` (or `OMP_SRC`), applies patches, builds, and relinks every launcher holding an `omp`. After committing in the checkout, run `just omp-runtime-export` then `just omp-rebuild`. `just omp-runtime-check` fails when a patch differs from its source commit (ignoring the sha line), is missing from `PIN`, or `PIN` names a missing file. Run it after upstream bumps.
 
 ## Private workspaces
 

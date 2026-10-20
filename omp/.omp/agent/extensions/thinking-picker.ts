@@ -1,9 +1,6 @@
 /**
  * Direct picker for the session's thinking effort.
  *
- * omp ships only `app.thinking.cycle` (Shift+Tab), which steps blindly along the
- * ladder. This surfaces the levels as a list instead: Alt+J, or `/effort [level]`.
- *
  * Alt+J because tmux leaves lowercase M-j free (it is bound only inside the M-n
  * `create_mode` table), and it sits beside the Alt+K / Alt+L model pickers.
  *
@@ -11,7 +8,7 @@
  * accepts a concrete `ThinkingLevel`, while `auto` is a `ConfiguredThinkingLevel`
  * that only the `defaultThinkingLevel` setting understands.
  */
-import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@oh-my-pi/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@oh-my-pi/pi-coding-agent";
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 
 /** Every `Effort` the catalog defines, plus explicit reasoning disablement. */
@@ -75,26 +72,4 @@ export default function thinkingPicker(pi: ExtensionAPI) {
 	}
 
 	pi.registerShortcut("alt+j", { description: "Pick thinking effort", handler: pick });
-
-	pi.registerCommand("effort", {
-		description: "Pick the session's thinking effort level",
-		getArgumentCompletions: prefix => {
-			const matches = LEVELS.filter(level => level.startsWith(prefix.trim().toLowerCase()));
-			return matches.length === 0
-				? null
-				: matches.map(level => ({ value: level, label: level, description: BLURB[level] }));
-		},
-		handler: async (args, ctx: ExtensionCommandContext) => {
-			const requested = args.trim().toLowerCase();
-			if (requested.length === 0) {
-				await pick(ctx);
-				return;
-			}
-			if (!isLevel(requested)) {
-				ctx.ui.notify(`Unknown effort "${requested}". Expected one of: ${LEVELS.join(", ")}`, "warning");
-				return;
-			}
-			apply(ctx, requested);
-		},
-	});
 }
