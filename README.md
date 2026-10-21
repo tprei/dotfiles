@@ -140,7 +140,7 @@ readlink -f ~/.omp/profiles/mix/agent/extensions/antigravity-cli.ts
 
 - `PIN`: upstream release, baseline commit, tarball URL, ordered patch list.
 - `NNNN-*.patch`: `git format-patch` output above the baseline.
-- `0001` scopes provider bans to the main driver and stays required: upstream's only knob, the global `disabledProviders` setting, also restricts subagents. Root, `mix`, and `china` bar `antigravity-cli` for the main driver through the patch's `mainAgent.disabledProviders` key while advisor, commit, surveyor, and git-commit-specialist subagents keep using it.
+- `0001` scopes provider bans to the main driver and stays required: upstream's only knob, the global `disabledProviders` setting, also restricts subagents. Root, `mix`, and `china` bar `antigravity-cli` for the main driver through the patch's `mainAgent.disabledProviders` key while advisor and commit side agents and the surveyor and git-commit-specialist subagents keep using it.
 
 Upstream v18.12.4 ships a native `/effort` command that owns the slash picker and explicit levels, so the thinking-picker extension no longer registers its own; Alt+J still opens its direct effort picker. `/m` keeps fuzzy ranking and latest-version preference, and `/use` keeps session-only role lineups, unlike the persistent native `/modelpreset`.
 

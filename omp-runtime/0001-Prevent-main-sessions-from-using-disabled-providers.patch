@@ -1,27 +1,37 @@
-From b3821d60cf0466063b8548c13d6fdb546f0ca5ec Mon Sep 17 00:00:00 2001
+From 3beb232dbcf1067702aaff59381e876941b71312 Mon Sep 17 00:00:00 2001
 From: tprei <37089330+tprei@users.noreply.github.com>
 Date: Mon, 14 Sep 2026 22:09:29 +0100
 Subject: [PATCH] Prevent main sessions from using disabled providers
 
 ---
  .../coding-agent/src/config/model-settings.ts |   6 +
- .../coding-agent/src/session/agent-session.ts |  18 +-
- .../src/session/main-agent-model-policy.ts    |  13 ++
- .../src/session/model-controls.ts             |  16 +-
- .../coding-agent/src/session/turn-recovery.ts |  24 ++-
- .../src/thread/remote-agent-session.ts        |   1 +
- .../agent-session-model-switch-auth.test.ts   |  86 +++++++++-
- .../test/agent-session-retry-fallback.test.ts | 162 ++++++++++++++++++
- ...sue-2750-subagent-runtime-fallback.test.ts |   1 +
+ packages/coding-agent/src/main.ts             |  39 +-
+ packages/coding-agent/src/sdk.ts              | 107 ++++-
+ .../coding-agent/src/session/agent-session.ts |  55 ++-
+ .../src/session/main-agent-model-policy.ts    |  13 +
+ .../src/session/model-controls.ts             |  15 +-
+ .../coding-agent/src/session/turn-recovery.ts |  24 +-
+ .../src/slash-commands/builtin-modes.ts       |   7 +
+ .../agent-session-model-switch-auth.test.ts   |  86 +++-
+ ...agent-session-new-session-boundary.test.ts | 145 +++++-
+ .../test/agent-session-prewalk-auto.test.ts   |  25 +-
+ .../test/agent-session-prewalk.test.ts        | 323 +++++++++++++
+ .../test/agent-session-retry-fallback.test.ts | 162 +++++++
+ ...sue-2750-subagent-runtime-fallback.test.ts |   2 +
+ .../test/prewalk-discovery-provider.test.ts   |  43 +-
+ .../test/prewalk-startup-degradation.test.ts  | 175 ++++++-
+ .../test/sdk-model-selection.test.ts          | 454 +++++++++++++++++-
+ .../test/slash-commands/effort.test.ts        |   1 +
+ .../subagent-fallback-context-window.test.ts  |   1 +
  .../test/turn-recovery-replay-unsafe.test.ts  |   1 +
- 10 files changed, 321 insertions(+), 7 deletions(-)
+ 20 files changed, 1630 insertions(+), 54 deletions(-)
  create mode 100644 packages/coding-agent/src/session/main-agent-model-policy.ts
 
 diff --git a/packages/coding-agent/src/config/model-settings.ts b/packages/coding-agent/src/config/model-settings.ts
-index 58967122..cc078a58 100644
+index d2688b9..dc8de78 100644
 --- a/packages/coding-agent/src/config/model-settings.ts
 +++ b/packages/coding-agent/src/config/model-settings.ts
-@@ -112,6 +112,12 @@ export const cfgDisabledProviders = register({
+@@ -81,6 +81,12 @@ export const cfgDisabledProviders = register({
  	pathScoped: { valuesKey: "providers" },
  });
  
@@ -34,26 +44,484 @@ index 58967122..cc078a58 100644
  export const cfgModelRoleStorage = register({
  	id: "modelRoleStorage",
  	type: "enum",
+diff --git a/packages/coding-agent/src/main.ts b/packages/coding-agent/src/main.ts
+index 6d20ef9..6204c09 100644
+--- a/packages/coding-agent/src/main.ts
++++ b/packages/coding-agent/src/main.ts
+@@ -46,7 +46,7 @@ import { applyStartupCwd } from "./cli/startup-cwd";
+ import { getLatestRelease, isSourceCheckout, managedInstallName } from "./cli/update-cli";
+ import { findConfigFile } from "./config";
+ import { ModelRegistry } from "./config/model-registry";
+-import { formatModelSelectorValue } from "@oh-my-pi/pi-tui/overlays/model-selector";
++import { formatModelSelectorValue, parseModelString } from "@oh-my-pi/pi-tui/overlays/model-selector";
+ import {
+ 	DEFAULT_PREWALK_TARGET,
+ 	disabledProviderIds,
+@@ -180,7 +180,8 @@ import {
+ 	cfgOmitThinking,
+ 	cfgPrewalkEnabled,
+ } from "./session/settings";
+-import { cfgDisabledProviders, cfgEnabledModels } from "./config/model-settings";
++import { cfgDisabledProviders, cfgEnabledModels, cfgMainAgentDisabledProviders } from "./config/model-settings";
++import { assertMainAgentProviderAllowed, isMainAgentProviderDisabled } from "./session/main-agent-model-policy";
+ import { cfgTaskAgentIdleTtlMs } from "./task/settings";
+ import { cfgSkillsIncludeSkills } from "./extensibility/settings";
+ import { cfgWorkspaceAdditionalDirectories } from "./session/context-settings";
+@@ -1467,6 +1468,10 @@ export async function buildSessionOptions(
+ 	// - supports --model <provider>/<pattern>
+ 	const modelMatchPreferences = getModelMatchPreferences(activeSettings);
+ 	const disabledProviders = disabledProviderIds(activeSettings);
++	const startupScopedModels =
++		scopedModels.length === 0 || cfgMainAgentDisabledProviders.get(activeSettings).length === 0
++			? scopedModels
++			: scopedModels.filter(entry => !isMainAgentProviderDisabled(activeSettings, "main", entry.model.provider));
+ 	// `--model` rewrites the session's `default` role below. Preserve the
+ 	// configured assignment so explicit prewalk role targets still resolve
+ 	// against the value that existed when the CLI was invoked.
+@@ -1476,6 +1481,10 @@ export async function buildSessionOptions(
+ 	// scoped thinking-level seed below must be deferred along with the model.
+ 	let deferredDefaultRole = false;
+ 	if (parsed.model) {
++		const requestedProvider = (parsed.provider ?? parseModelString(parsed.model)?.provider)?.toLowerCase();
++		if (requestedProvider && !disabledProviders.has(requestedProvider)) {
++			assertMainAgentProviderAllowed(activeSettings, "main", requestedProvider);
++		}
+ 		const resolved = resolveCliModel({
+ 			cliProvider: parsed.provider,
+ 			cliModel: parsed.model,
+@@ -1509,6 +1518,7 @@ export async function buildSessionOptions(
+ 				process.exit(1);
+ 			}
+ 		} else if (resolved.model) {
++			assertMainAgentProviderAllowed(activeSettings, "main", resolved.model.provider);
+ 			options.model = resolved.model;
+ 			options.rebindModelAfterDiscovery = true;
+ 			// The recorded role must carry the effort the session actually starts
+@@ -1523,12 +1533,12 @@ export async function buildSessionOptions(
+ 				options.thinkingLevel = resolved.thinkingLevel;
+ 			}
+ 		}
+-	} else if (scopedModels.length > 0 && !restoringSession) {
++	} else if (startupScopedModels.length > 0 && !restoringSession) {
+ 		const remembered = activeSettings.getModelRole("default");
+ 		if (remembered) {
+ 			const rememberedSpec = resolveModelRoleValue(
+ 				remembered,
+-				scopedModels.map(scopedModel => scopedModel.model),
++				startupScopedModels.map(scopedModel => scopedModel.model),
+ 				{
+ 					settings: activeSettings,
+ 					matchPreferences: modelMatchPreferences,
+@@ -1536,12 +1546,12 @@ export async function buildSessionOptions(
+ 			);
+ 			const rememberedResolvedModel = rememberedSpec.model;
+ 			const rememberedModel = rememberedResolvedModel
+-				? scopedModels.find(
++				? startupScopedModels.find(
+ 						scopedModel =>
+ 							scopedModel.model.provider === rememberedResolvedModel.provider &&
+ 							scopedModel.model.id === rememberedResolvedModel.id,
+ 					)
+-				: scopedModels.find(scopedModel => scopedModel.model.id.toLowerCase() === remembered.toLowerCase());
++				: startupScopedModels.find(scopedModel => scopedModel.model.id.toLowerCase() === remembered.toLowerCase());
+ 			if (rememberedModel) {
+ 				options.model = rememberedModel.model;
+ 				options.rebindModelAfterDiscovery = true;
+@@ -1565,7 +1575,7 @@ export async function buildSessionOptions(
+ 		// escape it — keep pinning the first scoped model there.
+ 		deferredDefaultRole = !options.model && Boolean(remembered) && !((parsed.models?.length ?? 0) > 0);
+ 		if (!options.model && !deferredDefaultRole) {
+-			options.model = scopedModels[0].model;
++			options.model = startupScopedModels[0].model;
+ 			options.rebindModelAfterDiscovery = true;
+ 		}
+ 	} else if ((parsed.models?.length ?? 0) > 0 && !restoringSession) {
+@@ -1593,6 +1603,8 @@ export async function buildSessionOptions(
+ 			? true
+ 			: !restoringSession && cfgPrewalkEnabled.get(activeSettings);
+ 	if (prewalkEnabled) {
++		const prewalkDisabledProviders = new Set(disabledProviders);
++		for (const provider of cfgMainAgentDisabledProviders.get(activeSettings)) prewalkDisabledProviders.add(provider);
+ 		const target = parsed.prewalkInto ?? DEFAULT_PREWALK_TARGET;
+ 		let targetPatterns: string[];
+ 
+@@ -1622,7 +1634,7 @@ export async function buildSessionOptions(
+ 			target,
+ 			modelRegistry,
+ 			modelMatchPreferences,
+-			disabledProviders,
++			prewalkDisabledProviders,
+ 			{ deferUnregistered: true },
+ 		);
+ 		if (selection.deferred) {
+@@ -1641,6 +1653,10 @@ export async function buildSessionOptions(
+ 	}
+ 	if (parsed.planYolo) {
+ 		const rolePattern = expandRoleAlias(parsed.planYoloInto ?? "@smol", activeSettings);
++		const requestedProvider = parseModelString(rolePattern)?.provider.toLowerCase();
++		if (requestedProvider && !disabledProviders.has(requestedProvider)) {
++			assertMainAgentProviderAllowed(activeSettings, "main", requestedProvider);
++		}
+ 		const resolved = resolveCliModel({ cliModel: rolePattern, modelRegistry, preferences: modelMatchPreferences });
+ 		if (resolved.warning) {
+ 			process.stderr.write(`${chalk.yellow(`Warning: ${resolved.warning}`)}\n`);
+@@ -1653,6 +1669,7 @@ export async function buildSessionOptions(
+ 				`Provider "${resolved.model.provider}" is disabled. Remove it from disabledProviders to hand off to "${rolePattern}".`,
+ 			);
+ 		}
++		assertMainAgentProviderAllowed(activeSettings, "main", resolved.model.provider);
+ 		if (!modelRegistry.hasConfiguredAuth(resolved.model)) {
+ 			throw new Error(`No API key for ${resolved.model.provider}/${resolved.model.id}`);
+ 		}
+@@ -1663,15 +1680,15 @@ export async function buildSessionOptions(
+ 	if (parsed.thinking) {
+ 		options.thinkingLevel = parsed.thinking;
+ 	} else if (
+-		scopedModels.length > 0 &&
+-		scopedModels[0].explicitThinkingLevel === true &&
++		startupScopedModels.length > 0 &&
++		startupScopedModels[0].explicitThinkingLevel === true &&
+ 		// A deferred default role resolves its own model (and any explicit
+ 		// thinking suffix) after extensions register; seeding the fallback
+ 		// scoped model's level here would override it in createAgentSession.
+ 		!deferredDefaultRole &&
+ 		!restoringSession
+ 	) {
+-		options.thinkingLevel = scopedModels[0].thinkingLevel;
++		options.thinkingLevel = startupScopedModels[0].thinkingLevel;
+ 	}
+ 
+ 	// Scoped models for Ctrl+P cycling — fill in default thinking levels when not explicit.
+diff --git a/packages/coding-agent/src/sdk.ts b/packages/coding-agent/src/sdk.ts
+index 68140c1..bb8d42c 100644
+--- a/packages/coding-agent/src/sdk.ts
++++ b/packages/coding-agent/src/sdk.ts
+@@ -167,7 +167,7 @@ import type { MnemopiSessionState } from "./mnemopi/state";
+ import mcpXdevGuidanceTemplate from "./prompts/system/mcp-xdev-guidance.md" with { type: "text" };
+ import lateDiagnosticTemplate from "./prompts/tools/lsp-late-diagnostic.md" with { type: "text" };
+ import { AgentLifecycleManager } from "./registry/agent-lifecycle";
+-import { type AgentKind, type AgentRef, AgentRegistry, MAIN_AGENT_ID } from "./registry/agent-registry";
++import { type AgentRef, AgentRegistry, MAIN_AGENT_ID } from "./registry/agent-registry";
+ import {
+ 	buildSecretObfuscator,
+ 	deobfuscateSessionContext,
+@@ -375,7 +375,14 @@ import {
+ 	type SkillsSettings,
+ } from "./extensibility/settings";
+ import { cfgTtsr } from "./export/ttsr-settings";
+-import { cfgDisabledProviders, cfgEnabledModels, cfgEnabledProviders, cfgModelRoles } from "./config/model-settings";
++import {
++	cfgDisabledProviders,
++	cfgEnabledModels,
++	cfgEnabledProviders,
++	cfgMainAgentDisabledProviders,
++	cfgModelRoles,
++} from "./config/model-settings";
++import { assertMainAgentProviderAllowed, isMainAgentProviderDisabled } from "./session/main-agent-model-policy";
+ import { cfgEditRecoverInlineEdits } from "./edit/settings";
+ import { cfgGoalEnabled } from "./goals/settings";
+ import {
+@@ -1170,6 +1177,12 @@ export async function resolvePrewalkTarget(
+ 	// before advancing to the next candidate in the configured role chain.
+ 	for (const pattern of patterns) {
+ 		disabledProvider = undefined;
++		const requestedProvider = parseModelString(pattern)?.provider.toLowerCase();
++		if (requestedProvider && disabledProviders.has(requestedProvider)) {
++			disabledProvider = requestedProvider;
++			lastResolution = { model: undefined, warning: undefined, error: undefined };
++			continue;
++		}
+ 		let candidate = resolveCandidate(pattern);
+ 		lastResolution = candidate;
+ 		if (candidate.model && disabledProviders.has(candidate.model.provider)) {
+@@ -1185,11 +1198,6 @@ export async function resolvePrewalkTarget(
+ 			continue;
+ 		}
+ 
+-		const requestedProvider = parseModelString(pattern)?.provider.toLowerCase();
+-		if (requestedProvider && disabledProviders.has(requestedProvider)) {
+-			disabledProvider = requestedProvider;
+-			continue;
+-		}
+ 		if (!requestedProvider) {
+ 			if (deferUnregistered) deferred = true;
+ 			continue;
+@@ -1756,6 +1764,28 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
+ 	const settings = await (options.settings ??
+ 		options.settingsManager ??
+ 		logger.time("settings", Settings.init, { cwd, agentDir }));
++	// Agent identity must resolve before model selection and rule discovery: `agents`
++	// frontmatter decides which rules are bucketed into this session at all, and
++	// `mainAgent.disabledProviders` applies only to the top-level driver.
++	const isSubagentSession = (options.taskDepth ?? 0) > 0 || Boolean(options.parentTaskPrefix);
++	const agentKind: "main" | "sub" = isSubagentSession ? SUB_AGENT_RULE_NAME : MAIN_AGENT_RULE_NAME;
++	const selectionDisabledProviders = (): ReadonlySet<string> => {
++		const disabled = new Set(disabledProviderIds(settings));
++		if (agentKind === "main") {
++			for (const provider of cfgMainAgentDisabledProviders.get(settings)) disabled.add(provider);
++		}
++		return disabled;
++	};
++	const filterDriverModels = (models: Model[]): Model[] => {
++		if (agentKind === "sub" || cfgMainAgentDisabledProviders.get(settings).length === 0) return models;
++		return models.filter(candidate => !isMainAgentProviderDisabled(settings, agentKind, candidate.provider));
++	};
++	if (options.model) {
++		assertMainAgentProviderAllowed(settings, agentKind, options.model.provider);
++	}
++	if (options.planYolo) {
++		assertMainAgentProviderAllowed(settings, agentKind, options.planYolo.target.provider);
++	}
+ 	// Discovery provider toggles and process-wide setting effects (theme, request limits, …)
+ 	// follow the newest holder: each top-level session holds both on its settings until disposed,
+ 	// then hands them back to the previous holder. Subagents and helper sessions never take them,
+@@ -1793,6 +1823,12 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
+ 			},
+ 		);
+ 	let prewalk = options.prewalk;
++	if (prewalk && isMainAgentProviderDisabled(settings, agentKind, prewalk.target.provider)) {
++		const warning = `prewalk disabled — provider "${prewalk.target.provider}" is disabled`;
++		logger.warn("Prewalk startup warning", { warning });
++		options.onPrewalkWarning?.(warning);
++		prewalk = undefined;
++	}
+ 	let deferredPrewalk = options.deferredPrewalk;
+ 	// Track whether we internally created the authStorage so we can close it
+ 	// if construction fails before the session takes ownership.
+@@ -2031,10 +2067,12 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
+ 	if (!options.modelRegistry) {
+ 		modelRegistry.refreshInBackground();
+ 	}
+-	const allowedModels = await logger.time("resolveAllowedModels", () =>
+-		explicitDefaultProviders
+-			? modelRegistry.getAvailableForProviders(explicitDefaultProviders)
+-			: resolveAllowedModels(modelRegistry, settings, modelMatchPreferences),
++	const allowedModels = filterDriverModels(
++		await logger.time("resolveAllowedModels", () =>
++			explicitDefaultProviders
++				? modelRegistry.getAvailableForProviders(explicitDefaultProviders)
++				: resolveAllowedModels(modelRegistry, settings, modelMatchPreferences),
++		),
+ 	);
+ 	let defaultRoleSpec = logger.time("resolveDefaultModelRole", () =>
+ 		resolveModelRoleValue(defaultRoleValue, allowedModels, {
+@@ -2140,8 +2178,12 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
+ 		// of session setup (extension/skill load, tool registry, system prompt
+ 		// build). Effective for endpoints known before any request (official
+ 		// Anthropic); others warm once a request has revealed their real origin.
+-		// Every mode benefits (interactive, print, rpc, acp).
+-		void prewarmModelConnection(model);
++		// Every mode benefits (interactive, print, rpc, acp). A main-banned
++		// saved/restored model must not warm; the constructor's in-try policy
++		// assert rejects it and closes SDK-owned resources.
++		if (!isMainAgentProviderDisabled(settings, agentKind, model.provider)) {
++			void prewarmModelConnection(model);
++		}
+ 	}
+ 
+ 	// Re-derives the thinking level whenever startup settles on a different
+@@ -2169,10 +2211,6 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
+ 		skillWarnings = discovered.warnings;
+ 	}
+ 
+-	// Agent identity must resolve before rule discovery: `agents` frontmatter decides
+-	// which rules are bucketed into this session at all.
+-	const isSubagentSession = (options.taskDepth ?? 0) > 0 || Boolean(options.parentTaskPrefix);
+-	const agentKind: AgentKind = isSubagentSession ? SUB_AGENT_RULE_NAME : MAIN_AGENT_RULE_NAME;
+ 	// Visuals (Mermaid, SVG figures, table charts) are drawn only in the top-level TUI transcript.
+ 	const tuiTranscript = options.tuiTranscript === true && !isSubagentSession;
+ 	const resolvedAgentName = (options.agentName ?? agentKind).trim().toLowerCase();
+@@ -2314,6 +2352,9 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
+ 	const evalKernelOwnerId = `agent-session:${Snowflake.next()}`;
+ 
+ 	try {
++		if (model) {
++			assertMainAgentProviderAllowed(settings, agentKind, model.provider);
++		}
+ 		const getActiveModelString = (): string | undefined => {
+ 			const activeModel = agent?.state.model;
+ 			if (activeModel) return formatModelString(activeModel);
+@@ -2874,6 +2915,7 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
+ 					const restored = resolveSessionModelSelector(modelRegistry, sessionModelStrings[i]);
+ 					if (restored) {
+ 						const restoredModel = restored.model;
++						assertMainAgentProviderAllowed(settings, agentKind, restoredModel.provider);
+ 						model = restoredModel;
+ 						modelFallbackMessage = undefined;
+ 						restoredSessionModelIndex = i;
+@@ -2925,6 +2967,12 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
+ 		// registered. Use the same CLI resolver as the immediate path so bare role
+ 		// names, exact model names, and provider selectors keep one precedence rule.
+ 		if (!model && deferredModelPatterns.length > 0) {
++			if (deferredModelPatterns.length === 1 && !deferredModelPatterns[0].includes(",")) {
++				const parsedPattern = parseModelString(deferredModelPatterns[0]);
++				if (parsedPattern?.provider) {
++					assertMainAgentProviderAllowed(settings, agentKind, parsedPattern.provider.toLowerCase());
++				}
++			}
+ 			// Deferred `--model` patterns almost always failed at the immediate
+ 			// path (main.ts:881) precisely because discovery-backed providers
+ 			// hadn't populated yet. Await the in-flight runtime discovery
+@@ -2940,7 +2988,7 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
+ 			// window.
+ 			await logger.time("resolveModelDiscoveryDeferredRetry", startRuntimeDiscovery);
+ 			const matchPreferences = getModelMatchPreferences(settings);
+-			const disabledProviders = new Set(cfgDisabledProviders.get(settings));
++			const disabledProviders = selectionDisabledProviders();
+ 			const runtimeResolved = deferredModelPatterns.some(pattern =>
+ 				pattern.split(",").some(selector => {
+ 					const trimmedSelector = selector.trim();
+@@ -3201,6 +3249,7 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
+ 						});
+ 					}
+ 				}
++				assertMainAgentProviderAllowed(settings, agentKind, selectedModel.provider);
+ 				model = selectedModel;
+ 				initialRetryFallback =
+ 					retryFallback && usageFallbackTriggered ? { ...retryFallback, pinned: true } : retryFallback;
+@@ -3247,7 +3296,9 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
+ 				if (hasExplicitModel) return false;
+ 				// Re-resolve the allowed set: extension factories and discovery
+ 				// refreshes above may have registered models not visible earlier.
+-				const fallbackCandidates = await resolveAllowedModels(modelRegistry, settings, modelMatchPreferences);
++				const fallbackCandidates = filterDriverModels(
++					await resolveAllowedModels(modelRegistry, settings, modelMatchPreferences),
++				);
+ 				const reResolvedRoleSpec = resolveModelRoleValue(settings.getModelRole("default"), fallbackCandidates, {
+ 					settings,
+ 					matchPreferences: modelMatchPreferences,
+@@ -3309,7 +3360,7 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
+ 				// so outside one it resolves from its provider's catalog and
+ 				// `hasModelAuth` decides whether requests can authenticate.
+ 				const scopedByEnabledModels = (cfgEnabledModels.get(settings)?.length ?? 0) > 0;
+-				const disabledProviders = cfgDisabledProviders.get(settings);
++				const disabledProviders = selectionDisabledProviders();
+ 				for (const candidate of findRetryFallbackCandidates(
+ 					fallbackContext,
+ 					chainKey,
+@@ -3317,15 +3368,17 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
+ 					originalModel,
+ 					{ allowMissingPrimary: true },
+ 				)) {
++					if (disabledProviders.has(candidate.provider)) continue;
+ 					let resolved = parseModelPattern(candidate.raw, fallbackCandidates, modelMatchPreferences);
+-					if (!resolved.model && !scopedByEnabledModels && !disabledProviders?.includes(candidate.provider)) {
++					if (!resolved.model && !scopedByEnabledModels && !disabledProviders.has(candidate.provider)) {
+ 						resolved = parseModelPattern(
+ 							candidate.raw,
+ 							modelRegistry.getProviderModels(candidate.provider),
+ 							modelMatchPreferences,
+ 						);
+ 					}
+-					if (!resolved.model || !hasModelAuth(resolved.model)) continue;
++					if (!resolved.model || disabledProviders.has(resolved.model.provider) || !hasModelAuth(resolved.model))
++						continue;
+ 					model = resolved.model;
+ 					initialRetryFallback = retryFallback;
+ 					modelFallbackMessage = undefined;
+@@ -3344,7 +3397,9 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
+ 			await tryResolveDefaultRole();
+ 
+ 			if (!model) {
+-				let fallbackCandidates = await resolveAllowedModels(modelRegistry, settings, modelMatchPreferences);
++				let fallbackCandidates = filterDriverModels(
++					await resolveAllowedModels(modelRegistry, settings, modelMatchPreferences),
++				);
+ 				let pick = pickDefaultAvailableModel(fallbackCandidates.filter(hasModelAuth), provider =>
+ 					modelRegistry.hasConcreteAuth(provider),
+ 				);
+@@ -3365,7 +3420,9 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
+ 				) {
+ 					await logger.time("resolveModelDiscoveryFallback", () => modelRegistry.refresh("online-if-uncached"));
+ 					if (!(await tryResolveDefaultRole()) && !model) {
+-						fallbackCandidates = await resolveAllowedModels(modelRegistry, settings, modelMatchPreferences);
++						fallbackCandidates = filterDriverModels(
++							await resolveAllowedModels(modelRegistry, settings, modelMatchPreferences),
++						);
+ 						pick = pickDefaultAvailableModel(fallbackCandidates.filter(hasModelAuth), provider =>
+ 							modelRegistry.hasConcreteAuth(provider),
+ 						);
+@@ -3398,7 +3455,7 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
+ 				target,
+ 				modelRegistry,
+ 				modelMatchPreferences,
+-				disabledProviderIds(settings),
++				selectionDisabledProviders(),
+ 				{ beforeRefresh: discoveryInFlight ? () => discoveryInFlight : undefined },
+ 			);
+ 			prewalk = selection.prewalk;
 diff --git a/packages/coding-agent/src/session/agent-session.ts b/packages/coding-agent/src/session/agent-session.ts
-index cb3ce80c..7a564e53 100644
+index 0d2665d..5b000d0 100644
 --- a/packages/coding-agent/src/session/agent-session.ts
 +++ b/packages/coding-agent/src/session/agent-session.ts
-@@ -425,6 +425,7 @@ import {
+@@ -374,6 +374,7 @@ import {
  	LAUNCH_COMPLETION_MESSAGE_TYPE,
  	type LaunchCompletionEntry,
  } from "./launch-completion";
-+import { assertMainAgentProviderAllowed } from "./main-agent-model-policy";
++import { assertMainAgentProviderAllowed, isMainAgentProviderDisabled } from "./main-agent-model-policy";
  import {
  	type BashExecutionMessage,
  	buildReplanTitleContext,
-@@ -2257,6 +2258,18 @@ export class AgentSession implements SettingsScope, AgentViewSession {
+@@ -1686,10 +1687,22 @@ export class AgentSession implements SettingsScope {
+ 		this.#emit(queuedContinuation || ircContinuation ? { ...pending, isTerminal: false } : pending);
+ 	}
+ 
++	get agentKind(): "main" | "sub" {
++		return this.#agentKind;
++	}
++
+ 	/**
+ 	 * Arm prewalk outside the normal startup path so an explicit slash command starts immediately.
+ 	 */
+ 	armPrewalk(target: Model, thinkingLevel?: ConfiguredThinkingLevel): boolean {
++		if (isMainAgentProviderDisabled(this.settings, this.#agentKind, target.provider)) {
++			this.emitNotice(
++				"warning",
++				`Prewalk not armed: provider "${target.provider}" is disabled for the main driver.`,
++				"prewalk",
++			);
++			return false;
++		}
+ 		return this.#prewalk.arm(target, thinkingLevel);
+ 	}
+ 
+@@ -1703,12 +1716,21 @@ export class AgentSession implements SettingsScope {
+ 	}
+ 
+ 	/** Restore a planning model and re-arm prewalk without partially applying a rejected restart. */
+-	restartPrewalk(
++	async restartPrewalk(
+ 		source: Model,
+ 		sourceThinkingLevel: ConfiguredThinkingLevel | undefined,
+ 		target: Model,
+ 		targetThinkingLevel: ConfiguredThinkingLevel | undefined,
+ 	): Promise<PrewalkRestartResult> {
++		if (isMainAgentProviderDisabled(this.settings, this.#agentKind, target.provider)) {
++			this.emitNotice(
++				"warning",
++				`Prewalk not armed: provider "${target.provider}" is disabled for the main driver.`,
++				"prewalk",
++			);
++			return "rejected";
++		}
++		assertMainAgentProviderAllowed(this.settings, this.#agentKind, source.provider);
+ 		return this.#prewalk.restart(source, sourceThinkingLevel, target, targetThinkingLevel);
+ 	}
+ 
+@@ -1758,6 +1780,24 @@ export class AgentSession implements SettingsScope {
+ 		this.settings = config.settings;
  		this.#skillDescriptions = config.skillDescriptions ?? new SkillDescriptionCatalog();
- 		this.#mcpNamespaces = config.mcpNamespaces;
  		this.memoryEnabled = config.memoryEnabled ?? true;
 +		this.#agentKind = config.agentKind ?? "main";
 +		const initialModel = this.agent.state.model;
 +		if (initialModel) {
 +			assertMainAgentProviderAllowed(this.settings, this.#agentKind, initialModel.provider);
++		}
++		if (config.prewalk) {
++			assertMainAgentProviderAllowed(this.settings, this.#agentKind, config.prewalk.target.provider);
++		}
++		if (config.planYolo) {
++			assertMainAgentProviderAllowed(this.settings, this.#agentKind, config.planYolo.target.provider);
 +		}
 +		if (this.#agentKind === "main") {
 +			const ownedStreamFn = this.agent.streamFn;
@@ -64,8 +532,8 @@ index cb3ce80c..7a564e53 100644
 +		}
  		this.#modelRegistry = config.modelRegistry;
  		this.#allowSessionModelFallback = config.allowSessionModelFallback === true;
- 		this.#disableModelFallback = config.disableModelFallback === true;
-@@ -2409,6 +2422,7 @@ export class AgentSession implements SettingsScope, AgentViewSession {
+ 		this.#interactivePrompts = config.interactivePrompts !== false;
+@@ -1897,6 +1937,7 @@ export class AgentSession implements SettingsScope {
  			sessionManager: this.sessionManager,
  			providerSessionState: this.#providerSessionState,
  			model: () => this.model,
@@ -73,7 +541,7 @@ index cb3ce80c..7a564e53 100644
  			sessionId: () => this.sessionId,
  			promptGeneration: () => this.#promptGeneration,
  			resolveActiveEditMode: () => this.#tools.resolveActiveEditMode(),
-@@ -2460,6 +2474,7 @@ export class AgentSession implements SettingsScope, AgentViewSession {
+@@ -1944,6 +1985,7 @@ export class AgentSession implements SettingsScope {
  			modelRegistry: this.#modelRegistry,
  			configWarnings: this.configWarnings,
  			model: () => this.model,
@@ -81,15 +549,25 @@ index cb3ce80c..7a564e53 100644
  			contextFitsModel: (model, excludedMessage) => this.#maintenance.contextFitsModel(model, excludedMessage),
  			textOutputCommitted: () => this.#textOutputCommitted,
  			thinkingLevel: () => this.thinkingLevel,
-@@ -2873,7 +2888,6 @@ export class AgentSession implements SettingsScope, AgentViewSession {
+@@ -2291,7 +2333,6 @@ export class AgentSession implements SettingsScope {
+ 		this.#streamingEditGuard = new StreamingEditGuard(streamGuardsHost);
  		this.#loopGuards = new LoopGuards(streamGuardsHost);
  		this.#agentId = config.agentId;
- 		this.#agentRegistry = config.agentRegistry;
 -		this.#agentKind = config.agentKind ?? "main";
  		// A subagent's streamed text reaches no output sink until the run settles
  		// (the parent sees only the yield), so a failed turn's partial prose is
  		// replay-safe and transient provider errors after it stay retryable —
-@@ -13782,6 +13796,7 @@ export class AgentSession implements SettingsScope, AgentViewSession {
+@@ -2710,6 +2751,9 @@ export class AgentSession implements SettingsScope {
+ 		if (cfgDisabledProviders.get(this.settings).includes(target.provider)) {
+ 			return `provider "${target.provider}" is disabled`;
+ 		}
++		if (isMainAgentProviderDisabled(this.settings, this.#agentKind, target.provider)) {
++			return `provider "${target.provider}" is disabled for the main driver`;
++		}
+ 		if (!this.#modelRegistry.hasConfiguredAuth(target)) return `no API key for ${target.provider}/${target.id}`;
+ 		return { target, thinkingLevel: resolved.thinkingLevel };
+ 	}
+@@ -11227,6 +11271,7 @@ export class AgentSession implements SettingsScope {
  	}
  
  	async #setModelWithProviderSessionReset(model: Model): Promise<void> {
@@ -97,17 +575,29 @@ index cb3ce80c..7a564e53 100644
  		const currentModel = this.model;
  		const isChanging = !currentModel || !modelsAreEqual(currentModel, model);
  		if (currentModel) {
-@@ -14810,6 +14825,7 @@ export class AgentSession implements SettingsScope, AgentViewSession {
+@@ -11912,6 +11957,9 @@ export class AgentSession implements SettingsScope {
+ 		},
+ 	): Promise<boolean> {
+ 		const explicitModel = options?.model;
++		if (explicitModel) {
++			assertMainAgentProviderAllowed(this.settings, this.#agentKind, explicitModel.provider);
++		}
+ 		if (explicitModel && !this.#modelRegistry.hasConfiguredAuth(explicitModel)) {
+ 			throw new Error(`No API key for ${explicitModel.provider}/${explicitModel.id}`);
+ 		}
+@@ -12063,6 +12111,9 @@ export class AgentSession implements SettingsScope {
+ 						: `Could not restore model ${targetModelStrings[0]}`;
+ 				}
  			}
- 
- 			if (targetModel) {
++			if (targetModel) {
 +				assertMainAgentProviderAllowed(this.settings, this.#agentKind, targetModel.provider);
- 				const currentModel = this.model;
- 				const shouldResetProviderState =
- 					switchingToDifferentSession ||
++			}
+ 			// The first build used the departing model's frame budget; size the
+ 			// archive for the model this session is about to adopt.
+ 			if (targetModel && frameDataBytesBudget(targetModel) !== frameDataBytesBudget(this.model)) {
 diff --git a/packages/coding-agent/src/session/main-agent-model-policy.ts b/packages/coding-agent/src/session/main-agent-model-policy.ts
 new file mode 100644
-index 00000000..6a74110d
+index 0000000..6a74110
 --- /dev/null
 +++ b/packages/coding-agent/src/session/main-agent-model-policy.ts
 @@ -0,0 +1,13 @@
@@ -125,34 +615,18 @@ index 00000000..6a74110d
 +	}
 +}
 diff --git a/packages/coding-agent/src/session/model-controls.ts b/packages/coding-agent/src/session/model-controls.ts
-index 1f5ac582..a2714f86 100644
+index 239a415..e6041b5 100644
 --- a/packages/coding-agent/src/session/model-controls.ts
 +++ b/packages/coding-agent/src/session/model-controls.ts
-@@ -43,6 +43,7 @@ import {
- import type { EditModeSetting } from "../edit/settings";
+@@ -44,6 +44,7 @@ import {
+ import type { EditMode } from "@oh-my-pi/pi-tui/tools/edit";
  import type { AgentSessionEvent } from "./agent-session-events";
  import type { ModelCycleResult, ResolvedRoleModel, RoleModelCycle, RoleModelCycleResult } from "./agent-session-types";
 +import { assertMainAgentProviderAllowed, isMainAgentProviderDisabled } from "./main-agent-model-policy";
  import { formatRoleModelValue, resolveRoleModelFull } from "./role-models";
- import { EPHEMERAL_MODEL_CHANGE_ROLE, PREWALK_MODEL_CHANGE_ROLE, TEMPORARY_MODEL_CHANGE_ROLE } from "./session-entries";
+ import { EPHEMERAL_MODEL_CHANGE_ROLE } from "./session-entries";
  import type { SessionManager } from "./session-manager";
-@@ -81,6 +82,7 @@ export function resolveRoleModelCycle(
- 	currentModel: Model | undefined,
- 	lastRole: string | undefined,
- 	roleOrder: readonly string[],
-+	agentKind: "main" | "sub",
- ): RoleModelCycle | undefined {
- 	if (availableModels.length === 0 || !currentModel) return undefined;
- 	const matchPreferences = getModelMatchPreferences(settings);
-@@ -93,6 +95,7 @@ export function resolveRoleModelCycle(
- 		if (!roleModelStr) continue;
- 		const resolved = resolveModelRoleValue(roleModelStr, availableModels, { settings, matchPreferences });
- 		if (!resolved.model) continue;
-+		if (isMainAgentProviderDisabled(settings, agentKind, resolved.model.provider)) continue;
- 		models.push({
- 			role,
- 			model: resolved.model,
-@@ -135,6 +138,7 @@ export function serviceTierForModel(
+@@ -59,6 +60,7 @@ import { cfgDisabledProviders, cfgEnabledModels } from "../config/model-settings
  
  /** Capabilities borrowed from the owning AgentSession. */
  export interface ModelControlsHost {
@@ -160,7 +634,7 @@ index 1f5ac582..a2714f86 100644
  	agent: Agent;
  	settings: Settings;
  	modelRegistry: ModelRegistry;
-@@ -295,6 +299,7 @@ export class ModelControls {
+@@ -239,6 +241,7 @@ export class ModelControls {
  			persist?: boolean;
  		},
  	): Promise<{ switched: boolean }> {
@@ -168,23 +642,24 @@ index 1f5ac582..a2714f86 100644
  		const previousEditMode = this.#host.resolveActiveEditMode();
  		if (!this.#host.modelRegistry.hasConfiguredAuth(model)) {
  			throw new Error(`No API key for ${model.provider}/${model.id}`);
-@@ -340,6 +345,7 @@ export class ModelControls {
+@@ -285,6 +288,7 @@ export class ModelControls {
+ 		options?: { ephemeral?: boolean },
  		selection: "explicit" | "automatic" = "explicit",
- 		isCurrent?: () => boolean,
- 	): Promise<boolean> {
+ 	): Promise<void> {
 +		assertMainAgentProviderAllowed(this.#host.settings, this.#host.agentKind(), model.provider);
  		const previousEditMode = this.#host.resolveActiveEditMode();
  		if (!this.#host.modelRegistry.hasConfiguredAuth(model)) {
  			throw new Error(`No API key for ${model.provider}/${model.id}`);
-@@ -410,6 +416,7 @@ export class ModelControls {
- 			this.#model,
- 			this.#host.sessionManager.getLastModelChangeRole(),
- 			roleOrder,
-+			this.#host.agentKind(),
- 		);
- 	}
+@@ -355,6 +359,8 @@ export class ModelControls {
+ 				matchPreferences,
+ 			});
+ 			if (!resolved.model) continue;
++			if (isMainAgentProviderDisabled(this.#host.settings, this.#host.agentKind(), resolved.model.provider))
++				continue;
  
-@@ -450,6 +457,7 @@ export class ModelControls {
+ 			models.push({
+ 				role,
+@@ -421,6 +427,7 @@ export class ModelControls {
  		const result: Array<{ model: Model; thinkingLevel?: ThinkingLevel }> = [];
  
  		for (const scoped of this.scopedModels) {
@@ -192,7 +667,7 @@ index 1f5ac582..a2714f86 100644
  			const provider = scoped.model.provider;
  			let apiKey: string | undefined;
  			if (apiKeysByProvider.has(provider)) {
-@@ -496,7 +504,9 @@ export class ModelControls {
+@@ -467,7 +474,9 @@ export class ModelControls {
  
  	async #cycleAvailableModel(direction: "forward" | "backward"): Promise<ModelCycleResult | undefined> {
  		const previousEditMode = this.#host.resolveActiveEditMode();
@@ -203,7 +678,7 @@ index 1f5ac582..a2714f86 100644
  		if (availableModels.length <= 1) return undefined;
  
  		const currentModel = this.#model;
-@@ -529,7 +539,9 @@ export class ModelControls {
+@@ -500,7 +509,9 @@ export class ModelControls {
  	 * See {@link filterAvailableModelsByEnabledPatterns} for supported pattern forms and limitations.
  	 */
  	getAvailableModels(): Model[] {
@@ -215,10 +690,10 @@ index 1f5ac582..a2714f86 100644
  		if (!patterns || patterns.length === 0) return all;
  		return filterAvailableModelsByEnabledPatterns(all, patterns, this.#host.settings);
 diff --git a/packages/coding-agent/src/session/turn-recovery.ts b/packages/coding-agent/src/session/turn-recovery.ts
-index 62cdcbae..0bc61e81 100644
+index e89ad21..73fe7aa 100644
 --- a/packages/coding-agent/src/session/turn-recovery.ts
 +++ b/packages/coding-agent/src/session/turn-recovery.ts
-@@ -34,6 +34,7 @@ import type { ModelRegistry } from "../config/model-registry";
+@@ -29,6 +29,7 @@ import type { ModelRegistry } from "../config/model-registry";
  import { formatModelStringWithRouting, resolveModelOverride } from "../config/model-resolver";
  
  import type { Settings } from "../config/settings";
@@ -226,7 +701,7 @@ index 62cdcbae..0bc61e81 100644
  import type { RetryErrorUpdate } from "../extensibility/shared-events";
  import { isEvalStateContext } from "../eval/state";
  import emptyStopRetryTemplate from "../prompts/system/empty-stop-retry.md" with { type: "text" };
-@@ -272,6 +273,7 @@ export interface TurnRecoveryHost {
+@@ -224,6 +225,7 @@ export interface TurnRecoveryHost {
  	settings: Settings;
  	modelRegistry: ModelRegistry;
  	configWarnings: string[];
@@ -234,7 +709,7 @@ index 62cdcbae..0bc61e81 100644
  	model(): Model | undefined;
  	/**
  	 * Whether the live context fits `model`'s usable window. `excludedMessage`
-@@ -515,6 +517,11 @@ export class TurnRecovery {
+@@ -444,6 +446,11 @@ export class TurnRecovery {
  		this.#fallbackRoutedFor = this.#host.sessionManager.getSessionId();
  	}
  
@@ -246,7 +721,7 @@ index 62cdcbae..0bc61e81 100644
  	/**
  	 * Model this session's produced work is attributed to.
  	 *
-@@ -2202,7 +2209,9 @@ export class TurnRecovery {
+@@ -1986,7 +1993,9 @@ export class TurnRecovery {
  				if (this.isRetryFallbackSelectorSuppressed(candidate)) continue;
  				const resolved = resolveModelOverride([candidate.raw], this.#host.modelRegistry, this.#host.settings);
  				const candidateModel = resolved.model ?? this.#host.modelRegistry.find(candidate.provider, candidate.id);
@@ -254,26 +729,26 @@ index 62cdcbae..0bc61e81 100644
 +				if (!candidateModel) continue;
 +				if (this.#isMainAgentProviderDisabled(candidateModel.provider)) continue;
 +				if (!this.#host.modelRegistry.hasConfiguredAuth(candidateModel)) continue;
- 				if (cfgOffline.get(this.#host.settings) && candidateModel.provider !== currentModel.provider) continue;
  				if (ceiling !== undefined && !modelSupportsEffortCeiling(candidateModel, ceiling)) continue;
- 				// Skip a candidate whose window cannot hold the live context so we
-@@ -2303,6 +2312,7 @@ export class TurnRecovery {
+ 				// A usage fallback must also fit: skip a candidate whose window cannot
+ 				// hold the live context so we never switch onto an oversized request
+@@ -2126,6 +2135,7 @@ export class TurnRecovery {
  		if (!candidate) {
  			throw new Error(`Retry fallback model not found: ${selector.raw}`);
  		}
 +		if (this.#isMainAgentProviderDisabled(candidate.provider)) return false;
- 		if (cfgOffline.get(this.#host.settings) && candidate.provider !== this.#host.model()?.provider) return false;
  		const apiKey =
  			options?.apiKey ??
-@@ -2442,6 +2452,7 @@ export class TurnRecovery {
+ 			(await this.#host.modelRegistry.getApiKey(candidate, this.#host.sessionId(), { signal: options?.signal }));
+@@ -2244,6 +2254,7 @@ export class TurnRecovery {
  				// sets `switchedModel`, and the retry budget is reset to 1 on every
  				// failure — an unbounded retry loop against a model that cannot work.
  				if (this.#isNoOpRetryFallback(candidate, selector)) continue;
 +				if (this.#isMainAgentProviderDisabled(candidate.provider)) continue;
  				if (options?.excludeProvider === candidate.provider) continue;
- 				// Redeeming Anthropic fallback credit replays the refused request's frozen
- 				// body; the server validates thinking blocks across the boundary itself
-@@ -2624,8 +2635,13 @@ export class TurnRecovery {
+ 				// Anthropic signatures and redacted blocks are model-bound, while the
+ 				// latest assistant response must remain byte-identical. A same-provider
+@@ -2399,8 +2410,13 @@ export class TurnRecovery {
  		}
  		if (this.#hasReplayUnsafeOutput(message)) return false;
  		const currentSelector = formatRetryFallbackSelector(model, this.#host.thinkingLevel());
@@ -289,7 +764,7 @@ index 62cdcbae..0bc61e81 100644
  		);
  	}
  
-@@ -2659,6 +2675,7 @@ export class TurnRecovery {
+@@ -2415,6 +2431,7 @@ export class TurnRecovery {
  		if (!model) return false;
  		const baseModel = this.#host.modelRegistry.find("fireworks", toFireworksBaseModelId(model.id));
  		if (!baseModel) return false;
@@ -297,28 +772,48 @@ index 62cdcbae..0bc61e81 100644
  		const apiKey = await this.#host.modelRegistry.getApiKey(baseModel, this.#host.sessionId());
  		if (!apiKey) return false;
  		const baseSelector = formatModelStringWithRouting(baseModel);
-@@ -2720,6 +2737,7 @@ export class TurnRecovery {
+@@ -2476,6 +2493,7 @@ export class TurnRecovery {
  		const primaryModel =
  			resolvedPrimary.model ?? this.#host.modelRegistry.find(originalSelector.provider, originalSelector.id);
  		if (!primaryModel) return false;
 +		if (this.#isMainAgentProviderDisabled(primaryModel.provider)) return false;
- 		if (cfgOffline.get(this.#host.settings) && primaryModel.provider !== currentModel.provider) return false;
  		const apiKey = await this.#host.modelRegistry.getApiKey(primaryModel, this.#host.sessionId());
  		if (!apiKey) return false;
-diff --git a/packages/coding-agent/src/thread/remote-agent-session.ts b/packages/coding-agent/src/thread/remote-agent-session.ts
-index e9d07ea4..22d25fca 100644
---- a/packages/coding-agent/src/thread/remote-agent-session.ts
-+++ b/packages/coding-agent/src/thread/remote-agent-session.ts
-@@ -592,6 +592,7 @@ export class RemoteAgentSession implements AgentViewSession {
- 			this.#state.model,
- 			lastModelChangeRole(this.#entryIndex.branchView()),
- 			roleOrder,
-+			"main",
- 		);
- 	}
  
+diff --git a/packages/coding-agent/src/slash-commands/builtin-modes.ts b/packages/coding-agent/src/slash-commands/builtin-modes.ts
+index 62a6aeb..d95c38b 100644
+--- a/packages/coding-agent/src/slash-commands/builtin-modes.ts
++++ b/packages/coding-agent/src/slash-commands/builtin-modes.ts
+@@ -26,6 +26,7 @@ import { describeLoopLimitRuntime } from "../modes/loop-limit";
+ import type { InteractiveModeContext } from "../modes/types";
+ import ratchetKickoffPrompt from "../prompts/ratchet-kickoff.md" with { type: "text" };
+ import type { AgentSession } from "../session/agent-session";
++import { isMainAgentProviderDisabled } from "../session/main-agent-model-policy";
+ import { CLI_THINKING_LEVELS, getConfiguredThinkingLevelMetadata } from "@oh-my-pi/pi-tui/thinking";
+ import { noThinkingMessage, resolveThinkingArgument } from "./helpers/effort";
+ import { commandConsumed, errorMessage, usage } from "./helpers/parse";
+@@ -793,6 +794,9 @@ export const BUILTIN_MODE_SLASH_COMMANDS: ReadonlyArray<SlashCommandSpec> = [
+ 			if (target.error || !target.model) {
+ 				return usage(target.error ?? 'Model "@smol" not found', runtime);
+ 			}
++			if (isMainAgentProviderDisabled(runtime.settings, runtime.session.agentKind, target.model.provider)) {
++				return usage(`Provider "${target.model.provider}" is disabled for the main driver.`, runtime);
++			}
+ 			if (!runtime.session.modelRegistry.hasConfiguredAuth(target.model)) {
+ 				return usage(`No API key for ${target.model.provider}/${target.model.id}`, runtime);
+ 			}
+@@ -801,6 +805,9 @@ export const BUILTIN_MODE_SLASH_COMMANDS: ReadonlyArray<SlashCommandSpec> = [
+ 				if (source.error || !source.model) {
+ 					return usage(source.error ?? 'Model "@default" not found', runtime);
+ 				}
++				if (isMainAgentProviderDisabled(runtime.settings, runtime.session.agentKind, source.model.provider)) {
++					return usage(`Provider "${source.model.provider}" is disabled for the main driver.`, runtime);
++				}
+ 				if (!runtime.session.modelRegistry.hasConfiguredAuth(source.model)) {
+ 					return usage(`No API key for ${source.model.provider}/${source.model.id}`, runtime);
+ 				}
 diff --git a/packages/coding-agent/test/agent-session-model-switch-auth.test.ts b/packages/coding-agent/test/agent-session-model-switch-auth.test.ts
-index 8d7f15e7..eb5864e3 100644
+index 8d7f15e..eb5864e 100644
 --- a/packages/coding-agent/test/agent-session-model-switch-auth.test.ts
 +++ b/packages/coding-agent/test/agent-session-model-switch-auth.test.ts
 @@ -2,12 +2,15 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, spyOn } from "bun
@@ -445,11 +940,608 @@ index 8d7f15e7..eb5864e3 100644
 +		expect(streamInvocations).toBe(0);
 +	});
  });
+diff --git a/packages/coding-agent/test/agent-session-new-session-boundary.test.ts b/packages/coding-agent/test/agent-session-new-session-boundary.test.ts
+index bece0c6..5b506fc 100644
+--- a/packages/coding-agent/test/agent-session-new-session-boundary.test.ts
++++ b/packages/coding-agent/test/agent-session-new-session-boundary.test.ts
+@@ -1,7 +1,8 @@
+-import { afterAll, afterEach, beforeAll, describe, expect, it, spyOn } from "bun:test";
++import { afterAll, afterEach, beforeAll, describe, expect, it, spyOn, vi } from "bun:test";
+ import * as path from "node:path";
+-import { Agent, AppendOnlyContextManager } from "@oh-my-pi/pi-agent-core";
+-import type { AssistantMessage } from "@oh-my-pi/pi-ai";
++import { Agent, AppendOnlyContextManager, type AgentMessage, type ThinkingLevel } from "@oh-my-pi/pi-agent-core";
++import type { AssistantMessage, Model, ProviderSessionState } from "@oh-my-pi/pi-ai";
++import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
+ import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
+ import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
+ import { ExtensionRuntime, loadExtensionFromFactory } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/loader";
+@@ -22,6 +23,8 @@ let modelRegistry: ModelRegistry;
+ async function setup(): Promise<void> {
+ 	sharedDir = TempDir.createSync("@pi-new-session-boundary-shared-");
+ 	authStorage = await AuthStorage.create(path.join(sharedDir.path(), "auth.db"));
++	authStorage.keys.setRuntime("anthropic", "test-key");
++	authStorage.keys.setRuntime("openai", "test-key");
+ 	modelRegistry = new ModelRegistry(authStorage, path.join(sharedDir.path(), "models.yml"));
+ }
+ 
+@@ -30,17 +33,27 @@ async function teardown(): Promise<void> {
+ 	sharedDir.removeSync();
+ }
+ 
++interface Harness {
++	agent: Agent;
++	session: AgentSession;
++	sessionManager: SessionManager;
++}
++
+ async function createHarness(options?: {
+ 	extension?: {
+ 		name: string;
+ 		register: (api: ExtensionAPI) => void;
+ 	};
+-}): Promise<{ agent: Agent; session: AgentSession; sessionManager: SessionManager }> {
++	model?: Model;
++	settings?: Settings;
++	agentKind?: "main" | "sub";
++}): Promise<Harness> {
+ 	const tempDir = TempDir.createSync("@pi-new-session-boundary-");
+ 	const cwd = tempDir.path();
+ 	const sessionManager = SessionManager.create(cwd, path.join(cwd, "sessions"));
+ 	const agent = new Agent({
+ 		initialState: {
++			...(options?.model ? { model: options.model } : {}),
+ 			systemPrompt: ["Test"],
+ 			tools: [],
+ 			messages: [],
+@@ -61,9 +74,10 @@ async function createHarness(options?: {
+ 	const session = new AgentSession({
+ 		agent,
+ 		sessionManager,
+-		settings: Settings.isolated(),
++		settings: options?.settings ?? Settings.isolated(),
+ 		modelRegistry,
+ 		extensionRunner,
++		...(options?.agentKind ? { agentKind: options.agentKind } : {}),
+ 	});
+ 	cleanup.push(async () => {
+ 		await session.dispose();
+@@ -437,4 +451,125 @@ describe("AgentSession.newSession boundary", () => {
+ 		if (!reportedFile) throw new Error("Expected session_switch to report a persisted session file");
+ 		expect(await Bun.file(reportedFile).exists()).toBe(true);
+ 	});
++
++	/** Persisted source/target pair for main-driver resume policy: allowed Anthropic source, OpenAI-recorded target. */
++	async function createResumeFixture(options?: { agentKind?: "main" | "sub" }) {
++		const primary = getBundledModel("anthropic", "claude-sonnet-4-5");
++		const banned = getBundledModel("openai", "gpt-4o");
++		if (!primary || !banned) throw new Error("Expected bundled anthropic/openai models");
++		const switchEvents: unknown[] = [];
++		const source = await createHarness({
++			model: primary,
++			agentKind: options?.agentKind,
++			settings: Settings.isolated({ "mainAgent.disabledProviders": [banned.provider] }),
++			extension: {
++				name: "observe-session-switch",
++				register: pi => {
++					pi.on("session_switch", event => {
++						switchEvents.push(event);
++					});
++				},
++			},
++		});
++		source.sessionManager.appendMessage({ role: "user", content: "source", timestamp: 1 });
++		source.agent.replaceMessages(source.sessionManager.buildSessionContext().messages);
++		await source.sessionManager.ensureOnDisk();
++		await source.sessionManager.flush();
++		const target = await createHarness();
++		target.sessionManager.appendModelChange(`${banned.provider}/${banned.id}`);
++		target.sessionManager.appendMessage({ role: "user", content: "target", timestamp: 2 });
++		await target.sessionManager.ensureOnDisk();
++		await target.sessionManager.flush();
++		const targetFile = target.sessionManager.getSessionFile();
++		const sourceFile = source.sessionManager.getSessionFile();
++		if (!targetFile) throw new Error("Expected persisted target session");
++		if (!sourceFile) throw new Error("Expected persisted source session");
++		return { primary, banned, source, target, targetFile, sourceFile, switchEvents };
++	}
++
++	interface SourceSnapshot {
++		file: string | undefined;
++		id: string;
++		modelId: string | undefined;
++		messages: AgentMessage[];
++		thinkingLevel: ThinkingLevel | undefined;
++	}
++
++	function snapshot(source: Harness): SourceSnapshot {
++		return {
++			file: source.sessionManager.getSessionFile(),
++			id: source.session.sessionId,
++			modelId: source.session.model?.id,
++			messages: [...source.session.messages],
++			thinkingLevel: source.session.thinkingLevel,
++		};
++	}
++
++	function expectSourceRestored(source: Harness, before: SourceSnapshot) {
++		expect(source.sessionManager.getSessionFile()).toBe(before.file);
++		expect(source.session.sessionId).toBe(before.id);
++		expect(source.session.model?.id).toBe(before.modelId);
++		expect(source.session.messages).toEqual(before.messages);
++		expect(source.session.thinkingLevel).toBe(before.thinkingLevel);
++		expect(source.session.isSessionTransitioning).toBe(false);
++	}
++
++	it("rejects a saved main-banned resume target before hooks observe or provider state closes", async () => {
++		const { banned, source, targetFile, switchEvents } = await createResumeFixture();
++		const providerState = { close: vi.fn() } satisfies ProviderSessionState;
++		source.session.providerSessionState.set("stable-provider-state", providerState);
++		const before = snapshot(source);
++
++		await expect(source.session.switchSession(targetFile, { preserveLocalCwd: true })).rejects.toThrow(
++			`Provider "${banned.provider}" is disabled for the main driver.`,
++		);
++
++		expect(switchEvents).toEqual([]);
++		expect(providerState.close).not.toHaveBeenCalled();
++		expect(source.session.providerSessionState.get("stable-provider-state")).toBe(providerState);
++		expectSourceRestored(source, before);
++	});
++
++	it("rejects an explicit main-banned resume model before auth and notifications", async () => {
++		const { banned, source, targetFile, switchEvents } = await createResumeFixture();
++		const providerState = { close: vi.fn() } satisfies ProviderSessionState;
++		source.session.providerSessionState.set("stable-provider-state", providerState);
++		const before = snapshot(source);
++		const hasAuthSpy = spyOn(modelRegistry, "hasConfiguredAuth");
++
++		await expect(source.session.switchSession(targetFile, { preserveLocalCwd: true, model: banned })).rejects.toThrow(
++			`Provider "${banned.provider}" is disabled for the main driver.`,
++		);
++
++		expect(hasAuthSpy).not.toHaveBeenCalled();
++		hasAuthSpy.mockRestore();
++		expect(switchEvents).toEqual([]);
++		expect(providerState.close).not.toHaveBeenCalled();
++		expect(source.session.providerSessionState.get("stable-provider-state")).toBe(providerState);
++		expectSourceRestored(source, before);
++	});
++
++	it("a sub session adopts a main-banned saved target and closes departing provider state", async () => {
++		const { banned, source, targetFile, switchEvents } = await createResumeFixture({ agentKind: "sub" });
++		const providerState = { close: vi.fn() } satisfies ProviderSessionState;
++		source.session.providerSessionState.set("stable-provider-state", providerState);
++
++		expect(await source.session.switchSession(targetFile, { preserveLocalCwd: true })).toBe(true);
++
++		expect(switchEvents).toHaveLength(1);
++		expect(providerState.close).toHaveBeenCalledTimes(1);
++		expect(source.session.providerSessionState.size).toBe(0);
++		expect(source.session.model?.id).toBe(banned.id);
++		expect(source.session.isSessionTransitioning).toBe(false);
++	});
++
++	it("keepModel retains the allowed current model over a banned saved target", async () => {
++		const { primary, source, targetFile, switchEvents } = await createResumeFixture();
++
++		expect(await source.session.switchSession(targetFile, { keepModel: true, preserveLocalCwd: true })).toBe(true);
++
++		expect(switchEvents).toHaveLength(1);
++		expect(source.session.model?.id).toBe(primary.id);
++		expect(source.session.isSessionTransitioning).toBe(false);
++	});
+ });
+diff --git a/packages/coding-agent/test/agent-session-prewalk-auto.test.ts b/packages/coding-agent/test/agent-session-prewalk-auto.test.ts
+index 23d9b2d..7abda04 100644
+--- a/packages/coding-agent/test/agent-session-prewalk-auto.test.ts
++++ b/packages/coding-agent/test/agent-session-prewalk-auto.test.ts
+@@ -7,6 +7,7 @@ import { createMockModel, type MockResponse } from "@oh-my-pi/pi-ai/providers/mo
+ import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
+ import { AUTO_PREWALK_TIMEOUT_MS, type PrewalkRoute } from "@oh-my-pi/pi-coding-agent/auto-prewalk/classifier";
+ import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
++import { cfgMainAgentDisabledProviders } from "@oh-my-pi/pi-coding-agent/config/model-settings";
+ import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
+ import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/types";
+ import { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
+@@ -152,6 +153,8 @@ describe("AgentSession auto-prewalk", () => {
+ 		/** Arm prewalk at startup, as `--prewalk`/`prewalk.enabled` (true = the default `@smol` target) or task prewalk would. */
+ 		startupArm?: boolean | Model;
+ 		suppressAutoPrewalk?: boolean;
++		/** Overrides the @smol handoff target model. */
++		target?: Model;
+ 		/** `todo.eager`, which adds a first-turn reminder before the judge answers. */
+ 		todoEager?: "preferred" | "always";
+ 		beforeStream?: (context: Context, options?: SimpleStreamOptions) => Promise<void>;
+@@ -159,7 +162,7 @@ describe("AgentSession auto-prewalk", () => {
+ 
+ 	function createFixture(responses: MockResponse[], options: FixtureOptions = {}) {
+ 		const primary = modelOrThrow("claude-sonnet-4-5");
+-		const target = modelOrThrow("claude-sonnet-4-6");
++		const target = options.target ?? modelOrThrow("claude-sonnet-4-6");
+ 		authStorage = createInMemoryAuthStorage();
+ 		authStorage.keys.setRuntime("anthropic", "test-key");
+ 		if (options.judge !== false) authStorage.keys.setRuntime("typesafe", "ts-key");
+@@ -680,6 +683,26 @@ describe("AgentSession auto-prewalk", () => {
+ 		});
+ 	});
+ 
++	it("does not arm a main-banned auto target and leaves the judge side request intact", async () => {
++		const calls = stubJudge([PREWALK]);
++		const banned = getBundledModel("openai", "gpt-4o");
++		if (!banned) throw new Error("Expected bundled openai model gpt-4o");
++		const f = createFixture(cycle(), { auto: "on", target: banned });
++		cfgMainAgentDisabledProviders.override(f.settings, [banned.provider]);
++		const hasAuthSpy = vi.spyOn(f.session.modelRegistry, "hasConfiguredAuth");
++
++		await f.session.prompt(TASK);
++
++		expect(asked(calls)).toHaveLength(1);
++		expect(f.requested).toEqual([f.primary.id, f.primary.id, f.primary.id]);
++		expect(f.session.getPrewalkState()).toBeUndefined();
++		expect(f.nudges.flat()).toEqual([]);
++		expect(f.notices).toEqual([
++			`Auto-prewalk not armed: target "@smol": provider "${banned.provider}" is disabled for the main driver.`,
++		]);
++		expect(hasAuthSpy.mock.calls.some(([model]) => model.provider === banned.provider)).toBe(false);
++	});
++
+ 	it("never judges a subagent's tasks", async () => {
+ 		const calls = stubJudge([PREWALK]);
+ 		const f = createFixture([done("one"), done("two")], { auto: "on", agentKind: "sub" });
+diff --git a/packages/coding-agent/test/agent-session-prewalk.test.ts b/packages/coding-agent/test/agent-session-prewalk.test.ts
+index e63b623..e698169 100644
+--- a/packages/coding-agent/test/agent-session-prewalk.test.ts
++++ b/packages/coding-agent/test/agent-session-prewalk.test.ts
+@@ -6,6 +6,7 @@ import { type Api, Effort, type Model } from "@oh-my-pi/pi-ai";
+ import { createMockModel, type MockResponse } from "@oh-my-pi/pi-ai/providers/mock";
+ import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
+ import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
++import { cfgMainAgentDisabledProviders } from "@oh-my-pi/pi-coding-agent/config/model-settings";
+ import { CustomToolAdapter } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/wrapper";
+ import { DeferredMCPTool } from "@oh-my-pi/pi-coding-agent/mcp/tool-bridge";
+ import { dispatchXdevTool, type XdevDispatch, type XdevState } from "@oh-my-pi/pi-coding-agent/tools/xdev";
+@@ -22,6 +23,8 @@ import {
+ 	cfgRetryFallbackRevertPolicy,
+ } from "@oh-my-pi/pi-coding-agent/session/settings";
+ import { executeBuiltinSlashCommand } from "@oh-my-pi/pi-coding-agent/slash-commands/builtin-registry";
++import { executeAcpBuiltinSlashCommand } from "@oh-my-pi/pi-coding-agent/slash-commands/acp-builtins";
++import type { SlashCommandRuntime } from "@oh-my-pi/pi-coding-agent/slash-commands/types";
+ import type { TuiSlashCommandRuntime } from "@oh-my-pi/pi-coding-agent/slash-commands/types";
+ import { AUTO_THINKING } from "@oh-my-pi/pi-tui/thinking";
+ import { TempDir } from "@oh-my-pi/pi-utils";
+@@ -1230,6 +1233,326 @@ describe("AgentSession prewalk", () => {
+ 		expect(notices.some(message => message.includes("nothing to switch"))).toBe(true);
+ 	});
+ 
++	it("armPrewalk rejects a main-banned target without arming, nudging, or changing effort", async () => {
++		const banned = getBundledModel("openai", "gpt-4o");
++		if (!banned) throw new Error("Expected bundled openai model gpt-4o");
++		const created = createLifecycleSession([{ content: ["idle"] }]);
++		cfgMainAgentDisabledProviders.override(created.settings, [banned.provider]);
++		created.settings.setModelRole("smol", `${banned.provider}/${banned.id}:low`);
++		const notices: string[] = [];
++		created.session.subscribe(event => {
++			if (event.type === "notice" && event.source === "prewalk") notices.push(event.message);
++		});
++		const armBefore = created.session.getPrewalkState();
++		if (!armBefore) throw new Error("Expected startup arm");
++		const steeringBefore = created.session.agent.peekSteeringQueue().length;
++		const modelBefore = created.session.model?.id;
++		const effortBefore = created.session.thinkingLevel;
++		const hasAuthSpy = vi.spyOn(modelRegistry, "hasConfiguredAuth");
++
++		expect(created.session.armPrewalk(banned, Effort.Low)).toBe(false);
++
++		expect(hasAuthSpy).not.toHaveBeenCalled();
++		expect(created.session.getPrewalkState()).toBe(armBefore);
++		expect(created.session.getPrewalkState()?.target.id).toBe(created.target.id);
++		expect(created.session.model?.id).toBe(modelBefore);
++		expect(created.session.thinkingLevel).toBe(effortBefore);
++		expect(created.session.agent.peekSteeringQueue()).toHaveLength(steeringBefore);
++		expect(notices).toEqual([`Prewalk not armed: provider "${banned.provider}" is disabled for the main driver.`]);
++	});
++
++	it("restartPrewalk rejects a main-banned target and preserves the active arm and queues", async () => {
++		const banned = getBundledModel("openai", "gpt-4o");
++		if (!banned) throw new Error("Expected bundled openai model gpt-4o");
++		const created = createLifecycleSession([{ content: ["idle"] }]);
++		cfgMainAgentDisabledProviders.override(created.settings, [banned.provider]);
++		const notices: string[] = [];
++		created.session.subscribe(event => {
++			if (event.type === "notice" && event.source === "prewalk") notices.push(event.message);
++		});
++		const armBefore = created.session.getPrewalkState();
++		if (!armBefore) throw new Error("Expected startup arm");
++		const steeringBefore = [...created.session.agent.peekSteeringQueue()];
++		const followUpBefore = [...created.session.agent.peekFollowUpQueue()];
++		const modelBefore = created.session.model?.id;
++		const effortBefore = created.session.thinkingLevel;
++		const hasAuthSpy = vi.spyOn(modelRegistry, "hasConfiguredAuth");
++
++		expect(await created.session.restartPrewalk(created.primary, Effort.High, banned, Effort.Low)).toBe("rejected");
++
++		expect(hasAuthSpy).not.toHaveBeenCalled();
++		expect(created.session.getPrewalkState()).toBe(armBefore);
++		expect(created.session.model?.id).toBe(modelBefore);
++		expect(created.session.thinkingLevel).toBe(effortBefore);
++		expect(created.session.agent.peekSteeringQueue()).toEqual(steeringBefore);
++		expect(created.session.agent.peekFollowUpQueue()).toEqual(followUpBefore);
++		expect(notices).toEqual([`Prewalk not armed: provider "${banned.provider}" is disabled for the main driver.`]);
++	});
++
++	it("restartPrewalk rejects a banned source before source auth or model mutation", async () => {
++		const bannedTarget = getBundledModel("openai", "gpt-4o");
++		if (!bannedTarget) throw new Error("Expected bundled openai model gpt-4o");
++		const created = createLifecycleSession([{ content: ["idle"] }]);
++		cfgMainAgentDisabledProviders.override(created.settings, ["anthropic"]);
++		const armBefore = created.session.getPrewalkState();
++		if (!armBefore) throw new Error("Expected startup arm");
++		const hasAuthSpy = vi.spyOn(modelRegistry, "hasConfiguredAuth");
++
++		await expect(
++			created.session.restartPrewalk(created.primary, Effort.High, bannedTarget, Effort.Low),
++		).rejects.toThrow('Provider "anthropic" is disabled for the main driver.');
++
++		expect(hasAuthSpy).not.toHaveBeenCalled();
++		expect(created.session.model?.id).toBe(created.primary.id);
++		expect(created.session.getPrewalkState()).toBe(armBefore);
++	});
++
++	it("a subagent session can still arm and restart into a main-banned provider", async () => {
++		const banned = getBundledModel("openai", "gpt-4o");
++		if (!banned) throw new Error("Expected bundled openai model gpt-4o");
++		const created = createLifecycleSession([{ content: ["idle"] }], { armed: false, agentKind: "sub" });
++		cfgMainAgentDisabledProviders.override(created.settings, [banned.provider]);
++
++		expect(created.session.armPrewalk(banned, Effort.Low)).toBe(true);
++		expect(created.session.getPrewalkState()?.target.id).toBe(banned.id);
++
++		expect(await created.session.restartPrewalk(created.primary, Effort.High, banned, Effort.Low)).toBe("armed");
++		expect(created.session.model?.id).toBe(created.primary.id);
++		expect(created.session.getPrewalkState()?.target.id).toBe(banned.id);
++	});
++
++	it("direct construction rejects main-banned prewalk and planYolo targets", () => {
++		const banned = getBundledModel("openai", "gpt-4o");
++		if (!banned) throw new Error("Expected bundled openai model gpt-4o");
++		const settings = Settings.isolated({
++			"compaction.enabled": false,
++			"mainAgent.disabledProviders": [banned.provider],
++		});
++		const agent = new Agent({
++			initialState: {
++				model: modelOrThrow("claude-sonnet-4-5"),
++				systemPrompt: ["Test"],
++				tools: [],
++				messages: [],
++				thinkingLevel: Effort.Medium,
++			},
++			convertToLlm,
++		});
++		const base = {
++			agent,
++			sessionManager: SessionManager.inMemory(),
++			settings,
++			modelRegistry,
++			toolRegistry,
++		};
++
++		expect(() => new AgentSession({ ...base, prewalk: { target: banned, thinkingLevel: Effort.Low } })).toThrow(
++			`Provider "${banned.provider}" is disabled for the main driver.`,
++		);
++		expect(() => new AgentSession({ ...base, planYolo: { target: banned, thinkingLevel: Effort.Low } })).toThrow(
++			`Provider "${banned.provider}" is disabled for the main driver.`,
++		);
++	});
++
++	it("sub construction accepts main-banned prewalk and planYolo targets", async () => {
++		const banned = getBundledModel("openai", "gpt-4o");
++		if (!banned) throw new Error("Expected bundled openai model gpt-4o");
++		const settings = Settings.isolated({
++			"compaction.enabled": false,
++			"mainAgent.disabledProviders": [banned.provider],
++		});
++		const subAgent = (responses: MockResponse[]): Agent => {
++			const mock = createMockModel({ responses });
++			return new Agent({
++				getApiKey: () => "test-key",
++				initialState: {
++					model: modelOrThrow("claude-sonnet-4-5"),
++					systemPrompt: ["Test"],
++					tools: [writeTool as AgentTool],
++					messages: [],
++					thinkingLevel: Effort.Medium,
++				},
++				convertToLlm,
++				streamFn: (model, context, options) => mock.stream(model, context, options),
++			});
++		};
++		const base = {
++			settings,
++			modelRegistry,
++			toolRegistry,
++			agentKind: "sub" as const,
++		};
++		const prewalkSession = new AgentSession({
++			...base,
++			agent: subAgent([{ content: ["idle"] }]),
++			sessionManager: SessionManager.inMemory(),
++			prewalk: { target: banned, thinkingLevel: Effort.Low },
++		});
++		session = prewalkSession;
++		expect(prewalkSession.getPrewalkState()?.target.id).toBe(banned.id);
++
++		const planSession = new AgentSession({
++			...base,
++			agent: subAgent([{ content: ["plan started"] }]),
++			sessionManager: SessionManager.inMemory(),
++			planYolo: { target: banned, thinkingLevel: Effort.Low },
++		});
++		try {
++			await planSession.prompt("start the plan");
++			expect(planSession.getPlanModeState()?.enabled).toBe(true);
++		} finally {
++			await planSession.dispose();
++		}
++	});
++
++	it("/prewalk refuses a main-banned target before probing auth", async () => {
++		const banned = getBundledModel("openai", "gpt-4o");
++		if (!banned) throw new Error("Expected bundled openai model gpt-4o");
++		const settings = Settings.isolated({ "compaction.enabled": false });
++		settings.setModelRole("smol", `${banned.provider}/${banned.id}:medium`);
++		const agent = new Agent({
++			getApiKey: () => "test-key",
++			initialState: {
++				model: modelOrThrow("claude-sonnet-4-5"),
++				systemPrompt: ["Test"],
++				tools: [],
++				messages: [],
++				thinkingLevel: Effort.Medium,
++			},
++			convertToLlm,
++		});
++		const sessionManager = SessionManager.inMemory();
++		session = new AgentSession({
++			agent,
++			sessionManager,
++			settings,
++			modelRegistry,
++			toolRegistry,
++			thinkingLevel: Effort.Medium,
++		});
++		cfgMainAgentDisabledProviders.override(settings, [banned.provider]);
++		const outputs: string[] = [];
++		const runtime: SlashCommandRuntime = {
++			session,
++			sessionManager,
++			settings,
++			cwd: tempDir.path(),
++			output: text => {
++				outputs.push(text);
++			},
++			refreshCommands: () => {},
++			reloadPlugins: async () => {},
++		};
++		const hasAuthSpy = vi.spyOn(modelRegistry, "hasConfiguredAuth");
++
++		expect(await executeAcpBuiltinSlashCommand("/prewalk", runtime)).toEqual({ consumed: true });
++
++		expect(hasAuthSpy).not.toHaveBeenCalled();
++		expect(outputs).toEqual([`Provider "${banned.provider}" is disabled for the main driver.`]);
++		expect(session.getPrewalkState()).toBeUndefined();
++	});
++
++	it("/prewalk restart refuses a main-banned source before probing its auth", async () => {
++		authStorage.keys.setRuntime("openai", "test-key");
++		const allowedTarget = getBundledModel("openai", "gpt-4o");
++		const primary = modelOrThrow("claude-sonnet-4-5");
++		if (!allowedTarget) throw new Error("Expected bundled openai model gpt-4o");
++		const settings = Settings.isolated({ "compaction.enabled": false });
++		settings.setModelRole("default", `${primary.provider}/${primary.id}:medium`);
++		settings.setModelRole("smol", `${allowedTarget.provider}/${allowedTarget.id}:medium`);
++		const agent = new Agent({
++			getApiKey: () => "test-key",
++			initialState: {
++				model: primary,
++				systemPrompt: ["Test"],
++				tools: [],
++				messages: [],
++				thinkingLevel: Effort.Medium,
++			},
++			convertToLlm,
++		});
++		const sessionManager = SessionManager.inMemory();
++		session = new AgentSession({
++			agent,
++			sessionManager,
++			settings,
++			modelRegistry,
++			toolRegistry,
++			thinkingLevel: Effort.Medium,
++		});
++		cfgMainAgentDisabledProviders.override(settings, ["anthropic"]);
++		const outputs: string[] = [];
++		const runtime: SlashCommandRuntime = {
++			session,
++			sessionManager,
++			settings,
++			cwd: tempDir.path(),
++			output: text => {
++				outputs.push(text);
++			},
++			refreshCommands: () => {},
++			reloadPlugins: async () => {},
++		};
++		const hasAuthSpy = vi.spyOn(modelRegistry, "hasConfiguredAuth");
++
++		expect(await executeAcpBuiltinSlashCommand("/prewalk restart", runtime)).toEqual({ consumed: true });
++
++		expect(hasAuthSpy.mock.calls.some(([model]) => model.provider === "anthropic")).toBe(false);
++		expect(outputs).toEqual(['Provider "anthropic" is disabled for the main driver.']);
++		expect(session.model?.id).toBe(primary.id);
++		expect(session.getPrewalkState()).toBeUndefined();
++	});
++
++	it("a subagent command runtime may prewalk a main-banned provider", async () => {
++		authStorage.keys.setRuntime("openai", "test-key");
++		const banned = getBundledModel("openai", "gpt-4o");
++		if (!banned) throw new Error("Expected bundled openai model gpt-4o");
++		const created = createLifecycleSession([{ content: ["idle"] }], { armed: false, agentKind: "sub" });
++		cfgMainAgentDisabledProviders.override(created.settings, [banned.provider]);
++		created.settings.setModelRole("smol", `${banned.provider}/${banned.id}:medium`);
++		const outputs: string[] = [];
++		const runtime: SlashCommandRuntime = {
++			session: created.session,
++			sessionManager: created.session.sessionManager,
++			settings: created.settings,
++			cwd: tempDir.path(),
++			output: text => {
++				outputs.push(text);
++			},
++			refreshCommands: () => {},
++			reloadPlugins: async () => {},
++		};
++
++		expect(await executeAcpBuiltinSlashCommand("/prewalk", runtime)).toEqual({ consumed: true });
++
++		expect(outputs).toEqual([
++			`Prewalk on: switching to ${banned.provider}/${banned.id} at the next edit/write (todo-gated).`,
++		]);
++		expect(created.session.getPrewalkState()?.target.id).toBe(banned.id);
++	});
++
++	it("/new with a main-banned smol target warns through both rearm paths and stays unarmed", async () => {
++		const banned = getBundledModel("openai", "gpt-4o");
++		if (!banned) throw new Error("Expected bundled openai model gpt-4o");
++		const created = createLifecycleSession([{ content: ["fresh done"] }], { enabled: false, armed: false });
++		created.settings.setModelRole("smol", `${banned.provider}/${banned.id}:low`);
++		cfgMainAgentDisabledProviders.override(created.settings, [banned.provider]);
++		const notices: string[] = [];
++		created.session.subscribe(event => {
++			if (event.type === "notice" && event.source === "prewalk") notices.push(event.message);
++		});
++		const warning = `Prewalk not armed: provider "${banned.provider}" is disabled for the main driver.`;
++
++		cfgPrewalkEnabled.override(created.settings, true);
++		await Promise.resolve();
++		expect(created.session.getPrewalkState()).toBeUndefined();
++		expect(notices).toEqual([warning]);
++
++		expect(await created.session.newSession()).toBe(true);
++		expect(created.session.getPrewalkState()).toBeUndefined();
++		expect(notices).toEqual([warning, warning]);
++	});
++
+ 	it("/prewalk commands report success only when the requested arm becomes active", async () => {
+ 		const primary = modelOrThrow("claude-sonnet-4-5");
+ 		const target = modelOrThrow("claude-sonnet-4-6");
 diff --git a/packages/coding-agent/test/agent-session-retry-fallback.test.ts b/packages/coding-agent/test/agent-session-retry-fallback.test.ts
-index a098555a..29facbe7 100644
+index d5c31ed..b372d84 100644
 --- a/packages/coding-agent/test/agent-session-retry-fallback.test.ts
 +++ b/packages/coding-agent/test/agent-session-retry-fallback.test.ts
-@@ -9526,4 +9526,166 @@ describe("AgentSession retry fallback", () => {
+@@ -7988,4 +7988,166 @@ describe("AgentSession retry fallback", () => {
  		expect(requestedModels).toContain("openrouter/z-ai/glm-4.7@chutes");
  		expect(getLastAssistantMessage(session).stopReason).not.toBe("error");
  	});
@@ -617,10 +1709,10 @@ index a098555a..29facbe7 100644
 +	});
  });
 diff --git a/packages/coding-agent/test/issue-2750-subagent-runtime-fallback.test.ts b/packages/coding-agent/test/issue-2750-subagent-runtime-fallback.test.ts
-index c6a7fb5a..df91bd55 100644
+index 05b0c9b..7f0310e 100644
 --- a/packages/coding-agent/test/issue-2750-subagent-runtime-fallback.test.ts
 +++ b/packages/coding-agent/test/issue-2750-subagent-runtime-fallback.test.ts
-@@ -123,6 +123,7 @@ describe("subagent runtime model resolution", () => {
+@@ -111,6 +111,7 @@ describe("subagent runtime model resolution", () => {
  				let activeModel = options.model;
  				let activeLevel: ThinkingLevel | undefined = level;
  				const recovery = new TurnRecovery({
@@ -628,11 +1720,796 @@ index c6a7fb5a..df91bd55 100644
  					model: () => activeModel,
  					thinkingLevel: () => activeLevel,
  					sessionManager: { getSessionId: () => "literal-model" },
+@@ -173,6 +174,7 @@ describe("subagent runtime model resolution", () => {
+ 		vi.spyOn(sdkModule, "createAgentSession").mockImplementation(async options => {
+ 			if (!options?.settings || !options.sessionManager) throw new Error("Expected child settings and history");
+ 			const recovery = new TurnRecovery({
++				agentKind: () => "sub" as const,
+ 				model: () => primary,
+ 				thinkingLevel: () => undefined,
+ 				sessionManager: options.sessionManager,
+diff --git a/packages/coding-agent/test/prewalk-discovery-provider.test.ts b/packages/coding-agent/test/prewalk-discovery-provider.test.ts
+index adbf895..2e46140 100644
+--- a/packages/coding-agent/test/prewalk-discovery-provider.test.ts
++++ b/packages/coding-agent/test/prewalk-discovery-provider.test.ts
+@@ -12,7 +12,7 @@
+  * refreshes only the provider named by the selector, then retries after that
+  * provider's cache-aware discovery completes.
+  */
+-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
++import { afterEach, beforeEach, describe, expect, test, vi } from "bun:test";
+ import * as fs from "node:fs";
+ import * as os from "node:os";
+ import * as path from "node:path";
+@@ -20,6 +20,7 @@ import type { FetchImpl } from "@oh-my-pi/pi-ai";
+ import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
+ import { parseArgs } from "@oh-my-pi/pi-coding-agent/cli/args";
+ import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
++import { cfgMainAgentDisabledProviders } from "@oh-my-pi/pi-coding-agent/config/model-settings";
+ import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
+ import { buildSessionOptions } from "@oh-my-pi/pi-coding-agent/main";
+ import type { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
+@@ -41,6 +42,7 @@ describe("issue #11820 prewalk into a models.yml discovery provider target", ()
+ 	});
+ 
+ 	afterEach(() => {
++		vi.restoreAllMocks();
+ 		for (const storage of authStoragesToClose) storage.close();
+ 		authStoragesToClose.length = 0;
+ 		if (tempDir && fs.existsSync(tempDir)) removeSyncWithRetries(tempDir);
+@@ -184,4 +186,43 @@ describe("issue #11820 prewalk into a models.yml discovery provider target", ()
+ 		expect(options.prewalk).toBeUndefined();
+ 		expect(requestedUrls).toEqual([]);
+ 	});
++
++	test("does not discover a main-banned prewalk target provider", async () => {
++		const modelRegistry = registry();
++		const settings = Settings.isolated();
++		cfgMainAgentDisabledProviders.set(settings, ["my-provider"]);
++		const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
++
++		const options = await buildSessionOptions(
++			parseArgs(["--prewalk-into", "My-Provider/some-model"]),
++			[],
++			SessionManager.inMemory(),
++			modelRegistry,
++			settings,
++		);
++
++		expect(options.prewalk).toBeUndefined();
++		expect(options.deferredPrewalk).toBeUndefined();
++		expect(requestedUrls).toEqual([]);
++		const output = stderrSpy.mock.calls.map(([chunk]) => String(chunk)).join("");
++		expect(output).toContain('prewalk disabled — provider "my-provider" is disabled');
++	});
++
++	test("skips a main-banned prewalk candidate and discovers only the allowed one", async () => {
++		const modelRegistry = registry();
++		const settings = Settings.isolated();
++		cfgMainAgentDisabledProviders.set(settings, ["my-provider"]);
++
++		const options = await buildSessionOptions(
++			parseArgs(["--prewalk-into", "my-provider/some-model,unrelated-provider/unrelated-model"]),
++			[],
++			SessionManager.inMemory(),
++			modelRegistry,
++			settings,
++		);
++
++		expect(options.prewalk?.target.provider).toBe("unrelated-provider");
++		expect(options.prewalk?.target.id).toBe("unrelated-model");
++		expect(requestedUrls).toEqual([`${unrelatedBaseUrl}/models`]);
++	});
+ });
+diff --git a/packages/coding-agent/test/prewalk-startup-degradation.test.ts b/packages/coding-agent/test/prewalk-startup-degradation.test.ts
+index 0706652..1e8df7c 100644
+--- a/packages/coding-agent/test/prewalk-startup-degradation.test.ts
++++ b/packages/coding-agent/test/prewalk-startup-degradation.test.ts
+@@ -2,11 +2,13 @@ import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "bun:
+ import * as fs from "node:fs";
+ import * as os from "node:os";
+ import * as path from "node:path";
++import { Effort } from "@oh-my-pi/pi-ai";
+ import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
+ import { parseArgs } from "@oh-my-pi/pi-coding-agent/cli/args";
+ import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
++import { cfgMainAgentDisabledProviders } from "@oh-my-pi/pi-coding-agent/config/model-settings";
+ import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
+-import { buildSessionOptions } from "@oh-my-pi/pi-coding-agent/main";
++import { buildSessionOptions, resolveScopedModels } from "@oh-my-pi/pi-coding-agent/main";
+ import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
+ import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
+ import { removeSyncWithRetries, Snowflake } from "@oh-my-pi/pi-utils";
+@@ -87,6 +89,177 @@ describe("prewalk startup degradation", () => {
+ 		expect(options.prewalk?.target.id).toBe(enabled.id);
+ 	});
+ 
++	test("skips a main-banned provider and arms the next enabled prewalk candidate", async () => {
++		const disabled = getBundledModel("anthropic", "claude-sonnet-4-5");
++		const enabled = getBundledModel("openai", "gpt-4o");
++		if (!disabled || !enabled) throw new Error("expected claude-sonnet-4-5 and gpt-4o to be bundled");
++		const settings = Settings.isolated();
++		cfgMainAgentDisabledProviders.set(settings, [disabled.provider]);
++		authStorage.keys.setRuntime(disabled.provider, "test-key");
++		authStorage.keys.setRuntime(enabled.provider, "test-key");
++		const hasAuthSpy = vi.spyOn(modelRegistry, "hasConfiguredAuth");
++
++		const options = await buildSessionOptions(
++			parseArgs(["--prewalk-into", `${disabled.provider}/${disabled.id},${enabled.provider}/${enabled.id}`]),
++			[],
++			SessionManager.inMemory(),
++			modelRegistry,
++			settings,
++		);
++
++		expect(options.prewalk?.target.provider).toBe(enabled.provider);
++		expect(options.prewalk?.target.id).toBe(enabled.id);
++		expect(hasAuthSpy.mock.calls.filter(([model]) => model.provider === disabled.provider)).toHaveLength(0);
++	});
++
++	test("degrades an all-banned explicit prewalk with the provider-disabled warning", async () => {
++		const banned = getBundledModel("anthropic", "claude-sonnet-4-5");
++		if (!banned) throw new Error("expected claude-sonnet-4-5 to be bundled");
++		const settings = Settings.isolated();
++		cfgMainAgentDisabledProviders.set(settings, [banned.provider]);
++		authStorage.keys.setRuntime(banned.provider, "test-key");
++		const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
++
++		const options = await buildSessionOptions(
++			parseArgs(["--prewalk-into", `${banned.provider}/${banned.id}`]),
++			[],
++			SessionManager.inMemory(),
++			modelRegistry,
++			settings,
++		);
++
++		expect(options.prewalk).toBeUndefined();
++		expect(options.deferredPrewalk).toBeUndefined();
++		const output = stderrSpy.mock.calls.map(([chunk]) => String(chunk)).join("");
++		expect(output).toContain(`prewalk disabled — provider "${banned.provider}" is disabled`);
++	});
++
++	test("degrades configured prewalk pointing at a main-banned smol role", async () => {
++		const banned = getBundledModel("anthropic", "claude-sonnet-4-5");
++		if (!banned) throw new Error("expected claude-sonnet-4-5 to be bundled");
++		const settings = Settings.isolated();
++		cfgPrewalkEnabled.set(settings, true);
++		cfgMainAgentDisabledProviders.set(settings, [banned.provider]);
++		settings.setModelRole("smol", `${banned.provider}/${banned.id}`);
++		authStorage.keys.setRuntime(banned.provider, "test-key");
++		const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
++
++		const options = await buildSessionOptions(parseArgs([]), [], SessionManager.inMemory(), modelRegistry, settings);
++
++		expect(options.prewalk).toBeUndefined();
++		const output = stderrSpy.mock.calls.map(([chunk]) => String(chunk)).join("");
++		expect(output).toContain(`prewalk disabled — provider "${banned.provider}" is disabled`);
++	});
++
++	test("rejects a main-banned plan-yolo target before probing its auth", async () => {
++		const banned = getBundledModel("anthropic", "claude-sonnet-4-5");
++		if (!banned) throw new Error("expected claude-sonnet-4-5 to be bundled");
++		const settings = Settings.isolated();
++		cfgMainAgentDisabledProviders.set(settings, [banned.provider]);
++		authStorage.keys.setRuntime(banned.provider, "test-key");
++		const hasAuthSpy = vi.spyOn(modelRegistry, "hasConfiguredAuth");
++
++		await expect(
++			buildSessionOptions(
++				parseArgs(["--plan-yolo", "--plan-yolo-into", `${banned.provider}/${banned.id}`]),
++				[],
++				SessionManager.inMemory(),
++				modelRegistry,
++				settings,
++			),
++		).rejects.toThrow(`Provider "${banned.provider}" is disabled for the main driver.`);
++		expect(hasAuthSpy.mock.calls.filter(([model]) => model.provider === banned.provider)).toHaveLength(0);
++	});
++
++	test("arms an allowed plan-yolo target while another provider is main-banned", async () => {
++		const banned = getBundledModel("anthropic", "claude-sonnet-4-5");
++		const allowed = getBundledModel("openai", "gpt-4o");
++		if (!banned || !allowed) throw new Error("expected claude-sonnet-4-5 and gpt-4o to be bundled");
++		const settings = Settings.isolated();
++		cfgMainAgentDisabledProviders.set(settings, [banned.provider]);
++		authStorage.keys.setRuntime(banned.provider, "test-key");
++		authStorage.keys.setRuntime(allowed.provider, "test-key");
++
++		const options = await buildSessionOptions(
++			parseArgs(["--plan-yolo", "--plan-yolo-into", `${allowed.provider}/${allowed.id}`]),
++			[],
++			SessionManager.inMemory(),
++			modelRegistry,
++			settings,
++		);
++
++		expect(options.planYolo?.target.provider).toBe(allowed.provider);
++		expect(options.planYolo?.target.id).toBe(allowed.id);
++	});
++
++	test("keeps the global-disabled plan-yolo refusal when both bans overlap", async () => {
++		const banned = getBundledModel("anthropic", "claude-sonnet-4-5");
++		if (!banned) throw new Error("expected claude-sonnet-4-5 to be bundled");
++		const settings = Settings.isolated({ disabledProviders: [banned.provider] });
++		cfgMainAgentDisabledProviders.set(settings, [banned.provider]);
++		authStorage.keys.setRuntime(banned.provider, "test-key");
++
++		await expect(
++			buildSessionOptions(
++				parseArgs(["--plan-yolo", "--plan-yolo-into", `${banned.provider}/${banned.id}`]),
++				[],
++				SessionManager.inMemory(),
++				modelRegistry,
++				settings,
++			),
++		).rejects.toThrow(`Provider "${banned.provider}" is disabled. Remove it from disabledProviders to hand off to`);
++	});
++
++	test("rejects a main-banned --model without substituting the allowed fallback", async () => {
++		const banned = getBundledModel("anthropic", "claude-sonnet-4-5");
++		const allowed = getBundledModel("openai", "gpt-4o");
++		if (!banned || !allowed) throw new Error("expected claude-sonnet-4-5 and gpt-4o to be bundled");
++		const settings = Settings.isolated();
++		cfgMainAgentDisabledProviders.set(settings, [banned.provider]);
++		authStorage.keys.setRuntime(banned.provider, "test-key");
++		authStorage.keys.setRuntime(allowed.provider, "test-key");
++
++		await expect(
++			buildSessionOptions(
++				parseArgs(["--model", `${banned.provider}/${banned.id}`]),
++				[],
++				SessionManager.inMemory(),
++				modelRegistry,
++				settings,
++			),
++		).rejects.toThrow(`Provider "${banned.provider}" is disabled for the main driver.`);
++	});
++
++	test("pins the first allowed startup scoped model and takes its explicit effort", async () => {
++		const banned = getBundledModel("anthropic", "claude-sonnet-4-5");
++		const allowed = getBundledModel("openai", "gpt-4o");
++		if (!banned || !allowed) throw new Error("expected claude-sonnet-4-5 and gpt-4o to be bundled");
++		const settings = Settings.isolated();
++		cfgMainAgentDisabledProviders.set(settings, [banned.provider]);
++		authStorage.keys.setRuntime(banned.provider, "test-key");
++		authStorage.keys.setRuntime(allowed.provider, "test-key");
++		const parsed = parseArgs([
++			"--models",
++			`${banned.provider}/${banned.id}:low,${allowed.provider}/${allowed.id}:high`,
++		]);
++		const scopedModels = await resolveScopedModels(parsed, modelRegistry, settings);
++		expect(scopedModels).toHaveLength(2);
++
++		const options = await buildSessionOptions(
++			parsed,
++			scopedModels,
++			SessionManager.inMemory(),
++			modelRegistry,
++			settings,
++		);
++
++		expect(options.model?.provider).toBe(allowed.provider);
++		expect(options.model?.id).toBe(allowed.id);
++		expect(options.thinkingLevel).toBe(Effort.High);
++		expect(options.scopedModels).toHaveLength(2);
++		expect(options.scopedModels?.map(entry => entry.model.provider)).toEqual([banned.provider, allowed.provider]);
++	});
++
+ 	test("does not implicitly re-arm configured prewalk while restoring a session", async () => {
+ 		const model = getBundledModel("anthropic", "claude-sonnet-4-5");
+ 		if (!model) throw new Error("expected claude-sonnet-4-5 to be bundled");
+diff --git a/packages/coding-agent/test/sdk-model-selection.test.ts b/packages/coding-agent/test/sdk-model-selection.test.ts
+index 02b6ea4..da4251d 100644
+--- a/packages/coding-agent/test/sdk-model-selection.test.ts
++++ b/packages/coding-agent/test/sdk-model-selection.test.ts
+@@ -10,6 +10,7 @@ import { resolveModelCacheProviderId } from "@oh-my-pi/pi-catalog/provider-model
+ import { DEFAULT_MODEL_PER_PROVIDER } from "@oh-my-pi/pi-catalog/provider-models/descriptors";
+ import { parseArgs } from "@oh-my-pi/pi-coding-agent/cli/args";
+ import { ModelRegistry, type ProviderConfigInput } from "@oh-my-pi/pi-coding-agent/config/model-registry";
++import { cfgMainAgentDisabledProviders } from "@oh-my-pi/pi-coding-agent/config/model-settings";
+ import { getModelMatchPreferences, resolveModelScope } from "@oh-my-pi/pi-coding-agent/config/model-resolver";
+ import { resetSettingsForTest, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
+ import {
+@@ -17,12 +18,16 @@ import {
+ 	rebuildScopedModels,
+ 	resolveScopedModels,
+ } from "@oh-my-pi/pi-coding-agent/main";
+-import { createAgentSession, type ExtensionFactory } from "@oh-my-pi/pi-coding-agent/sdk";
++import {
++	createAgentSession,
++	type CreateAgentSessionOptions,
++	type ExtensionFactory,
++} from "@oh-my-pi/pi-coding-agent/sdk";
+ import * as discoveryModule from "@oh-my-pi/pi-coding-agent/task/discovery";
+ import * as executorModule from "@oh-my-pi/pi-coding-agent/task/executor";
+ import { getBundledAgent } from "@oh-my-pi/pi-coding-agent/task/agents";
+ import { AgentStorage } from "@oh-my-pi/pi-coding-agent/session/agent-storage";
+-import type { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
++import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
+ import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
+ import type { AgentDefinition } from "@oh-my-pi/pi-coding-agent/task/types";
+ import { removeSyncWithRetries, Snowflake } from "@oh-my-pi/pi-utils";
+@@ -1147,6 +1152,451 @@ describe("createAgentSession deferred model pattern resolution", () => {
+ 		}
+ 	});
+ 
++	describe("main driver provider policy", () => {
++		function spyFetchCalls(): string[] {
++			const calls: string[] = [];
++			const recordingFetch: typeof fetch = Object.assign(
++				async (...args: Parameters<typeof fetch>) => {
++					const input = args[0];
++					calls.push(String(input instanceof Request ? input.url : input));
++					return new Response("not found", { status: 404 });
++				},
++				{ preconnect: fetch.preconnect },
++			);
++			vi.spyOn(globalThis, "fetch").mockImplementation(recordingFetch);
++			return calls;
++		}
++
++		function startDefaultChainFixture(): {
++			settings: Settings;
++			authStorage: AuthStorage;
++			modelRegistry: ModelRegistry;
++		} {
++			const settings = Settings.isolated({
++				"retry.modelFallback": true,
++				"retry.fallbackChains": {
++					default: ["anthropic/claude-sonnet-4-5", "runtime-provider/runtime-fallback-model"],
++				},
++			});
++			settings.setModelRole("default", "missing-provider/missing-model:low");
++			const authStorage = createInMemoryAuthStorage();
++			authStorage.keys.setRuntime("anthropic", "test-key");
++			authStorage.keys.setRuntime("runtime-provider", "test-key");
++			authStoragesToClose.push(authStorage);
++			const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "main-policy-chain-models.yml"));
++			return { settings, authStorage, modelRegistry };
++		}
++
++		function startPoolFixture(
++			role: string | undefined,
++			enabledModels?: string[],
++		): {
++			settings: Settings;
++			authStorage: AuthStorage;
++			modelRegistry: ModelRegistry;
++		} {
++			const settings = Settings.isolated(enabledModels ? { enabledModels } : undefined);
++			if (role) settings.setModelRole("default", role);
++			const authStorage = createInMemoryAuthStorage();
++			authStorage.keys.setRuntime("anthropic", "test-key");
++			authStorage.keys.setRuntime("runtime-provider", "test-key");
++			authStoragesToClose.push(authStorage);
++			const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "main-policy-pool-models.yml"));
++			return { settings, authStorage, modelRegistry };
++		}
++
++		function policySessionOptions(
++			modelRegistry: ModelRegistry,
++			authStorage: AuthStorage,
++			settings: Settings,
++		): CreateAgentSessionOptions {
++			return {
++				cwd: tempDir,
++				agentDir: tempDir,
++				authStorage,
++				modelRegistry,
++				settings,
++				sessionManager: SessionManager.inMemory(),
++				disableExtensionDiscovery: true,
++				extensions: [providerExtension],
++				skills: [],
++				contextFiles: [],
++				promptTemplates: [],
++				slashCommands: [],
++				enableMCP: false,
++				enableLsp: false,
++				skipPythonPreflight: true,
++				rules: [],
++				preloadedCustomToolPaths: [],
++				toolNames: ["read"],
++			};
++		}
++
++		test("main driver skips the banned default-chain primary and inherits its effort", async () => {
++			const fetchCalls = spyFetchCalls();
++			const { settings, authStorage, modelRegistry } = startDefaultChainFixture();
++			cfgMainAgentDisabledProviders.set(settings, ["anthropic"]);
++			const hasAuthSpy = vi.spyOn(modelRegistry, "hasConfiguredAuth");
++			const getApiKeySpy = vi.spyOn(modelRegistry, "getApiKey");
++			const { session, modelFallbackMessage } = await createAgentSession(
++				policySessionOptions(modelRegistry, authStorage, settings),
++			);
++			try {
++				expect(session.model?.provider).toBe("runtime-provider");
++				expect(session.model?.id).toBe("runtime-fallback-model");
++				expect(session.thinkingLevel).toBe(Effort.Low);
++				expect(modelFallbackMessage).toBeUndefined();
++				expect(hasAuthSpy.mock.calls.filter(([model]) => model.provider === "anthropic")).toHaveLength(0);
++				expect(getApiKeySpy.mock.calls.filter(([model]) => model.provider === "anthropic")).toHaveLength(0);
++				expect(fetchCalls.filter(url => url.includes("anthropic"))).toHaveLength(0);
++			} finally {
++				await session.dispose();
++			}
++		});
++
++		test.each([
++			["taskDepth", { taskDepth: 1 }],
++			["parentTaskPrefix", { parentTaskPrefix: "policy-sub" }],
++		] as const)("subagent scope via %s keeps the banned default-chain primary", async (_label, scope) => {
++			const { settings, authStorage, modelRegistry } = startDefaultChainFixture();
++			cfgMainAgentDisabledProviders.set(settings, ["anthropic"]);
++			const { session } = await createAgentSession({
++				...policySessionOptions(modelRegistry, authStorage, settings),
++				...scope,
++			});
++			try {
++				expect(session.model?.provider).toBe("anthropic");
++				expect(session.model?.id).toBe("claude-sonnet-4-5");
++				expect(session.thinkingLevel).toBe(Effort.Low);
++			} finally {
++				await session.dispose();
++			}
++		});
++
++		test("main driver does not resolve a banned chain candidate through its provider catalog", async () => {
++			const { settings, authStorage, modelRegistry } = startDefaultChainFixture();
++			cfgMainAgentDisabledProviders.set(settings, ["anthropic"]);
++			const available = modelRegistry.getAvailable.bind(modelRegistry);
++			vi.spyOn(modelRegistry, "getAvailable").mockImplementation(() =>
++				available().filter(model => model.provider !== "anthropic"),
++			);
++			const getProviderModelsSpy = vi.spyOn(modelRegistry, "getProviderModels");
++			const { session, modelFallbackMessage } = await createAgentSession(
++				policySessionOptions(modelRegistry, authStorage, settings),
++			);
++			try {
++				expect(session.model?.provider).toBe("runtime-provider");
++				expect(session.model?.id).toBe("runtime-fallback-model");
++				expect(modelFallbackMessage).toBeUndefined();
++				expect(getProviderModelsSpy.mock.calls.filter(([provider]) => provider === "anthropic")).toHaveLength(0);
++			} finally {
++				await session.dispose();
++			}
++		});
++
++		test("main driver skips a banned provider-qualified default and re-resolves to an allowed model", async () => {
++			const fetchCalls = spyFetchCalls();
++			const { settings, authStorage, modelRegistry } = startPoolFixture("anthropic/claude-sonnet-4-5");
++			cfgRetryFallbackChains.set(settings, { default: ["runtime-provider/runtime-model"] });
++			cfgMainAgentDisabledProviders.set(settings, ["anthropic"]);
++			const { session, modelFallbackMessage } = await createAgentSession(
++				policySessionOptions(modelRegistry, authStorage, settings),
++			);
++			try {
++				expect(session.model?.provider).toBe("runtime-provider");
++				expect(session.model?.id).toBe("runtime-model");
++				expect(modelFallbackMessage).toBeUndefined();
++			} finally {
++				await session.dispose();
++			}
++			expect(fetchCalls.filter(url => url.includes("anthropic"))).toHaveLength(0);
++		});
++
++		test("subagent scope keeps the banned provider-qualified default through the fast path", async () => {
++			const { settings, authStorage, modelRegistry } = startPoolFixture("anthropic/claude-sonnet-4-5");
++			cfgMainAgentDisabledProviders.set(settings, ["anthropic"]);
++			const { session } = await createAgentSession({
++				...policySessionOptions(modelRegistry, authStorage, settings),
++				taskDepth: 1,
++			});
++			try {
++				expect(session.model?.provider).toBe("anthropic");
++				expect(session.model?.id).toBe("claude-sonnet-4-5");
++			} finally {
++				await session.dispose();
++			}
++		});
++
++		test("main driver picks the next allowed candidate from the generic pool", async () => {
++			const { settings, authStorage, modelRegistry } = startPoolFixture(undefined, [
++				"anthropic/claude-sonnet-4-5",
++				"runtime-provider/runtime-model",
++			]);
++			cfgMainAgentDisabledProviders.set(settings, ["anthropic"]);
++			const { session, modelFallbackMessage } = await createAgentSession(
++				policySessionOptions(modelRegistry, authStorage, settings),
++			);
++			try {
++				expect(session.model?.provider).toBe("runtime-provider");
++				expect(session.model?.id).toBe("runtime-model");
++				expect(modelFallbackMessage).toBeUndefined();
++			} finally {
++				await session.dispose();
++			}
++		});
++
++		test("subagent scope keeps the native generic pool preference", async () => {
++			const { settings, authStorage, modelRegistry } = startPoolFixture(undefined, [
++				"anthropic/claude-sonnet-4-5",
++				"runtime-provider/runtime-model",
++			]);
++			cfgMainAgentDisabledProviders.set(settings, ["anthropic"]);
++			const { session } = await createAgentSession({
++				...policySessionOptions(modelRegistry, authStorage, settings),
++				taskDepth: 1,
++			});
++			try {
++				expect(session.model?.provider).toBe("anthropic");
++			} finally {
++				await session.dispose();
++			}
++		});
++
++		test("rejects an explicit bundled model pin on a main-banned provider", async () => {
++			const bundled = getBundledModel("anthropic", "claude-sonnet-4-5");
++			if (!bundled) throw new Error("expected claude-sonnet-4-5 to be bundled");
++			const { settings, authStorage, modelRegistry } = startPoolFixture("runtime-provider/runtime-model");
++			cfgMainAgentDisabledProviders.set(settings, ["anthropic"]);
++			await expect(
++				createAgentSession({
++					...policySessionOptions(modelRegistry, authStorage, settings),
++					model: bundled,
++				}),
++			).rejects.toThrow('Provider "anthropic" is disabled for the main driver.');
++		});
++
++		test("subagent scope accepts the same bundled model pin", async () => {
++			const bundled = getBundledModel("anthropic", "claude-sonnet-4-5");
++			if (!bundled) throw new Error("expected claude-sonnet-4-5 to be bundled");
++			const { settings, authStorage, modelRegistry } = startPoolFixture("runtime-provider/runtime-model");
++			cfgMainAgentDisabledProviders.set(settings, ["anthropic"]);
++			const { session } = await createAgentSession({
++				...policySessionOptions(modelRegistry, authStorage, settings),
++				model: bundled,
++				taskDepth: 1,
++			});
++			try {
++				expect(session.model?.provider).toBe("anthropic");
++				expect(session.model?.id).toBe("claude-sonnet-4-5");
++			} finally {
++				await session.dispose();
++			}
++		});
++
++		test("rejects a deferred concrete modelPattern on a main-banned provider before discovery", async () => {
++			const fetchCalls = spyFetchCalls();
++			const { settings, authStorage, modelRegistry } = startPoolFixture("runtime-provider/runtime-model");
++			cfgMainAgentDisabledProviders.set(settings, ["anthropic"]);
++			await expect(
++				createAgentSession({
++					...policySessionOptions(modelRegistry, authStorage, settings),
++					modelPattern: "anthropic/claude-sonnet-4-5",
++				}),
++			).rejects.toThrow('Provider "anthropic" is disabled for the main driver.');
++			expect(fetchCalls.filter(url => url.includes("runtime.example.com"))).toHaveLength(0);
++		});
++
++		test("subagent scope accepts the same deferred concrete modelPattern", async () => {
++			const { settings, authStorage, modelRegistry } = startPoolFixture("runtime-provider/runtime-model");
++			cfgMainAgentDisabledProviders.set(settings, ["anthropic"]);
++			const { session } = await createAgentSession({
++				...policySessionOptions(modelRegistry, authStorage, settings),
++				modelPattern: "anthropic/claude-sonnet-4-5",
++				taskDepth: 1,
++			});
++			try {
++				expect(session.model?.provider).toBe("anthropic");
++				expect(session.model?.id).toBe("claude-sonnet-4-5");
++			} finally {
++				await session.dispose();
++			}
++		});
++
++		test("degrades a deferred prewalk targeting a main-banned provider", async () => {
++			const fetchCalls = spyFetchCalls();
++			const { settings, authStorage, modelRegistry } = startPoolFixture("anthropic/claude-sonnet-4-5");
++			cfgMainAgentDisabledProviders.set(settings, ["runtime-provider"]);
++			const onPrewalkWarning = vi.fn();
++			const { session } = await createAgentSession({
++				...policySessionOptions(modelRegistry, authStorage, settings),
++				deferredPrewalk: { target: "runtime-provider/runtime-model", patterns: ["runtime-provider/runtime-model"] },
++				onPrewalkWarning,
++			});
++			try {
++				expect(session.model?.provider).toBe("anthropic");
++				expect(session.getPrewalkState()).toBeUndefined();
++				expect(onPrewalkWarning).toHaveBeenCalledTimes(1);
++				expect(onPrewalkWarning.mock.calls[0]?.[0]).toBe(
++					'prewalk disabled — provider "runtime-provider" is disabled',
++				);
++				expect(fetchCalls.filter(url => url.includes("runtime.example.com"))).toHaveLength(0);
++			} finally {
++				await session.dispose();
++			}
++		});
++
++		test("subagent scope arms the same deferred prewalk target", async () => {
++			const { settings, authStorage, modelRegistry } = startPoolFixture("anthropic/claude-sonnet-4-5");
++			cfgMainAgentDisabledProviders.set(settings, ["runtime-provider"]);
++			const { session } = await createAgentSession({
++				...policySessionOptions(modelRegistry, authStorage, settings),
++				deferredPrewalk: { target: "runtime-provider/runtime-model", patterns: ["runtime-provider/runtime-model"] },
++				taskDepth: 1,
++			});
++			try {
++				expect(session.getPrewalkState()?.target.provider).toBe("runtime-provider");
++				expect(session.getPrewalkState()?.target.id).toBe("runtime-model");
++			} finally {
++				await session.dispose();
++			}
++		});
++
++		test("drops a concrete prewalk arm for a main-banned provider and keeps it for subagents", async () => {
++			const prewalkModel = getBundledModel("anthropic", "claude-sonnet-4-5");
++			if (!prewalkModel) throw new Error("expected claude-sonnet-4-5 to be bundled");
++			const { settings, authStorage, modelRegistry } = startPoolFixture("runtime-provider/runtime-model");
++			cfgMainAgentDisabledProviders.set(settings, ["anthropic"]);
++			const onPrewalkWarning = vi.fn();
++			const { session } = await createAgentSession({
++				...policySessionOptions(modelRegistry, authStorage, settings),
++				prewalk: { target: prewalkModel, thinkingLevel: Effort.Low },
++				onPrewalkWarning,
++			});
++			try {
++				expect(session.model?.provider).toBe("runtime-provider");
++				expect(session.getPrewalkState()).toBeUndefined();
++				expect(onPrewalkWarning).toHaveBeenCalledTimes(1);
++				expect(onPrewalkWarning.mock.calls[0]?.[0]).toBe('prewalk disabled — provider "anthropic" is disabled');
++			} finally {
++				await session.dispose();
++			}
++
++			const { session: subSession } = await createAgentSession({
++				...policySessionOptions(modelRegistry, authStorage, settings),
++				prewalk: { target: prewalkModel, thinkingLevel: Effort.Low },
++				taskDepth: 1,
++			});
++			try {
++				expect(subSession.getPrewalkState()?.target.id).toBe("claude-sonnet-4-5");
++				expect(subSession.getPrewalkState()?.thinkingLevel).toBe(Effort.Low);
++			} finally {
++				await subSession.dispose();
++			}
++		});
++
++		test("rejects a main-banned plan-yolo target before any prompt and permits it for subagents", async () => {
++			const planYoloModel = getBundledModel("anthropic", "claude-sonnet-4-5");
++			if (!planYoloModel) throw new Error("expected claude-sonnet-4-5 to be bundled");
++			const { settings, authStorage, modelRegistry } = startPoolFixture("runtime-provider/runtime-model");
++			cfgMainAgentDisabledProviders.set(settings, ["anthropic"]);
++			await expect(
++				createAgentSession({
++					...policySessionOptions(modelRegistry, authStorage, settings),
++					planYolo: { target: planYoloModel },
++				}),
++			).rejects.toThrow('Provider "anthropic" is disabled for the main driver.');
++
++			const { session: subSession } = await createAgentSession({
++				...policySessionOptions(modelRegistry, authStorage, settings),
++				planYolo: { target: planYoloModel },
++				taskDepth: 1,
++			});
++			try {
++				expect(subSession.model?.provider).toBe("runtime-provider");
++			} finally {
++				await subSession.dispose();
++			}
++		});
++
++		test("rejects an all-filtered explicit --models scope instead of an unrelated allowed default", async () => {
++			const banned = getBundledModel("anthropic", "claude-sonnet-4-5");
++			if (!banned) throw new Error("expected claude-sonnet-4-5 to be bundled");
++			const { settings, authStorage, modelRegistry } = startPoolFixture(undefined);
++			cfgMainAgentDisabledProviders.set(settings, [banned.provider]);
++			const parsed = parseArgs(["--models", `${banned.provider}/${banned.id}`]);
++			const scopedModels = await resolveScopedModels(parsed, modelRegistry, settings);
++			expect(scopedModels).toHaveLength(1);
++			const cliOptions = await buildCliSessionOptions(
++				parsed,
++				scopedModels,
++				SessionManager.inMemory(),
++				modelRegistry,
++				settings,
++			);
++			await expect(
++				createAgentSession({
++					...cliOptions,
++					cwd: tempDir,
++					agentDir: tempDir,
++					authStorage,
++					modelRegistry,
++					settings,
++					disableExtensionDiscovery: true,
++					extensions: [providerExtension],
++					skills: [],
++					contextFiles: [],
++					promptTemplates: [],
++					slashCommands: [],
++					enableMCP: false,
++					enableLsp: false,
++					skipPythonPreflight: true,
++					rules: [],
++					preloadedCustomToolPaths: [],
++					toolNames: ["read"],
++				}),
++			).rejects.toThrow(`Provider "${banned.provider}" is disabled for the main driver.`);
++		});
++
++		test("closes SDK-owned auth storage when a saved banned resume model is refused", async () => {
++			const fetchCalls = spyFetchCalls();
++			const banned = getBundledModel("anthropic", "claude-sonnet-4-5");
++			if (!banned) throw new Error("expected claude-sonnet-4-5 to be bundled");
++			const closeSpy = vi.spyOn(AuthStorage.prototype, "close");
++			const getApiKeySpy = vi.spyOn(ModelRegistry.prototype, "getApiKey");
++			const originalApiKey = Bun.env.ANTHROPIC_API_KEY;
++			Bun.env.ANTHROPIC_API_KEY = "test-key";
++			const sessionManager = SessionManager.inMemory();
++			sessionManager.appendModelChange(`${banned.provider}/${banned.id}`);
++			try {
++				await expect(
++					createAgentSession({
++						cwd: tempDir,
++						agentDir: tempDir,
++						settings: Settings.isolated({ "mainAgent.disabledProviders": [banned.provider] }),
++						sessionManager,
++						disableExtensionDiscovery: true,
++						skills: [],
++						contextFiles: [],
++						promptTemplates: [],
++						slashCommands: [],
++						enableMCP: false,
++						enableLsp: false,
++						skipPythonPreflight: true,
++						rules: [],
++						preloadedCustomToolPaths: [],
++						toolNames: ["read"],
++					}),
++				).rejects.toThrow(`Provider "${banned.provider}" is disabled for the main driver.`);
++				expect(closeSpy).toHaveBeenCalled();
++				expect(getApiKeySpy.mock.calls.filter(([model]) => model.provider === banned.provider)).toHaveLength(0);
++				expect(fetchCalls.filter(url => url.includes(banned.provider))).toHaveLength(0);
++			} finally {
++				if (originalApiKey === undefined) delete Bun.env.ANTHROPIC_API_KEY;
++				else Bun.env.ANTHROPIC_API_KEY = originalApiKey;
++			}
++		});
++	});
++
+ 	test("preserves deferred bare role fallback chains", async () => {
+ 		const settings = Settings.isolated();
+ 		settings.setModelRole("task", "runtime-provider/runtime-model,runtime-provider/runtime-fallback-model");
+diff --git a/packages/coding-agent/test/slash-commands/effort.test.ts b/packages/coding-agent/test/slash-commands/effort.test.ts
+index 9813f17..88af96f 100644
+--- a/packages/coding-agent/test/slash-commands/effort.test.ts
++++ b/packages/coding-agent/test/slash-commands/effort.test.ts
+@@ -42,6 +42,7 @@ function harness(options: { reasoning?: boolean; efforts?: readonly Effort[]; ce
+ 	// efforts and push the resolved level at the agent.
+ 	const controls = new ModelControls(
+ 		{
++			agentKind: () => "main" as const,
+ 			agent: { setThinkingLevel: () => {}, setDisableReasoning: () => {} },
+ 			model: () => model,
+ 			promptGeneration: () => 0,
+diff --git a/packages/coding-agent/test/task/subagent-fallback-context-window.test.ts b/packages/coding-agent/test/task/subagent-fallback-context-window.test.ts
+index fcc68da..893d9f6 100644
+--- a/packages/coding-agent/test/task/subagent-fallback-context-window.test.ts
++++ b/packages/coding-agent/test/task/subagent-fallback-context-window.test.ts
+@@ -50,6 +50,7 @@ describe("subagent context window after a model swap", () => {
+ 		vi.spyOn(sdkModule, "createAgentSession").mockImplementation(async () => {
+ 			let activeModel = primary;
+ 			const recovery = new TurnRecovery({
++				agentKind: () => "sub" as const,
+ 				model: () => activeModel,
+ 				thinkingLevel: () => undefined,
+ 				sessionManager: { getSessionId: () => "context-window-swap" },
 diff --git a/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts b/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
-index 9b9412b0..0c0da6b9 100644
+index 9b65f76..efeb1ae 100644
 --- a/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
 +++ b/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
-@@ -71,6 +71,7 @@ function createHost(
+@@ -65,6 +65,7 @@ function createHost(
  	}
  	const agentState = { messages: options.messages ?? [] };
  	return {
