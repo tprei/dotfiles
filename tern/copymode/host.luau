@@ -19,6 +19,7 @@ type State = {
 }
 
 local CLOSE_URL = "copymode://close"
+local PARK_URL = "copymode://park"
 local CAPTURE_TIMEOUT_MS = 60000
 local PARSE_LINES_PER_TICK = 4000
 local PARSE_BYTES_PER_TICK = 1024 * 1024
@@ -332,11 +333,12 @@ local function start_capture(state: State, cx: BlockCx, origin: number)
 	local argv = {
 		shell(),
 		"-lc",
-		'PATH="$HOME/.local/bin:$PATH"; exec python3 "$1" --origin "$2" --output "$3"',
+		'PATH="$HOME/.local/bin:$PATH"; exec python3 "$1" --origin "$2" --output "$3" --copy "$4"',
 		"_",
 		tern.plugin.dir .. "/capture.py",
 		tostring(origin),
 		path,
+		tostring(cx.pane),
 	}
 	local ok, err = pcall(function()
 		tern.process.run(argv, { timeout_ms = CAPTURE_TIMEOUT_MS }, function(result: ProcessResult)
@@ -369,8 +371,48 @@ local function request_close(state: State, cx: BlockCx)
 	cx:open(CLOSE_URL)
 end
 
+local function find_origin(state: State, cx: BlockCx)
+	local argv = {
+		shell(),
+		"-lc",
+		'PATH="$HOME/.local/bin:$PATH"; exec python3 "$1" --origin-of "$2"',
+		"_",
+		tern.plugin.dir .. "/capture.py",
+		tostring(cx.pane),
+	}
+	local ok, err = pcall(function()
+		tern.process.run(argv, { timeout_ms = CAPTURE_TIMEOUT_MS }, function(result: ProcessResult)
+			if gone(state, cx.pane) then
+				return
+			end
+			if result.status ~= 0 then
+				state.model.status = "error"
+				state.model.message = failure_message(result, "Finding the pane to capture")
+				cx:render()
+				return
+			end
+			local origin = tonumber(string.match(result.stdout, "(%d+)%s*$") or "")
+			if origin == nil or origin <= 0 then
+				state.model.status = "error"
+				state.model.message = "Copy mode couldn't tell which pane to capture"
+				cx:render()
+				return
+			end
+			state.origin = origin
+			cx:save()
+			cx:open(PARK_URL)
+			start_capture(state, cx, origin)
+		end)
+	end)
+	if not ok then
+		state.model.status = "error"
+		state.model.message = trim(tostring(err))
+		cx:render()
+	end
+end
+
 local copy: BlockDef<State> = {
-	init = function(cx: BlockCx, args: { string }, saved: any): State
+	init = function(cx: BlockCx, _args: { string }, saved: any): State
 		serial += 1
 		local previous = running[cx.pane]
 		if previous ~= nil then
@@ -402,20 +444,11 @@ local copy: BlockDef<State> = {
 				restore_path = saved.path
 			end
 		end
-		if origin_id == nil and type(args[1]) == "string" then
-			local parsed_id = tonumber(args[1])
-			if parsed_id ~= nil and parsed_id > 0 then
-				origin_id = parsed_id
-			end
-		end
 		if restore_path ~= nil then
 			state.origin = origin_id
 			state.snapshot = restore_path
 		elseif origin_id ~= nil then
 			state.origin = origin_id
-		else
-			state.model.status = "error"
-			state.model.message = "Copy mode couldn't tell which pane to capture"
 		end
 
 		tern.timer(0, function()
@@ -432,6 +465,8 @@ local copy: BlockDef<State> = {
 				load_snapshot(state, cx, state.snapshot)
 			elseif state.origin ~= nil then
 				start_capture(state, cx, state.origin)
+			else
+				find_origin(state, cx)
 			end
 		end)
 		return state
@@ -469,10 +504,13 @@ local copy: BlockDef<State> = {
 		return result == "changed"
 	end,
 	save = function(state: State): any
-		if state.model.status ~= "ready" or state.origin == nil or state.snapshot == nil then
+		if state.origin == nil then
 			return nil
 		end
-		return { origin = state.origin, path = state.snapshot }
+		if state.model.status == "ready" and state.snapshot ~= nil then
+			return { origin = state.origin, path = state.snapshot }
+		end
+		return { origin = state.origin }
 	end,
 }
 

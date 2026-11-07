@@ -1,7 +1,7 @@
 --!strict
 
-local ORIGIN_MODULO = 17592186044416
 local CLOSE_URL = "copymode://close"
+local PARK_URL = "copymode://park"
 local COPY_BLOCK = "copymode.copy"
 local RECORDS_KEY = "active"
 
@@ -161,6 +161,18 @@ local function reconcile(cx: WindowCx)
 	recover_orphans(cx, nil)
 end
 
+local function park(cx: WindowCx, record: Record)
+	local info = pane_of(cx, record.origin)
+	if info == nil or info.parked == true then
+		return
+	end
+	local ok, why = cx.layout:park(record.origin)
+	if not ok then
+		cx:toast("error", "Copy mode couldn't freeze the pane", tostring(why))
+		finish(cx, record, true)
+	end
+end
+
 tern.command({
 	id = "open",
 	title = "Browse this pane's scrollback in copy mode",
@@ -200,22 +212,13 @@ tern.command({
 			end
 		end
 		local tab = cx.session:tab_of(origin)
-		local copy = cx.layout:split(origin, "down", {
-			block = COPY_BLOCK,
-			args = { tostring(origin % ORIGIN_MODULO) },
-		})
+		local copy = cx.layout:split(origin, "down", { block = COPY_BLOCK })
 		if copy == nil then
 			cx:toast("error", "Copy mode couldn't open its block", "Is the plugin enabled on the pane's host?")
 			return
 		end
 		if tab == nil then
 			cx.layout:close(copy)
-			return
-		end
-		local ok, why = cx.layout:park(origin)
-		if not ok then
-			cx.layout:close(copy)
-			cx:toast("error", "Copy mode couldn't freeze the pane", tostring(why))
 			return
 		end
 		records[copy] = {
@@ -257,10 +260,16 @@ tern.override("close_pane", function(cx)
 end)
 
 tern.route.link(function(link, cx)
-	if link.url ~= CLOSE_URL or link.pane == nil then
+	if link.pane == nil or (link.url ~= CLOSE_URL and link.url ~= PARK_URL) then
 		return nil
 	end
 	local record = record_for_copy(link.pane)
+	if link.url == PARK_URL then
+		if record ~= nil then
+			park(cx, record)
+		end
+		return { handled = true }
+	end
 	if record ~= nil then
 		restore(cx, record)
 		return { handled = true }

@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import stat
@@ -46,6 +47,104 @@ def style_of(cells, needle):
     return cells[start][1]
 
 
+class FindOriginTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.bin_dir = os.path.join(self.tmp.name, "bin")
+        os.mkdir(self.bin_dir)
+
+    def write_tern(self, body):
+        path = os.path.join(self.bin_dir, "tern")
+        with open(path, "w") as fh:
+            fh.write("#!%s\nimport sys\n%s" % (sys.executable, body))
+        os.chmod(path, 0o755)
+
+    def write_ls(self, tree, blocks=(5, 9)):
+        result = {"sessions": [{"tabs": [{"blocks": [{"id": pane} for pane in blocks], "splits": tree}]}]}
+        self.write_tern("sys.stdout.write(%r)\n" % json.dumps(result))
+
+    def run_origin(self, extra_env=None):
+        env = dict(os.environ, PATH=self.bin_dir)
+        if extra_env:
+            env.update(extra_env)
+        return subprocess.run(
+            [sys.executable, CAPTURE, "--origin-of", "9"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+    def test_finds_column_a_leaf(self):
+        self.write_ls({"Split": {"axis": "Column", "a": {"Leaf": 5}, "b": {"Leaf": 9}}})
+        result = self.run_origin()
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "5\n")
+
+    def test_finds_column_a_leaf_when_copy_is_nested_under_row(self):
+        self.write_ls(
+            {
+                "Split": {
+                    "axis": "Row",
+                    "a": {"Leaf": 3},
+                    "b": {
+                        "Split": {
+                            "axis": "Column",
+                            "a": {"Leaf": 5},
+                            "b": {"Leaf": 9},
+                        }
+                    },
+                }
+            }
+        )
+        result = self.run_origin()
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "5\n")
+
+    def test_rejects_copy_on_column_a_side(self):
+        self.write_ls({"Split": {"axis": "Column", "a": {"Leaf": 9}, "b": {"Leaf": 5}}})
+        result = self.run_origin()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("can't find the pane copy mode split from", result.stderr)
+
+    def test_reports_copy_not_in_a_tab(self):
+        self.write_ls({"Split": {"axis": "Column", "a": {"Leaf": 5}, "b": {"Leaf": 6}}}, blocks=(5, 6))
+        result = self.run_origin()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("is in no tab", result.stderr)
+
+    def test_reports_tern_ls_failure(self):
+        self.write_tern("sys.stderr.write('boom\\n')\nsys.exit(2)\n")
+        result = self.run_origin()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("tern ls exited 2: boom", result.stderr)
+
+    def test_sets_copy_pane_environment(self):
+        output = {"sessions": [{"tabs": [{"blocks": [{"id": 5}, {"id": 9}], "splits": {"Split": {"axis": "Column", "a": {"Leaf": 5}, "b": {"Leaf": 9}}}}]}]}
+        env_path = os.path.join(self.tmp.name, "environment")
+        argv_path = os.path.join(self.tmp.name, "argv")
+        names = ("TERN_PANE", "TERN_PANE_SOCKET", "TERN_WINDOW_KEY", "TERN_WINDOW_SOCKET")
+        body = (
+            "import json, os\n"
+            "sys.stdout.write(%r)\n"
+            "with open(os.environ['COPYMODE_ENV_FILE'], 'w') as fh:\n"
+            "    fh.write('\\n'.join(name + '=' + os.environ[name] for name in %r if name in os.environ))\n"
+            "with open(os.environ['COPYMODE_ARGV_FILE'], 'w') as fh:\n"
+            "    fh.write(json.dumps(sys.argv[1:]))\n"
+        ) % (json.dumps(output), names)
+        self.write_tern(body)
+        env = {name: "set" for name in names}
+        env["TERN_PANE"] = "1234"
+        env["COPYMODE_ENV_FILE"] = env_path
+        env["COPYMODE_ARGV_FILE"] = argv_path
+        result = self.run_origin(env)
+        self.assertEqual(result.returncode, 0)
+        with open(env_path) as fh:
+            self.assertEqual(fh.read(), "TERN_PANE=9")
+        with open(argv_path) as fh:
+            self.assertEqual(json.load(fh), ["ls", "--json"])
+
+
 class CaptureTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -67,11 +166,35 @@ class CaptureTests(unittest.TestCase):
         if extra_env:
             env.update(extra_env)
         return subprocess.run(
-            [sys.executable, CAPTURE, "--origin", "17", "--output", self.output, *extra],
+            [sys.executable, CAPTURE, "--origin", "17", "--output", self.output, "--copy", "9", *extra],
             capture_output=True,
             text=True,
             env=env,
         )
+
+    def test_capture_uses_copy_pane_environment(self):
+        env_path = os.path.join(self.tmp.name, "environment")
+        argv_path = os.path.join(self.tmp.name, "argv")
+        names = ("TERN_PANE", "TERN_PANE_SOCKET", "TERN_WINDOW_KEY", "TERN_WINDOW_SOCKET")
+        body = (
+            "import json, os\n"
+            "sys.stdout.write('<pre>x</pre>')\n"
+            "with open(os.environ['COPYMODE_ENV_FILE'], 'w') as fh:\n"
+            "    fh.write('\\n'.join(name + '=' + os.environ[name] for name in %r if name in os.environ))\n"
+            "with open(os.environ['COPYMODE_ARGV_FILE'], 'w') as fh:\n"
+            "    fh.write(json.dumps(sys.argv[1:]))\n"
+        ) % (names,)
+        self.write_tern(body)
+        env = {name: "set" for name in names}
+        env["TERN_PANE"] = "1234"
+        env["COPYMODE_ENV_FILE"] = env_path
+        env["COPYMODE_ARGV_FILE"] = argv_path
+        result = self.run_capture(extra_env=env)
+        self.assertEqual(result.returncode, 0)
+        with open(env_path) as fh:
+            self.assertEqual(fh.read(), "TERN_PANE=9")
+        with open(argv_path) as fh:
+            self.assertEqual(json.load(fh), ["capture", "17", "--html", "--scrollback", "--surfaces"])
 
     def test_full_capture_streams_beyond_16mib_to_file_without_stdout(self):
         self.write_tern("sys.stdout.write('x' * (%s))\n" % BIG)
