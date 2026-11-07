@@ -2,11 +2,13 @@
 
 import argparse
 import codecs
+import json
 import os
 import subprocess
 import sys
 import threading
 from html.parser import HTMLParser
+from typing import Optional
 
 CHUNK = 65536
 PANE_IDENTITY = ("TERN_PANE", "TERN_PANE_SOCKET", "TERN_WINDOW_KEY", "TERN_WINDOW_SOCKET")
@@ -15,6 +17,12 @@ PANE_IDENTITY = ("TERN_PANE", "TERN_PANE_SOCKET", "TERN_WINDOW_KEY", "TERN_WINDO
 def fail(message: str) -> int:
     print("copymode: %s" % message, file=sys.stderr)
     return 1
+
+
+def tern_env(copy: int) -> dict:
+    env = {name: value for name, value in os.environ.items() if name not in PANE_IDENTITY}
+    env["TERN_PANE"] = str(copy)
+    return env
 
 
 def discard(path: str) -> None:
@@ -138,11 +146,71 @@ class HtmlToAnsi(HTMLParser):
         self.out.write(data.encode("utf-8"))
 
 
+def find_tab(ls: dict, copy: int) -> dict:
+    for session in ls["sessions"]:
+        for tab in session["tabs"]:
+            if any(block["id"] == copy for block in tab["blocks"]):
+                return tab
+    raise LookupError("pane %d is in no tab" % copy)
+
+
+def split_origin(tree: dict, copy: int) -> Optional[int]:
+    if "Split" not in tree:
+        return None
+    node = tree["Split"]
+    if node["axis"] == "Column" and node["b"] == {"Leaf": copy} and "Leaf" in node["a"]:
+        return node["a"]["Leaf"]
+    origin = split_origin(node["a"], copy)
+    if origin is None:
+        origin = split_origin(node["b"], copy)
+    return origin
+
+
+def print_origin(copy_arg: str) -> int:
+    try:
+        copy = int(copy_arg)
+    except ValueError:
+        return fail("--origin-of needs a pane id, not %r" % copy_arg)
+    env = tern_env(copy)
+    try:
+        result = subprocess.run(["tern", "ls", "--json"], capture_output=True, text=True, env=env)
+    except FileNotFoundError:
+        return fail("tern is not on PATH; install Tern 0.8.3 and its CLI on this host")
+    if result.returncode != 0:
+        detail = result.stderr.strip()
+        message = "tern ls exited %d" % result.returncode
+        return fail(message + (": %s" % detail if detail else ""))
+    try:
+        ls = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        return fail("tern ls printed invalid JSON: %s" % e)
+    try:
+        tab = find_tab(ls, copy)
+    except LookupError as e:
+        return fail(str(e))
+    origin = split_origin(tab["splits"], copy)
+    if origin is None:
+        return fail("can't find the pane copy mode split from")
+    print(origin)
+    return 0
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="capture.py")
-    parser.add_argument("--origin", required=True)
-    parser.add_argument("--output", required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--origin")
+    mode.add_argument("--origin-of")
+    parser.add_argument("--output")
+    parser.add_argument("--copy")
     args = parser.parse_args(argv)
+    if args.origin_of is not None:
+        return print_origin(args.origin_of)
+    if args.output is None or args.copy is None:
+        parser.error("--origin needs --output and --copy")
+    try:
+        copy = int(args.copy)
+    except ValueError:
+        return fail("--copy needs a pane id, not %r" % args.copy)
 
     try:
         fd = os.open(args.output, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
@@ -152,13 +220,12 @@ def main(argv: list[str]) -> int:
     except OSError as e:
         return fail("cannot create %s: %s" % (args.output, e.strerror or e))
 
-    env = {name: value for name, value in os.environ.items() if name not in PANE_IDENTITY}
     try:
         proc = subprocess.Popen(
             ["tern", "capture", args.origin, "--html", "--scrollback", "--surfaces"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            env=env,
+            env=tern_env(copy),
         )
     except FileNotFoundError:
         discard(args.output)
