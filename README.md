@@ -52,7 +52,8 @@ Disable macOS **Input sources** shortcuts on `Control-Space`. Re-record Raycast 
 
 - Option+h/j/k/l focuses, Option+Shift+h/j/k/l moves, Option+-/=/0 shrinks, grows, and balances, Option+Shift+F fullscreens, and Option+Shift+Space toggles floating.
 - Option+/ and Option+, switch to tiles and accordion; pressing again toggles horizontal and vertical.
-- Option+1–5 switch workspaces and return to the previous one when already there; Option+Tab jumps back, and Option+Shift+1–5 move the window.
+- Option+1–7 switch workspaces and return to the previous one when already there; Option+Tab jumps back, and Option+Shift+1–7 move the window.
+- Workspaces 1–4 stay on the main monitor and 5–7 on the other one, or on the main monitor when only one is connected. Option+M focuses the other monitor, and Option+Shift+M moves the window there and follows it.
 - Option+Z toggles workspace Z, where new Zoom windows open. Finder, System Settings, and Calculator open floating.
 - Option+Shift+; enters service mode: `Esc` reloads the config and `r` flattens the workspace tree.
 - AeroSpace starts at login with 6-pixel inner and 3-pixel outer gaps. Turn on **Group windows by application** under **Desktop & Dock** > **Mission Control** so Mission Control doesn't shrink windows parked on hidden workspaces.

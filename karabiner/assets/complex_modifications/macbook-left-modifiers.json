@@ -151,6 +151,38 @@
         {
           "type": "basic",
           "from": {
+            "key_code": "6",
+            "modifiers": {
+              "mandatory": ["right_command"],
+              "optional": ["shift"]
+            }
+          },
+          "to": [
+            {
+              "key_code": "6",
+              "modifiers": ["left_control", "left_option", "left_command"]
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "from": {
+            "key_code": "7",
+            "modifiers": {
+              "mandatory": ["right_command"],
+              "optional": ["shift"]
+            }
+          },
+          "to": [
+            {
+              "key_code": "7",
+              "modifiers": ["left_control", "left_option", "left_command"]
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "from": {
             "key_code": "hyphen",
             "modifiers": {
               "mandatory": ["right_command"],
@@ -296,6 +328,22 @@
           "to": [
             {
               "key_code": "z",
+              "modifiers": ["left_control", "left_option", "left_command"]
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "from": {
+            "key_code": "m",
+            "modifiers": {
+              "mandatory": ["right_command"],
+              "optional": ["shift"]
+            }
+          },
+          "to": [
+            {
+              "key_code": "m",
               "modifiers": ["left_control", "left_option", "left_command"]
             }
           ]

@@ -2,7 +2,16 @@ config-version = 2
 
 start-at-login = true
 
-persistent-workspaces = ["1", "2", "3", "4", "5"]
+persistent-workspaces = ["1", "2", "3", "4", "5", "6", "7"]
+
+[workspace-to-monitor-force-assignment]
+    1 = 'main'
+    2 = 'main'
+    3 = 'main'
+    4 = 'main'
+    5 = ['secondary', 'main']
+    6 = ['secondary', 'main']
+    7 = ['secondary', 'main']
 
 [key-mapping]
     preset = 'qwerty'
@@ -40,14 +49,20 @@ persistent-workspaces = ["1", "2", "3", "4", "5"]
     ctrl-alt-cmd-3 = 'workspace --auto-back-and-forth 3'
     ctrl-alt-cmd-4 = 'workspace --auto-back-and-forth 4'
     ctrl-alt-cmd-5 = 'workspace --auto-back-and-forth 5'
+    ctrl-alt-cmd-6 = 'workspace --auto-back-and-forth 6'
+    ctrl-alt-cmd-7 = 'workspace --auto-back-and-forth 7'
     ctrl-alt-cmd-z = 'workspace --auto-back-and-forth Z'
     ctrl-alt-cmd-tab = 'workspace-back-and-forth'
+    ctrl-alt-cmd-m = 'focus-monitor --wrap-around next'
 
     ctrl-alt-cmd-shift-1 = 'move-node-to-workspace 1'
     ctrl-alt-cmd-shift-2 = 'move-node-to-workspace 2'
     ctrl-alt-cmd-shift-3 = 'move-node-to-workspace 3'
     ctrl-alt-cmd-shift-4 = 'move-node-to-workspace 4'
     ctrl-alt-cmd-shift-5 = 'move-node-to-workspace 5'
+    ctrl-alt-cmd-shift-6 = 'move-node-to-workspace 6'
+    ctrl-alt-cmd-shift-7 = 'move-node-to-workspace 7'
+    ctrl-alt-cmd-shift-m = 'move-node-to-monitor --focus-follows-window --wrap-around next'
 
     ctrl-alt-cmd-shift-semicolon = 'mode service'
 
