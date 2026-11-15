@@ -36,19 +36,31 @@ just usage                # provider usage report
 
 ## MacBook keyboard
 
-`karabiner/assets/complex_modifications/macbook-left-modifiers.json`:
+`karabiner/.config/karabiner/karabiner.json` is the active config, stowed as `~/.config/karabiner`. Stow must link the whole `karabiner` directory. Karabiner doesn't reload a symlinked `karabiner.json`, so never link the file alone.
 
-- Control sends Command outside terminals and stays Control inside them.
-- Tern counts as a terminal. After editing the rule, remove and re-add it in Karabiner's Complex Modifications; the enabled copy lives in `karabiner.json`.
+- Control sends Command outside terminals and stays Control inside them; Tern counts as a terminal.
 - `Control-Space` sends `Command-Space` in terminals, for Raycast.
 - Option sends right Command; Command sends Option.
-- Option plus an AeroSpace key sends Ctrl+Option+Command plus that key, so Control+K reaches apps as Command+K instead of AeroSpace.
+- Physical Option or physical right Command plus an AeroSpace key sends Ctrl+Option+Command plus that key, so Control+K reaches apps as Command+K instead of AeroSpace.
+- Caps Lock sends Escape in terminals and holds Command+Control+Option+Shift elsewhere.
+
+One-time setup: back up the live config to a unique sibling, stow, and restart Karabiner's user server once. After that, edits to the repo file reload automatically and Karabiner Settings write through the link into this repo. No import or remove-and-re-add of Complex Modifications is needed because the `Default profile` ships with the rules enabled. GUI saves also drop timestamped copies in `karabiner/.config/karabiner/automatic_backups/` (git-ignored). Rules imported through the GUI land in the repo's `assets/` directory; review those files before committing.
+
+```sh
+mv ~/.config/karabiner ~/.config/karabiner.backup-$(date +%Y%m%d-%H%M%S)
+just stow-check karabiner   # must report no conflicts
+just stow karabiner
+test -L ~/.config/karabiner && test ! -L ~/.config/karabiner/karabiner.json
+launchctl kickstart -k gui/$(id -u)/org.pqrs.service.agent.karabiner_console_user_server
+```
+
+The link check must succeed before continuing. If Karabiner recreates a real directory before Stow runs, stop Karabiner, move that directory aside, and repeat the setup. The service label above is installed with Karabiner-Elements 16.0.0; `launchctl list | grep karabiner` prints the label for other versions. If an earlier Stow install left `~/assets` pointing to this repo's old `karabiner/assets`, remove that obsolete symlink.
 
 Disable macOS **Input sources** shortcuts on `Control-Space`. Re-record Raycast with physical `Control-Space` (it should show `Command-Space`) and AltTab with physical `Command-Tab` (it should see `Option-Tab`).
 
 ## AeroSpace
 
-`aerospace/.aerospace.toml` binds only Ctrl+Option+Command chords, which the Karabiner rule sends for physical Option, so Herdr keeps its Alt chords and Control keeps app shortcuts. AeroSpace can't tell left from right Command, so the rule does it. Without a config file, AeroSpace's default Alt bindings shadow Herdr's.
+`aerospace/.aerospace.toml` binds only Ctrl+Option+Command chords, which the Karabiner rule sends for physical Option or physical right Command, so Herdr keeps its Alt chords and Control keeps app shortcuts. AeroSpace can't tell left from right Command, so the rule does it. Without a config file, AeroSpace's default Alt bindings shadow Herdr's.
 
 - Option+h/j/k/l focuses, Option+Shift+h/j/k/l moves, Option+-/=/0 shrinks, grows, and balances, Option+Shift+F fullscreens, and Option+Shift+Space toggles floating.
 - Option+/ and Option+, switch to tiles and accordion; pressing again toggles horizontal and vertical.

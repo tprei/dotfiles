@@ -3,6 +3,7 @@ venv
 nvim.log
 .nvimlog
 herdr/.config/herdr/checkpoints/
+karabiner/.config/karabiner/automatic_backups/
 omp/.omp/**/config.yml.lock
 pi/.pi/agent/auth.json
 pi/.pi/agent/codex-rate-history.jsonl
