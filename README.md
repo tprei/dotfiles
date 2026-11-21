@@ -42,7 +42,7 @@ just usage                # provider usage report
 - `Control-Space` sends `Command-Space` in terminals, for Raycast.
 - Option sends right Command; Command sends Option.
 - Physical Option or physical right Command plus an AeroSpace key sends Ctrl+Option+Command plus that key, so Control+K reaches apps as Command+K instead of AeroSpace.
-- Caps Lock sends Escape in terminals and holds Command+Control+Option+Shift elsewhere.
+- Holding Caps Lock sends Hyper (Command+Control+Option+Shift) in every app; tapping it alone sends Escape on release in terminals.
 
 One-time setup: back up the live config to a unique sibling, stow, and restart Karabiner's user server once. After that, edits to the repo file reload automatically and Karabiner Settings write through the link into this repo. No import or remove-and-re-add of Complex Modifications is needed because the `Default profile` ships with the rules enabled. GUI saves also drop timestamped copies in `karabiner/.config/karabiner/automatic_backups/` (git-ignored). Rules imported through the GUI land in the repo's `assets/` directory; review those files before committing.
 
@@ -57,6 +57,12 @@ launchctl kickstart -k gui/$(id -u)/org.pqrs.service.agent.karabiner_console_use
 The link check must succeed before continuing. If Karabiner recreates a real directory before Stow runs, stop Karabiner, move that directory aside, and repeat the setup. The service label above is installed with Karabiner-Elements 16.0.0; `launchctl list | grep karabiner` prints the label for other versions. If an earlier Stow install left `~/assets` pointing to this repo's old `karabiner/assets`, remove that obsolete symlink.
 
 Disable macOS **Input sources** shortcuts on `Control-Space`. Re-record Raycast with physical `Control-Space` (it should show `Command-Space`) and AltTab with physical `Command-Tab` (it should see `Option-Tab`).
+
+## Raycast
+
+`raycast/` isn't a Stow package; like `tern/`, Raycast reads it from this checkout. In Raycast **Settings > Script Commands > Add Script Directory**, add `~/repos/dotfiles/raycast/scripts`. Configure **Fork focused omp session** and record `Hyper+F` by holding Caps Lock and pressing F. Raycast stores script directories and hotkeys outside this repository; see its [Script Commands setup](https://manual.raycast.com/script-commands). Run the tests with `python3 -m unittest discover -s raycast/tests`.
+
+The command uses Tern's native fork operation to open the focused omp session in a new right-hand pane without changing the source session or its unsent draft. It selects only the shown session's shown tab and refuses a non-omp pane or multiple Tern windows rather than guessing. Tern must be installed at `/Applications/Tern.app`; `TERN_DAEMON_SOCKET` overrides its default daemon socket. Physical Option+Shift+F still fullscreens through a separate AeroSpace chord, leaving Hyper+F free.
 
 ## AeroSpace
 
