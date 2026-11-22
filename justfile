@@ -118,8 +118,10 @@ omp-rebuild:
     fi
     git -C "$src" log --oneline -1
     bun --cwd="$src" install --frozen-lockfile
-    bun --cwd="$src" run build:native
-    bun --cwd="$src/packages/coding-agent" link
+    version=$(sed -n 's/^Release: v//p' omp-runtime/PIN)
+    tag="$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')"
+    curl --fail --location "https://registry.npmjs.org/@oh-my-pi/pi-natives-$tag/-/pi-natives-$tag-$version.tgz" \
+        | tar -xzO "package/pi_natives.$tag.node" > "$src/packages/natives/native/pi_natives.$tag.node"
     sh "$src/scripts/link-omp.sh"
     wrapper=$(readlink -f "$src/packages/coding-agent/scripts/omp")
     for bin in "$HOME/.bun/bin" "$HOME/.local/bin"; do

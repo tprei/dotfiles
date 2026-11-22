@@ -1,12 +1,11 @@
 Upstream OMP release this customization builds on.
-Release: v18.10.4
-Upstream commit: 687892d1046ecaf18829b45f5b86928a308258f4
-Tarball: https://codeload.github.com/can1357/oh-my-pi/tar.gz/687892d1046ecaf18829b45f5b86928a308258f4
+Release: v19.1.0
+Upstream commit: a7135b8f31826c878734388b648f52bed8da436e
+Tarball: https://codeload.github.com/can1357/oh-my-pi/tar.gz/a7135b8f31826c878734388b648f52bed8da436e
 
 Local history.
-Baseline commit message: Upstream OMP v18.10.4 baseline 687892d
-Baseline SHA: 02135e692dc5db2c763ec73e12a41385e0d878d9
-Runtime commit message: Prevent main sessions from using disabled providers
+Baseline commit message: Upstream OMP v19.1.0 baseline a7135b8
+Baseline SHA: ef29cd5143dc71fcf1ad9789b50605a3a59e0925
 Patch file: 0001-Prevent-main-sessions-from-using-disabled-providers.patch
 
 Live locations, kept out of this repo. Override the checkout with OMP_SRC.
