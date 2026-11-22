@@ -8,19 +8,19 @@ providers:
           supportsDisplay: true
   openai-codex:
     modelOverrides:
-      gpt-6-astra:
+      gpt-6.2-astra:
         thinking:
           mode: effort
           efforts: [low, medium, high]
           defaultLevel: medium
   openrouter:
     modelOverrides:
-      openai/gpt-6-astra:
+      openai/gpt-6.2-astra:
         thinking:
           mode: effort
           efforts: [low, medium, high]
           defaultLevel: medium
-      openai/gpt-6-astra:batch:
+      openai/gpt-6.2-astra:batch:
         thinking:
           mode: effort
           efforts: [low, medium, high]

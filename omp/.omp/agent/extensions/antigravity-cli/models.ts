@@ -8,13 +8,13 @@ export const AGY_PROVIDER_ID = "antigravity-cli";
 export const AGY_API_ID = "antigravity-cli";
 
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-const FLASH_EFFORTS: AgyEffort[] = ["low", "medium", "high"];
-const PRO_EFFORTS: AgyEffort[] = ["low", "high"];
+const GEN4_EFFORTS: AgyEffort[] = ["low", "medium", "high", "xhigh"];
 
 type WireModelIds = {
 	low: string;
 	medium?: string;
 	high: string;
+	xhigh: string;
 };
 
 function createModel(id: string, name: string, efforts: AgyEffort[], wire: WireModelIds): ProviderModelConfig {
@@ -23,7 +23,7 @@ function createModel(id: string, name: string, efforts: AgyEffort[], wire: WireM
 		low: wire.low,
 		medium: wire.medium ?? wire.high,
 		high: wire.high,
-		xhigh: wire.high,
+		xhigh: wire.xhigh,
 		max: wire.high,
 		off: wire.low,
 	};
@@ -48,24 +48,17 @@ function createModel(id: string, name: string, efforts: AgyEffort[], wire: WireM
 }
 
 export const AGY_MODELS: ProviderModelConfig[] = [
-	createModel("gemini-3.8-flash", "Gemini 3.8 Flash (AGY CLI)", FLASH_EFFORTS, {
-		low: "gemini-3.8-flash-low",
-		medium: "gemini-3.8-flash-medium",
-		high: "gemini-3.8-flash-high",
+	createModel("gemini-4-hydrogen", "Gemini 4 Hydrogen (AGY CLI)", GEN4_EFFORTS, {
+		low: "gemini-4-hydrogen-low",
+		medium: "gemini-4-hydrogen-medium",
+		high: "gemini-4-hydrogen-high",
+		xhigh: "gemini-4-hydrogen-xhigh",
 	}),
-	createModel("gemini-3.7-flash", "Gemini 3.7 Flash (AGY CLI)", FLASH_EFFORTS, {
-		low: "gemini-3.7-flash-low",
-		medium: "gemini-3.7-flash-medium",
-		high: "gemini-3.7-flash-high",
-	}),
-	createModel("gemini-3.6-flash", "Gemini 3.6 Flash (AGY CLI)", FLASH_EFFORTS, {
-		low: "gemini-3.6-flash-low",
-		medium: "gemini-3.6-flash-medium",
-		high: "gemini-3.6-flash-high",
-	}),
-	createModel("gemini-3.1-pro", "Gemini 3.1 Pro (AGY CLI)", PRO_EFFORTS, {
-		low: "gemini-3.1-pro-low",
-		high: "gemini-3.1-pro-high",
+	createModel("gemini-4-neon", "Gemini 4 Neon (AGY CLI)", GEN4_EFFORTS, {
+		low: "gemini-4-neon-low",
+		medium: "gemini-4-neon-medium",
+		high: "gemini-4-neon-high",
+		xhigh: "gemini-4-neon-xhigh",
 	}),
 ];
 

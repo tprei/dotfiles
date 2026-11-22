@@ -11,11 +11,11 @@ setupVersion: 2
 modelRoles:
   default: zai/glm-5.3:max
   slow: anthropic/claude-opus-5-5:high
-  plan: openai-codex/gpt-6.1-sol:xhigh
-  advisor: antigravity-cli/gemini-3.8-flash:high
+  plan: openai-codex/gpt-6.2-sol:xhigh
+  advisor: antigravity-cli/gemini-4-hydrogen:high
   task: zai/glm-5.3-flash:max
   vision: zai/glm-5.3:max
-  commit: antigravity-cli/gemini-3.8-flash:medium
+  commit: antigravity-cli/gemini-4-hydrogen:medium
   smol: zai/glm-5.3:max
   tiny: zai/glm-5.3:max
 defaultThinkingLevel: auto
@@ -31,19 +31,19 @@ task:
     - scout
     - sonic
   agentModelOverrides:
-    planner: openai-codex/gpt-6.1-sol:xhigh
-    technical-architect: openai-codex/gpt-6.1-sol:xhigh
+    planner: openai-codex/gpt-6.2-sol:xhigh
+    technical-architect: openai-codex/gpt-6.2-sol:xhigh
     strategist: zai/glm-5.3:max
-    surveyor: antigravity-cli/gemini-3.8-flash:high
+    surveyor: antigravity-cli/gemini-4-hydrogen:high
     explorer: zai/glm-5.3-flash:max
     reviewer: zai/glm-5.3:max
     enemy: anthropic/claude-opus-5-5:medium
     security-reviewer: zai/glm-5.3:max
     triage: zai/glm-5.3:max
-    git-commit-specialist: antigravity-cli/gemini-3.8-flash:medium
+    git-commit-specialist: antigravity-cli/gemini-4-hydrogen:medium
     task: zai/glm-5.3-flash:max
     ui-implementer: zai/glm-5.3-flash:max
-    ui-designer: openai-codex/gpt-6.1-sol:xhigh
+    ui-designer: openai-codex/gpt-6.2-sol:xhigh
   enableLsp: true
 dev:
   autoqaConsent: granted
@@ -55,29 +55,29 @@ retry:
     default:
       - zai/glm-5.3-flash:max
     anthropic/claude-opus-5-5:
-      - openai-codex/gpt-6.1-sol:xhigh
-      - openai-codex/gpt-6-astra:low
-    anthropic/claude-fable-5-1:
+      - openai-codex/gpt-6.2-sol:xhigh
+      - openai-codex/gpt-6.2-astra:low
+    anthropic/claude-fable-5-2:
       - anthropic/claude-opus-5-5:medium
-      - openai-codex/gpt-6.1-sol:xhigh
+      - openai-codex/gpt-6.2-sol:xhigh
       - zai/glm-5.3:max
-    openai-codex/gpt-6.1-sol:
+    openai-codex/gpt-6.2-sol:
       - anthropic/claude-opus-5-5:high
       - zai/glm-5.3:max
     openai-codex/gpt-6-luna:
-      - antigravity-cli/gemini-3.8-flash:high
+      - antigravity-cli/gemini-4-hydrogen:high
       - opencode-go/muse-spark-1.3-contributor:high
       - zai/glm-5.3-flash:max
     zai/glm-5.3:
       []
     zai/glm-5.3-flash:
-      - antigravity-cli/gemini-3.8-flash:high
+      - antigravity-cli/gemini-4-hydrogen:high
       - opencode-go/muse-spark-1.3-contributor:medium
     antigravity-cli/*:
       - zai/glm-5.3:max
       - openai-codex/gpt-6-luna:max
     opencode-go/*:
-      - antigravity-cli/gemini-3.8-flash:high
+      - antigravity-cli/gemini-4-hydrogen:high
       - zai/glm-5.3-flash:max
   maxRetries: 20
 hideThinkingBlock: true

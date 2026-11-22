@@ -8,10 +8,10 @@ modelRoles:
   task: anthropic/claude-haiku-5-5:max
   slow: anthropic/claude-opus-5-5:xhigh
   plan: anthropic/claude-opus-5-5:xhigh
-  advisor: openai-codex/gpt-6.1-sol:max
-  commit: google-antigravity/gemini-3.8-flash
-  smol: google-antigravity/gemini-3.8-flash
-  tiny: google-antigravity/gemini-3.8-flash
+  advisor: openai-codex/gpt-6.2-sol:max
+  commit: google-antigravity/gemini-4-hydrogen
+  smol: google-antigravity/gemini-4-hydrogen
+  tiny: google-antigravity/gemini-4-hydrogen
 defaultThinkingLevel: auto
 task:
   eager: always
@@ -26,25 +26,25 @@ task:
     explorer: anthropic/claude-opus-5-5:xhigh
     planner: anthropic/claude-opus-5-5:xhigh
     technical-architect: anthropic/claude-opus-5-5:xhigh
-    reviewer: openai-codex/gpt-6.1-sol:max
-    enemy: openai-codex/gpt-6.1-sol:max
-    adversary: openai-codex/gpt-6.1-sol:max
-    surveyor: openai-codex/gpt-6.1-sol:xhigh
-    strategist: openai-codex/gpt-6.1-sol:xhigh
-    triage: google-antigravity/gemini-3.8-flash
-    git-commit-specialist: google-antigravity/gemini-3.8-flash
+    reviewer: openai-codex/gpt-6.2-sol:max
+    enemy: openai-codex/gpt-6.2-sol:max
+    adversary: openai-codex/gpt-6.2-sol:max
+    surveyor: openai-codex/gpt-6.2-sol:xhigh
+    strategist: openai-codex/gpt-6.2-sol:xhigh
+    triage: google-antigravity/gemini-4-hydrogen
+    git-commit-specialist: google-antigravity/gemini-4-hydrogen
 dev:
   autoqaConsent: granted
 retry:
   modelFallback: true
   fallbackChains:
-    google-antigravity/gemini-3.8-flash:
+    google-antigravity/gemini-4-hydrogen:
       - opencode-go/deepseek-v4-flash
       - anthropic/claude-haiku-5-5:max
     anthropic/claude-haiku-5-5:max:
-      - google-antigravity/gemini-3.8-flash
+      - google-antigravity/gemini-4-hydrogen
     zai/glm-5.3:
-      - google-antigravity/gemini-3.8-flash
+      - google-antigravity/gemini-4-hydrogen
       - openai-codex/gpt-6-luna:max
     anthropic/claude-opus-5-5:
       - anthropic/claude-sonnet-5-5:max
