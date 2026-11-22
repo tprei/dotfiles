@@ -52,6 +52,31 @@ tern-plugin:
     tern plugin link "{{ justfile_directory() }}/tern/extrakto"
     tern plugin link "{{ justfile_directory() }}/tern/copymode"
 
+# Open raycast/settings.json in Raycast's Import Settings & Data, which overwrites Raycast's settings and hotkeys with it. Raycast reads an unencrypted .rayconfig as gzipped JSON.
+raycast-import:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out="${TMPDIR:-/tmp}/dotfiles-raycast.rayconfig"
+    jq -c . "{{ justfile_directory() }}/raycast/settings.json" | gzip -n > "$out"
+    open -a Raycast "$out"
+    echo "opened $out in Raycast; confirm the import there"
+
+# Rebuild raycast/settings.json from a Raycast export (Export Settings & Data, Settings only): preferences plus every command with a hotkey.
+raycast-capture export:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    read -rsp "Export passphrase: " pass
+    echo
+    settings="{{ justfile_directory() }}/raycast/settings.json"
+    tmp=$(mktemp)
+    trap 'rm -f "$tmp"' EXIT
+    openssl enc -d -aes-256-cbc -nosalt -md sha256 -pass fd:3 -in "{{ export }}" 3<<<"$pass" \
+        | tail -c +17 | gunzip \
+        | jq --indent 2 '{raycast_version, builtin_package_raycastPreferences, builtin_package_rootSearch: {provider_schemaVersion: .builtin_package_rootSearch.provider_schemaVersion, rootSearch: ([.builtin_package_rootSearch.rootSearch[] | select(.hotkey) | {key, hotkey, type}] | sort_by(.key))}}' \
+        > "$tmp"
+    mv "$tmp" "$settings"
+    echo "wrote $settings"
+
 # Prove the omp package is linked into $HOME and not shadowed by real files.
 omp-verify:
     #!/usr/bin/env bash

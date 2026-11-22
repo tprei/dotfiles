@@ -1,0 +1,52 @@
+{
+  "raycast_version": "1.104.34",
+  "builtin_package_raycastPreferences": {
+    "preferencesAdvanced": {
+      "raycastWindowPresentationMode": 0,
+      "raycastWindowEscapeKeyBehavior": 0,
+      "mainWindowCaptureOpenQuickAccessOverlay": false,
+      "useHyperKeyIcon": true,
+      "pageNavigationCommandKeysIdentifierKey": "squareBrackets",
+      "raycastAPIOptions": 0,
+      "mainWindowCaptureCopyToClipboard": true,
+      "keepWindowVisibleOnResignKey": false,
+      "navigationCommandStyleIdentifierKey": "vim",
+      "popToRootTimeout": 90,
+      "raycast_hyperKey_state": {
+        "keyCode": 57,
+        "enabled": true,
+        "includeShiftKey": true
+      },
+      "mainWindowCaptureShowInFinder": false
+    },
+    "preferencesAppearance": {
+      "showFavoritesInCompactMode": true,
+      "raycastCurrentThemeId": "bundled-raycast-dark",
+      "raycastUI_preferredTextSize": "medium",
+      "raycastPreferredWindowMode": "compact",
+      "raycastCurrentThemeIdDarkAppearance": "bundled-raycast-dark",
+      "raycastShouldFollowSystemAppearance": false,
+      "statusBarIsVisible": false
+    },
+    "preferencesGeneral": {
+      "raycastGlobalHotkey": "Command-49",
+      "raycastAlternativeEscape": false
+    },
+    "provider_schemaVersion": 1
+  },
+  "builtin_package_rootSearch": {
+    "provider_schemaVersion": 1,
+    "rootSearch": [
+      {
+        "key": "builtin_command_searchEmoji",
+        "hotkey": "Control-Command-49",
+        "type": "command"
+      },
+      {
+        "key": "raycastScript_~/repos/dotfiles/raycast/scripts/omp-fork.py",
+        "hotkey": "Shift-Control-Option-Command-3",
+        "type": "scriptCommand"
+      }
+    ]
+  }
+}

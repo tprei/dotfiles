@@ -15,6 +15,8 @@ just omp-config-check     # parse configs, compile extensions, check GLM thinkin
 just omp-rebuild          # bootstrap the pinned source, apply patches, rebuild, relink
 just omp-runtime-export   # regenerate omp-runtime/*.patch from the source checkout
 just omp-runtime-check    # fail on patch drift against the source checkout and PIN
+just raycast-import       # load raycast/settings.json into Raycast (confirm in its dialog)
+just raycast-capture FILE # rebuild raycast/settings.json from a Raycast export
 just usage                # provider usage report
 ```
 
@@ -60,7 +62,11 @@ Disable macOS **Input sources** shortcuts on `Control-Space`. Re-record Raycast 
 
 ## Raycast
 
-`raycast/` isn't a Stow package; like `tern/`, Raycast reads it from this checkout. In Raycast **Settings > Script Commands > Add Script Directory**, add `~/repos/dotfiles/raycast/scripts`. Configure **Fork focused omp session** and record `Hyper+F` by holding Caps Lock and pressing F. Raycast stores script directories and hotkeys outside this repository; see its [Script Commands setup](https://manual.raycast.com/script-commands). Run the tests with `python3 -m unittest discover -s raycast/tests`.
+`raycast/` isn't a Stow package; like `tern/`, Raycast reads it from this checkout. `raycast/settings.json` versions Raycast's preferences and every command hotkey, including `Hyper+F` (`Shift-Control-Option-Command-3`, key code 3 being F) for **Fork focused omp session**.
+
+One-time setup per Mac: in Raycast **Settings > Extensions > Script Commands**, add the script directory `~/repos/dotfiles/raycast/scripts`. Raycast keeps script directories only in its encrypted database, and its export leaves them out, so this step can't be versioned. Then run `just raycast-import` and click **Import**. The recipe gzips `settings.json` into an unencrypted `.rayconfig` and opens it in Raycast's **Import Settings & Data**. On Raycast 1.104 that import overwrites existing settings and hotkeys rather than merging them, so `settings.json` must list every hotkey you want to keep.
+
+After changing settings or hotkeys in Raycast, run **Export Settings & Data** with only **Settings** checked, then `just raycast-capture <file>.rayconfig` and enter the export passphrase. It decrypts the export, keeps only preferences and hotkeyed commands, and rewrites `settings.json`; delete the export afterward. Run the script tests with `python3 -m unittest discover -s raycast/tests`.
 
 The command uses Tern's native fork operation to open the focused omp session in a new right-hand pane without changing the source session or its unsent draft. It selects only the shown session's shown tab and refuses a non-omp pane or multiple Tern windows rather than guessing. Tern must be installed at `/Applications/Tern.app`; `TERN_DAEMON_SOCKET` overrides its default daemon socket. Physical Option+Shift+F still fullscreens through a separate AeroSpace chord, leaving Hyper+F free.
 
