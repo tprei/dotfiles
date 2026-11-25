@@ -24,6 +24,7 @@ REPORTER_PATH = TOOLS / ".local" / "bin" / "codex-usage-check"
 if str(SHARE_DIR) not in sys.path:
     sys.path.insert(0, str(SHARE_DIR))
 
+import dashboard
 import token_usage
 import usage_history
 
@@ -46,6 +47,9 @@ HISTORY_START_MS = (1_789_000_000_000 // token_usage.DAY_MS) * token_usage.DAY_M
 HISTORY_END_MS = HISTORY_START_MS + 7 * token_usage.DAY_MS
 BASELINE_PROVIDERS = ["openai-codex", "anthropic", "google-antigravity", "opencode-go", "zai"]
 RECORD_KEYS = {"entry_id", "timestamp_ms", "provider", "model", "api", "tokens", "estimated_usd"}
+HOUR_MS = 3_600_000
+DAY_MS = 86_400_000
+FIXED_NOW_MS = 1_789_000_000_000
 
 
 def iso_z(ms: int) -> str:
@@ -166,6 +170,23 @@ def day_provider_total(day, name):
         if total["provider"] == name:
             return total
     return None
+
+
+def empty_token_snapshot(issues=None):
+    snapshot = token_usage.merge_usage([("WSL", merge_collection([]))], START_MS, END_MS)
+    if issues:
+        snapshot["issues"] = [*issues, *snapshot.get("issues", [])]
+    return snapshot
+
+
+def plain_history_snapshot(samples=None, issues=None):
+    return {
+        "start_ms": START_MS,
+        "end_ms": END_MS,
+        "samples": list(samples or []),
+        "sources_ok": ["WSL"],
+        "issues": list(issues or []),
+    }
 
 
 class TempRootMixin(unittest.TestCase):
@@ -1131,7 +1152,7 @@ class CollectTokenSnapshotWindowTests(unittest.TestCase):
         ):
             snapshot = reporter.collect_token_snapshot(now_ms)
 
-        self.assertEqual(requested_windows, [("WSL", start_ms, now_ms), ("mini-1", start_ms, now_ms)])
+        self.assertEqual(sorted(requested_windows), sorted([("WSL", start_ms, now_ms), ("mini-1", start_ms, now_ms)]))
         self.assertEqual(snapshot["start_ms"], start_ms)
         self.assertEqual(snapshot["end_ms"], now_ms)
         self.assertEqual(len(snapshot["days"]), 30)
@@ -1158,7 +1179,7 @@ class CollectTokenSnapshotWindowTests(unittest.TestCase):
 class CollectHistorySnapshotTests(unittest.TestCase):
     def test_history_window_covers_seven_days_ending_now(self):
         now_ms = 1_789_000_000_000
-        start_ms = now_ms - 7 * 86_400_000
+        start_ms = now_ms - 7 * DAY_MS
         requested_windows = []
         wsl_sample = history_sample(recorded_at_ms=start_ms + 1_000, used_fraction=0.1)
         mini_sample = history_sample(
@@ -1197,16 +1218,16 @@ class CollectHistorySnapshotTests(unittest.TestCase):
         ):
             snapshot = reporter.collect_history_snapshot(now_ms)
 
-        self.assertEqual(requested_windows, [("WSL", start_ms, now_ms), ("mini-1", start_ms, now_ms)])
+        self.assertEqual(sorted(requested_windows), sorted([("WSL", start_ms, now_ms), ("mini-1", start_ms, now_ms)]))
         self.assertEqual(snapshot["start_ms"], start_ms)
         self.assertEqual(snapshot["end_ms"], now_ms)
-        self.assertEqual(snapshot["sources_ok"], ["WSL", "mini-1"])
+        self.assertEqual(sorted(snapshot["sources_ok"]), ["WSL", "mini-1"])
         self.assertEqual(snapshot["samples"], [wsl_sample, mini_sample])
         self.assertEqual(snapshot["issues"], [])
 
     def test_unconfigured_ssh_host_yields_issue_and_keeps_local_samples(self):
         now_ms = 1_789_000_000_000
-        start_ms = now_ms - 7 * 86_400_000
+        start_ms = now_ms - 7 * DAY_MS
         wsl_sample = history_sample(recorded_at_ms=start_ms + 1_000, used_fraction=0.1)
 
         def local_history(requested_start, requested_end):
@@ -1231,9 +1252,9 @@ class CollectHistorySnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot["sources_ok"], ["WSL"])
         self.assertEqual(snapshot["samples"], [wsl_sample])
 
-    def test_remote_failure_issue_precedes_merge_issues(self):
+    def test_gather_issues_precede_merge_issues(self):
         now_ms = 1_789_000_000_000
-        start_ms = now_ms - 7 * 86_400_000
+        start_ms = now_ms - 7 * DAY_MS
         wsl_sample = history_sample(recorded_at_ms=start_ms + 1_000, used_fraction=0.1)
 
         def local_history(requested_start, requested_end):
@@ -1283,20 +1304,17 @@ class GatherCollectionsTests(unittest.TestCase):
         self.assertEqual(issues, ["mini-1 unavailable: collector unreadable"])
 
 
-class ReporterTelegramStateTests(unittest.TestCase):
+class TelegramStateMixin(TempRootMixin):
     def setUp(self):
         super().setUp()
-        temporary = tempfile.TemporaryDirectory(prefix="omp-token-state-")
-        self.addCleanup(temporary.cleanup)
-        self.state_path = Path(temporary.name) / "state.json"
+        self.state_path = self.root / "state" / "state.json"
         state_patcher = mock.patch.object(reporter, "CODEX_STATE_PATH", self.state_path)
         state_patcher.start()
         self.addCleanup(state_patcher.stop)
         self.config = {"bot_token": "unit-test-token", "chat_id": "42"}
-        self.limits_image = b"unit-limits-image"
-        self.token_image = b"unit-token-image"
 
     def write_state(self, state):
+        self.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.state_path.write_text(json.dumps(state), encoding="utf-8")
 
     def read_state(self):
@@ -1304,7 +1322,7 @@ class ReporterTelegramStateTests(unittest.TestCase):
             return {}
         return json.loads(self.state_path.read_text(encoding="utf-8"))
 
-    def telegram_http_error(self, description, code=400):
+    def telegram_error(self, description, code=400):
         body = json.dumps({"ok": False, "error_code": code, "description": description})
         return urllib.error.HTTPError(
             "https://api.telegram.org/bot-unit-test/method",
@@ -1314,247 +1332,506 @@ class ReporterTelegramStateTests(unittest.TestCase):
             io.BytesIO(body.encode("utf-8")),
         )
 
-    def test_edit_success_pins_existing_message_without_resend(self):
-        self.write_state({"message_id": 111, "tokens_message_id": 42})
-        with mock.patch.object(reporter, "tg_send_photo") as send, \
-                mock.patch.object(reporter, "tg_edit_photo") as edit, \
-                mock.patch.object(reporter, "tg_pin") as pin:
-            self.assertTrue(reporter.update_pinned(self.config, self.token_image, "tokens_message_id"))
-        send.assert_not_called()
-        edit.assert_called_once()
-        pin.assert_called_once()
-        self.assertEqual(call_arg(pin.call_args, 1, "message_id"), 42)
-        self.assertEqual(self.read_state(), {"message_id": 111, "tokens_message_id": 42})
 
-    def test_message_not_modified_counts_as_success(self):
-        self.write_state({"tokens_message_id": 42})
-        with mock.patch.object(reporter, "tg_send_photo") as send, \
-                mock.patch.object(
-                    reporter,
-                    "tg_edit_photo",
-                    side_effect=[self.telegram_http_error("Bad Request: message is not modified")],
-                ), \
-                mock.patch.object(reporter, "tg_pin"):
-            self.assertTrue(reporter.update_pinned(self.config, self.token_image, "tokens_message_id"))
-        send.assert_not_called()
-        self.assertEqual(self.read_state(), {"tokens_message_id": 42})
+class BuildDashboardTests(unittest.TestCase):
+    NOW_MS = FIXED_NOW_MS
 
-    def test_missing_message_replaces_only_that_state_key(self):
-        self.write_state({"message_id": 111, "tokens_message_id": 42, "note": "keep"})
-        with mock.patch.object(reporter, "tg_send_photo", return_value=555) as send, \
-                mock.patch.object(
-                    reporter,
-                    "tg_edit_photo",
-                    side_effect=[self.telegram_http_error("Bad Request: message to edit not found")],
-                ) as edit, \
-                mock.patch.object(reporter, "tg_pin") as pin, \
-                mock.patch.object(reporter, "tg_delete") as delete:
-            self.assertTrue(reporter.update_pinned(self.config, self.token_image, "tokens_message_id"))
-        send.assert_called_once()
-        edit.assert_called_once()
-        pin.assert_called_once()
-        self.assertEqual(call_arg(pin.call_args, 1, "message_id"), 555)
-        delete.assert_called_once()
-        self.assertEqual(call_arg(delete.call_args, 1, "message_id"), 42)
+    def report(self, provider, limits, plan=None):
+        entry = {"provider": provider, "limits": limits}
+        if plan is not None:
+            entry["metadata"] = {"planType": plan}
+        return entry
+
+    def sample(self, recorded_at_ms, used_fraction, provider="openai-codex", limit_id="openai-codex:primary"):
+        return {
+            "recorded_at_ms": recorded_at_ms,
+            "provider": provider,
+            "account_key": "acct",
+            "limit_id": limit_id,
+            "used_fraction": used_fraction,
+        }
+
+    def test_groups_windows_by_provider_and_account_in_report_order(self):
+        payload = {
+            "generatedAt": self.NOW_MS - 60_000,
+            "reports": [
+                self.report(
+                    "openai-codex",
+                    [window_limit(limit_id="openai-codex:primary", label="7 days", resets_at_ms=self.NOW_MS + 5 * HOUR_MS, used_fraction=0.24)],
+                    plan="Pro",
+                ),
+                self.report(
+                    "openai-codex",
+                    [window_limit(limit_id="weekly", label="Weekly limit", resets_at_ms=self.NOW_MS + 6 * DAY_MS, used_fraction=0.9)],
+                    plan="Team",
+                ),
+                self.report(
+                    "mistral",
+                    [window_limit(limit_id="mistral:primary", label="Monthly", resets_at_ms=self.NOW_MS + 3 * DAY_MS, used_fraction=0.1)],
+                ),
+            ],
+        }
+        view = reporter.build_dashboard(payload, empty_token_snapshot(), plain_history_snapshot(), self.NOW_MS)
+        providers = [quota.provider for quota in view.quotas]
+        self.assertEqual(len([name for name in providers if name == "openai-codex"]), 2)
+        self.assertIn("mistral", providers)
+        codex = [quota for quota in view.quotas if quota.provider == "openai-codex"]
+        self.assertEqual(codex[0].plan, "Pro")
+        self.assertEqual(codex[1].plan, "Team")
+        window = codex[0].windows[0]
+        self.assertEqual(window.label, "7 days")
+        self.assertAlmostEqual(window.used_percent, 24.0)
+        self.assertEqual(window.reset_ms, self.NOW_MS + 5 * HOUR_MS)
+        self.assertEqual(window.status, "ok")
+        self.assertIsNotNone(window.pace)
+
+    def test_redacted_same_provider_reports_stay_separate_groups_without_cross_coupling(self):
+        now = self.NOW_MS
+
+        def history_for(limit_id, fractions):
+            return [
+                {
+                    "recorded_at_ms": now - (2 - index) * HOUR_MS,
+                    "provider": "anthropic",
+                    "account_key": "acct",
+                    "limit_id": limit_id,
+                    "used_fraction": fraction,
+                }
+                for index, fraction in enumerate(fractions)
+            ]
+
+        payload = {
+            "generatedAt": now - 60_000,
+            "reports": [
+                {
+                    "provider": "anthropic",
+                    "metadata": {"planType": "Pro"},
+                    "limits": [
+                        forecast_limit(
+                            limit_id="anthropic:5h",
+                            label="Claude 5 Hour",
+                            used_fraction=0.40,
+                            resets_at_ms=now + 2 * HOUR_MS,
+                            duration_ms=5 * HOUR_MS,
+                        ),
+                        forecast_limit(
+                            limit_id="anthropic:7d",
+                            label="Claude 7 Day",
+                            used_fraction=0.90,
+                            resets_at_ms=now + 6 * DAY_MS,
+                            duration_ms=7 * DAY_MS,
+                        ),
+                    ],
+                },
+                {
+                    "provider": "anthropic",
+                    "metadata": {"planType": "Team"},
+                    "limits": [
+                        forecast_limit(
+                            limit_id="anthropic-b:7d",
+                            label="Claude 7 Day (B)",
+                            used_fraction=0.10,
+                            resets_at_ms=now + 5 * DAY_MS,
+                            duration_ms=7 * DAY_MS,
+                        ),
+                        forecast_limit(
+                            limit_id="anthropic-b:5h",
+                            label="Claude 5 Hour (B)",
+                            used_fraction=0.40,
+                            resets_at_ms=now + 2 * HOUR_MS,
+                            duration_ms=5 * HOUR_MS,
+                        ),
+                    ],
+                },
+            ],
+        }
+        history = plain_history_snapshot(
+            samples=(
+                history_for("anthropic:5h", (0.00, 0.20, 0.40))
+                + history_for("anthropic-b:5h", (0.00, 0.20, 0.40))
+                + history_for("anthropic:7d", (0.10, 0.15, 0.20))
+                + history_for("anthropic-b:7d", (0.10, 0.15, 0.20))
+            )
+        )
+        view = reporter.build_dashboard(payload, None, history, now)
+        groups = [quota for quota in view.quotas if quota.provider == "anthropic"]
+        self.assertEqual(len(groups), 2)
+        self.assertEqual(groups[0].plan, "Pro")
+        self.assertEqual(groups[1].plan, "Team")
+        for quota in groups:
+            resets = [window.reset_ms for window in quota.windows]
+            self.assertEqual(resets, sorted(resets))
+        short_verdicts = [
+            next(
+                window.pace.verdict
+                for window in quota.windows
+                if window.reset_ms == now + 2 * HOUR_MS
+            )
+            for quota in groups
+        ]
+        self.assertEqual(short_verdicts, ["GATED", "ON PACE"])
+
+    def test_windows_within_an_account_are_sorted_by_reset(self):
+        payload = usage_payload(
+            limits=[
+                window_limit(limit_id="late", label="Late", resets_at_ms=self.NOW_MS + 2 * DAY_MS, used_fraction=0.1),
+                window_limit(limit_id="early", label="Early", resets_at_ms=self.NOW_MS + DAY_MS, used_fraction=0.2),
+            ]
+        )
+        view = reporter.build_dashboard(payload, None, plain_history_snapshot(), self.NOW_MS)
         self.assertEqual(
-            self.read_state(),
-            {"message_id": 111, "note": "keep", "tokens_message_id": 555},
+            [window.reset_ms for window in view.quotas[0].windows],
+            [self.NOW_MS + DAY_MS, self.NOW_MS + 2 * DAY_MS],
         )
 
-    def test_generic_400_keeps_saved_id_without_duplicate_photo(self):
-        self.write_state({"tokens_message_id": 42})
-        with mock.patch.object(reporter, "tg_send_photo") as send, \
-                mock.patch.object(
-                    reporter,
-                    "tg_edit_photo",
-                    side_effect=[self.telegram_http_error("Bad Request: chat not found")],
-                ), \
-                mock.patch.object(reporter, "tg_pin") as pin:
-            self.assertFalse(reporter.update_pinned(self.config, self.token_image, "tokens_message_id"))
-        send.assert_not_called()
-        pin.assert_not_called()
-        self.assertEqual(self.read_state(), {"tokens_message_id": 42})
+    def test_generated_at_becomes_quota_updated_ms(self):
+        payload = usage_payload()
+        payload["generatedAt"] = self.NOW_MS - 60_000
+        view = reporter.build_dashboard(payload, None, None, self.NOW_MS)
+        self.assertEqual(view.quota_updated_ms, self.NOW_MS - 60_000)
 
-    def test_other_telegram_failure_keeps_saved_id(self):
-        self.write_state({"tokens_message_id": 42})
-        with mock.patch.object(reporter, "tg_send_photo") as send, \
-                mock.patch.object(
-                    reporter,
-                    "tg_edit_photo",
-                    side_effect=[reporter.TelegramError("Telegram editMessageMedia failed: busy")],
-                ), \
-                mock.patch.object(reporter, "tg_pin"):
-            self.assertFalse(reporter.update_pinned(self.config, self.token_image, "tokens_message_id"))
-        send.assert_not_called()
-        self.assertEqual(self.read_state(), {"tokens_message_id": 42})
+    def test_window_length_and_hourly_spark_reach_the_view(self):
+        payload = usage_payload(
+            limits=[forecast_limit(resets_at_ms=self.NOW_MS + 6 * DAY_MS, duration_ms=7 * DAY_MS)]
+        )
+        history = plain_history_snapshot(samples=[self.sample(self.NOW_MS - 2 * HOUR_MS, 0.10), self.sample(self.NOW_MS - 30 * 60_000, 0.24)])
+        window = reporter.build_dashboard(payload, None, history, self.NOW_MS).quotas[0].windows[0]
+        self.assertEqual(window.window_ms, 7 * DAY_MS)
+        self.assertEqual(len(window.pace.spark), 48)
+        self.assertIsNone(window.pace.spark[0])
+        self.assertAlmostEqual(window.pace.spark[-1], 0.24)
 
-    def test_pin_failure_on_edit_retains_saved_id(self):
-        self.write_state({"tokens_message_id": 42})
-        with mock.patch.object(reporter, "tg_send_photo") as send, \
-                mock.patch.object(reporter, "tg_edit_photo"), \
-                mock.patch.object(
-                    reporter,
-                    "tg_pin",
-                    side_effect=[reporter.TelegramError("Telegram pinChatMessage failed: no rights")],
-                ):
-            self.assertFalse(reporter.update_pinned(self.config, self.token_image, "tokens_message_id"))
-        send.assert_not_called()
-        self.assertEqual(self.read_state(), {"tokens_message_id": 42})
+    def test_missing_payload_marks_quota_issue_without_quotas(self):
+        view = reporter.build_dashboard(None, empty_token_snapshot(), plain_history_snapshot(), self.NOW_MS)
+        self.assertTrue(view.quota_issue)
+        self.assertEqual(view.quotas, [])
+        self.assertIsNone(view.quota_updated_ms)
+        self.assertIsNotNone(view.tokens)
+        self.assertFalse(view.history_partial)
 
-    def test_pin_failure_after_replacement_still_saves_new_id(self):
-        self.write_state({"message_id": 111})
-        with mock.patch.object(reporter, "tg_send_photo", return_value=555) as send, \
-                mock.patch.object(reporter, "tg_edit_photo") as edit, \
-                mock.patch.object(
-                    reporter,
-                    "tg_pin",
-                    side_effect=[reporter.TelegramError("Telegram pinChatMessage failed: no rights")],
-                ), \
-                mock.patch.object(reporter, "tg_delete") as delete:
-            self.assertFalse(reporter.update_pinned(self.config, self.token_image, "tokens_message_id"))
-        edit.assert_not_called()
-        send.assert_called_once()
-        delete.assert_not_called()
-        self.assertEqual(self.read_state(), {"message_id": 111, "tokens_message_id": 555})
+    def test_missing_tokens_and_history_mark_sections_unavailable(self):
+        view = reporter.build_dashboard(usage_payload(), None, None, self.NOW_MS)
+        self.assertIsNone(view.tokens)
+        self.assertEqual(view.history_sources, [])
+        self.assertTrue(view.history_partial)
 
-    def test_state_keys_stay_independent_per_image(self):
-        self.write_state({"tokens_message_id": 42})
-        with mock.patch.object(reporter, "tg_send_photo", return_value=900) as send, \
-                mock.patch.object(reporter, "tg_edit_photo") as edit, \
-                mock.patch.object(reporter, "tg_pin"):
-            self.assertTrue(reporter.update_pinned(self.config, self.limits_image, "message_id"))
-            self.assertTrue(reporter.update_pinned(self.config, self.token_image, "tokens_message_id"))
-        send.assert_called_once()
-        edit.assert_called_once()
-        self.assertEqual(call_arg(edit.call_args, 1, "message_id"), 42)
-        self.assertEqual(self.read_state(), {"message_id": 900, "tokens_message_id": 42})
+    def test_history_sources_and_partial_flag_follow_snapshot(self):
+        payload = usage_payload()
+        clean = reporter.build_dashboard(payload, None, plain_history_snapshot(), self.NOW_MS)
+        self.assertEqual(clean.history_sources, ["WSL"])
+        self.assertFalse(clean.history_partial)
+        flagged = reporter.build_dashboard(
+            payload, None, plain_history_snapshot(issues=["agent.db: boom"]), self.NOW_MS
+        )
+        self.assertEqual(flagged.history_sources, ["WSL"])
+        self.assertTrue(flagged.history_partial)
+
+    def test_tokens_snapshot_passes_through_unchanged(self):
+        snapshot = empty_token_snapshot()
+        view = reporter.build_dashboard(usage_payload(), snapshot, None, self.NOW_MS)
+        self.assertIs(view.tokens, snapshot)
+
+    def test_windows_without_history_show_no_data_pace(self):
+        payload = usage_payload(
+            limits=[
+                window_limit(limit_id="openai-codex:primary", label="7 days", resets_at_ms=self.NOW_MS + DAY_MS, used_fraction=0.4)
+            ]
+        )
+        view = reporter.build_dashboard(payload, None, plain_history_snapshot(), self.NOW_MS)
+        pace = view.quotas[0].windows[0].pace
+        self.assertEqual(pace.verdict, "NO DATA")
+        self.assertIsNone(pace.projected_percent)
+
+    def test_unknown_used_fraction_is_no_data_window(self):
+        payload = usage_payload(
+            limits=[
+                window_limit(limit_id="openai-codex:primary", label="7 days", resets_at_ms=self.NOW_MS + DAY_MS, used_fraction=None)
+            ]
+        )
+        view = reporter.build_dashboard(payload, None, plain_history_snapshot(), self.NOW_MS)
+        window = view.quotas[0].windows[0]
+        self.assertIsNone(window.used_percent)
+        self.assertEqual(window.pace.verdict, "NO DATA")
+
+    def test_exhausted_status_maps_to_exhausted_pace(self):
+        payload = usage_payload(
+            limits=[
+                window_limit(limit_id="openai-codex:primary", label="7 days", resets_at_ms=self.NOW_MS + DAY_MS, used_fraction=0.2, status="exhausted")
+            ]
+        )
+        view = reporter.build_dashboard(payload, None, plain_history_snapshot(), self.NOW_MS)
+        self.assertEqual(view.quotas[0].windows[0].pace.verdict, "EXHAUSTED")
+
+    def test_coupled_short_window_gates_through_the_full_pipeline(self):
+        payload = usage_payload(
+            provider="anthropic",
+            limits=[
+                forecast_limit(
+                    limit_id="anthropic:5h",
+                    label="Claude 5 Hour",
+                    used_fraction=0.40,
+                    resets_at_ms=self.NOW_MS + HOUR_MS,
+                    duration_ms=5 * HOUR_MS,
+                ),
+                forecast_limit(
+                    limit_id="anthropic:7d",
+                    label="Claude 7 Day",
+                    used_fraction=0.50,
+                    resets_at_ms=self.NOW_MS + 2 * HOUR_MS,
+                    duration_ms=7 * DAY_MS,
+                ),
+            ],
+        )
+        history = plain_history_snapshot(
+            samples=[
+                self.sample(self.NOW_MS - 2 * HOUR_MS, 0.00, provider="anthropic", limit_id="anthropic:5h"),
+                self.sample(self.NOW_MS - HOUR_MS, 0.20, provider="anthropic", limit_id="anthropic:5h"),
+                self.sample(self.NOW_MS, 0.40, provider="anthropic", limit_id="anthropic:5h"),
+                self.sample(self.NOW_MS - 2 * HOUR_MS, 0.26, provider="anthropic", limit_id="anthropic:7d"),
+                self.sample(self.NOW_MS - HOUR_MS, 0.38, provider="anthropic", limit_id="anthropic:7d"),
+                self.sample(self.NOW_MS, 0.50, provider="anthropic", limit_id="anthropic:7d"),
+            ]
+        )
+        view = reporter.build_dashboard(payload, None, history, self.NOW_MS)
+        short, long = view.quotas[0].windows
+        self.assertEqual(short.pace.verdict, "GATED")
+        self.assertAlmostEqual(short.pace.projected_percent, 60.0)
+        self.assertEqual(long.pace.verdict, "ON PACE")
 
 
-class PublishImagesTests(unittest.TestCase):
+class RenderDashboardTests(unittest.TestCase):
+    def view(self):
+        pace = dashboard.Pace(
+            verdict="ON PACE",
+            projected_percent=60.0,
+            rate="+1.0%/h",
+            detail="keep going · ~60% by reset",
+            exhaust_in_ms=None,
+        )
+        window = dashboard.QuotaWindow(
+            label="7 days",
+            used_percent=24.0,
+            reset_ms=FIXED_NOW_MS + DAY_MS,
+            status="ok",
+            pace=pace,
+        )
+        quota = dashboard.ProviderQuota(
+            provider="openai-codex",
+            account="account 1",
+            plan="Pro",
+            windows=[window],
+        )
+        return dashboard.Dashboard(
+            now_ms=FIXED_NOW_MS,
+            quota_updated_ms=FIXED_NOW_MS - 60_000,
+            quotas=[quota],
+            quota_issue=None,
+            tokens=None,
+            history_sources=["WSL"],
+            history_partial=False,
+        )
+
+    def test_pipes_svg_through_ffmpeg_and_returns_png_bytes(self):
+        with mock.patch.object(reporter, "subprocess") as subprocess_mock:
+            subprocess_mock.run.return_value = subprocess.CompletedProcess(
+                args=["ffmpeg"], returncode=0, stdout=b"png-bytes", stderr=b""
+            )
+            image = reporter.render_dashboard(self.view())
+        self.assertEqual(image, b"png-bytes")
+        run_call = subprocess_mock.run.call_args
+        command = call_arg(run_call, 0, "args")
+        self.assertTrue(str(command[0]).endswith("ffmpeg"))
+        self.assertIn("image2pipe", command)
+        self.assertIn("png", command)
+        svg = call_arg(run_call, 1, "input").decode("utf-8")
+        self.assertIn("<svg", svg)
+        self.assertIn("OpenAI Codex", svg)
+        self.assertIn("7 days", svg)
+
+    def test_ffmpeg_failure_raises_usage_error_with_exit_two(self):
+        with mock.patch.object(reporter, "subprocess") as subprocess_mock:
+            subprocess_mock.run.return_value = subprocess.CompletedProcess(
+                args=["ffmpeg"], returncode=1, stdout=b"", stderr=b"boom"
+            )
+            with self.assertRaises(reporter.UsageError) as raised:
+                reporter.render_dashboard(self.view())
+        self.assertEqual(raised.exception.exit_code, 2)
+
+    def test_missing_ffmpeg_raises_usage_error_with_exit_one(self):
+        with mock.patch.object(reporter, "subprocess") as subprocess_mock:
+            subprocess_mock.run.side_effect = FileNotFoundError("ffmpeg")
+            with self.assertRaises(reporter.UsageError) as raised:
+                reporter.render_dashboard(self.view())
+        self.assertEqual(raised.exception.exit_code, 1)
+
+    def test_ffmpeg_runs_with_the_bundled_fontconfig(self):
+        with mock.patch.object(reporter, "subprocess") as subprocess_mock:
+            subprocess_mock.run.return_value = subprocess.CompletedProcess(
+                args=["ffmpeg"], returncode=0, stdout=b"png-bytes", stderr=b""
+            )
+            reporter.render_dashboard(self.view())
+        env = subprocess_mock.run.call_args.kwargs["env"]
+        self.assertEqual(env["FONTCONFIG_FILE"], str(reporter.FONTCONFIG_PATH))
+
+    def test_missing_logo_assets_raise_usage_error_with_exit_one(self):
+        events = [dashboard.ResetEvent("openai-codex", "7 days", "weekly", 1.0, FIXED_NOW_MS - DAY_MS, 0.0, FIXED_NOW_MS + 6 * DAY_MS, "")]
+        with tempfile.TemporaryDirectory() as logo_dir, \
+                mock.patch.object(dashboard, "_LOGO_DIR", Path(logo_dir)):
+            dashboard._logo.cache_clear()
+            self.addCleanup(dashboard._logo.cache_clear)
+            for render in (reporter.render_dashboard, reporter.render_forecast):
+                with self.assertRaises(reporter.UsageError) as raised:
+                    render(self.view())
+                self.assertEqual(raised.exception.exit_code, 1)
+            with self.assertRaises(reporter.UsageError) as raised:
+                reporter.render_reset(events, FIXED_NOW_MS)
+            self.assertEqual(raised.exception.exit_code, 1)
+
+
+class PublishDashboardTests(unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.config = {"bot_token": "unit-test-token", "chat_id": "42"}
-        limits_patcher = mock.patch.object(reporter, "build_image", return_value=(b"limits-image", 0))
-        token_patcher = mock.patch.object(reporter, "build_token_image", return_value=(b"token-image", 0))
-        forecast_patcher = mock.patch.object(
-            reporter, "build_forecast_image", return_value=(b"forecast-image", 0)
+        self.payload = usage_payload(
+            limits=[window_limit(resets_at_ms=FIXED_NOW_MS + DAY_MS, used_fraction=0.24)]
         )
-        usage_patcher = mock.patch.object(
-            reporter, "run_omp_usage", return_value={"reports": [{"provider": "zai", "limits": []}]}
-        )
+        self.tokens = empty_token_snapshot()
+        self.history = plain_history_snapshot()
+        usage_patcher = mock.patch.object(reporter, "run_omp_usage", return_value=self.payload)
+        token_patcher = mock.patch.object(reporter, "collect_token_snapshot", return_value=self.tokens)
+        history_patcher = mock.patch.object(reporter, "collect_history_snapshot", return_value=self.history)
+        render_patcher = mock.patch.object(reporter, "render_dashboard", return_value=b"rendered-image")
+        forecast_patcher = mock.patch.object(reporter, "render_forecast", return_value=b"rendered-forecast")
         update_patcher = mock.patch.object(reporter, "update_pinned", return_value=True)
         announce_patcher = mock.patch.object(reporter, "announce_window_resets", return_value=0)
-        failure_patcher = mock.patch.object(
-            reporter, "fail", side_effect=lambda error: getattr(error, "exit_code", 2)
-        )
-        self.build_limits = limits_patcher.start()
-        self.build_tokens = token_patcher.start()
-        self.build_forecast = forecast_patcher.start()
         self.run_usage = usage_patcher.start()
+        self.collect_tokens = token_patcher.start()
+        self.collect_history = history_patcher.start()
+        self.render = render_patcher.start()
+        self.render_forecast = forecast_patcher.start()
         self.update = update_patcher.start()
         self.announce = announce_patcher.start()
-        self.failure = failure_patcher.start()
-        self.addCleanup(limits_patcher.stop)
-        self.addCleanup(token_patcher.stop)
-        self.addCleanup(forecast_patcher.stop)
-        self.addCleanup(usage_patcher.stop)
-        self.addCleanup(update_patcher.stop)
-        self.addCleanup(announce_patcher.stop)
-        self.addCleanup(failure_patcher.stop)
+        for patcher in (usage_patcher, token_patcher, history_patcher, render_patcher, forecast_patcher, update_patcher, announce_patcher):
+            self.addCleanup(patcher.stop)
 
-    def published(self):
-        return sorted(
-            (call_arg(call, 1, "image"), call_arg(call, 2, "state_key"))
-            for call in self.update.call_args_list
-        )
+    def rendered_view(self):
+        self.render.assert_called_once()
+        return self.render.call_args.args[0]
 
-    def published_in_order(self):
-        return [
-            (call_arg(call, 1, "image"), call_arg(call, 2, "state_key"))
-            for call in self.update.call_args_list
-        ]
+    def updates_for(self, message_key):
+        return [call for call in self.update.call_args_list if call.kwargs["message_key"] == message_key]
 
-    def test_publishes_every_image_in_order_with_independent_state_keys(self):
-        self.assertEqual(reporter.publish_images(self.config), 0)
-        self.assertEqual(
-            self.published_in_order(),
-            [
-                (b"limits-image", "message_id"),
-                (b"token-image", "tokens_message_id"),
-                (b"forecast-image", "forecast_message_id"),
-            ],
-        )
-        self.failure.assert_not_called()
-        self.announce.assert_called_once_with(
-            self.config, {"reports": [{"provider": "zai", "limits": []}]}
-        )
+    def test_successful_run_updates_usage_then_predictions(self):
+        self.assertEqual(reporter.publish_dashboard(self.config), 0)
+        view = self.rendered_view()
+        self.assertEqual(len(view.quotas), 1)
+        self.assertEqual(view.history_sources, ["WSL"])
+        self.assertFalse(view.history_partial)
+        self.assertIsNone(view.quota_issue)
+        usage, predictions = self.updates_for(reporter.LIMITS_STATE_KEY), self.updates_for(reporter.FORECAST_STATE_KEY)
+        self.assertEqual(len(usage), 1)
+        self.assertEqual(len(predictions), 1)
+        self.assertEqual(self.update.call_args_list[0], usage[0])
+        self.assertEqual(call_arg(usage[0], 0, "config"), self.config)
+        self.assertEqual(call_arg(usage[0], 1, "image"), b"rendered-image")
+        self.assertIn("OMP usage", call_arg(usage[0], 2, "caption"))
+        self.assertEqual(usage[0].kwargs["pinned_key"], reporter.PINNED_STATE_KEY)
+        self.assertFalse(usage[0].kwargs["force_pin"])
+        self.assertEqual(call_arg(predictions[0], 1, "image"), b"rendered-forecast")
+        self.assertIn("OMP predictions", call_arg(predictions[0], 2, "caption"))
+        self.assertEqual(predictions[0].kwargs["pinned_key"], reporter.FORECAST_PINNED_STATE_KEY)
+        self.assertIs(self.render_forecast.call_args.args[0], view)
+        self.announce.assert_called_once_with(self.config, self.payload)
 
-    def test_reset_announcement_failure_exits_two(self):
+    def test_token_collector_failure_still_updates_with_missing_tokens(self):
+        self.collect_tokens.side_effect = reporter.UsageError("mini-1 unavailable: ssh timed out", 2)
+        self.assertEqual(reporter.publish_dashboard(self.config), 2)
+        view = self.rendered_view()
+        self.assertIsNone(view.tokens)
+        self.assertIsNone(view.quota_issue)
+        self.assertEqual(len(self.updates_for(reporter.LIMITS_STATE_KEY)), 1)
+        self.assertEqual(len(self.updates_for(reporter.FORECAST_STATE_KEY)), 1)
+        self.announce.assert_called_once_with(self.config, self.payload)
+
+    def test_partial_token_sources_mark_the_snapshot(self):
+        self.collect_tokens.return_value = empty_token_snapshot(issues=["mini-1 unavailable: ssh timed out"])
+        self.assertEqual(reporter.publish_dashboard(self.config), 2)
+        view = self.rendered_view()
+        self.assertTrue(view.tokens["issues"])
+        self.assertEqual(self.update.call_count, 2)
+
+    def test_quota_failure_updates_usage_only_and_skips_predictions_and_resets(self):
+        self.run_usage.side_effect = reporter.UsageError("OMP usage timed out after 60s", 2)
+        self.assertEqual(reporter.publish_dashboard(self.config), 2)
+        view = self.rendered_view()
+        self.assertTrue(view.quota_issue)
+        self.assertEqual(view.quotas, [])
+        self.assertIs(view.tokens, self.tokens)
+        self.assertEqual(len(self.updates_for(reporter.LIMITS_STATE_KEY)), 1)
+        self.assertEqual(self.updates_for(reporter.FORECAST_STATE_KEY), [])
+        self.render_forecast.assert_not_called()
+        self.announce.assert_not_called()
+
+    def test_history_failure_marks_history_partial(self):
+        self.collect_history.side_effect = reporter.UsageError("mini-1 unavailable: ssh connection failed", 2)
+        self.assertEqual(reporter.publish_dashboard(self.config), 2)
+        view = self.rendered_view()
+        self.assertEqual(view.history_sources, [])
+        self.assertTrue(view.history_partial)
+        self.assertEqual(self.update.call_count, 2)
+
+    def test_predictions_render_failure_keeps_usage_update_and_reset_alert(self):
+        self.render_forecast.side_effect = reporter.UsageError("failed to load dashboard assets: logo missing", 1)
+        self.assertEqual(reporter.publish_dashboard(self.config), 1)
+        self.assertEqual(len(self.updates_for(reporter.LIMITS_STATE_KEY)), 1)
+        self.assertEqual(self.updates_for(reporter.FORECAST_STATE_KEY), [])
+        self.announce.assert_called_once_with(self.config, self.payload)
+
+    def test_predictions_update_failure_exits_two_without_blocking_other_steps(self):
+        def update(config, image, caption, *, message_key, pinned_key, force_pin=False):
+            return message_key != reporter.FORECAST_STATE_KEY
+
+        self.update.side_effect = update
+        self.assertEqual(reporter.publish_dashboard(self.config), 2)
+        self.assertEqual(self.update.call_count, 2)
+        self.announce.assert_called_once_with(self.config, self.payload)
+
+    def test_everything_unavailable_keeps_last_image_without_update(self):
+        self.run_usage.side_effect = reporter.UsageError("OMP usage timed out after 60s", 2)
+        self.collect_tokens.side_effect = reporter.UsageError("mini-1 unavailable: ssh timed out", 2)
+        self.collect_history.side_effect = reporter.UsageError("mini-1 unavailable: ssh timed out", 2)
+        self.assertEqual(reporter.publish_dashboard(self.config), 2)
+        self.update.assert_not_called()
+        self.render.assert_not_called()
+        self.announce.assert_not_called()
+
+    def test_fatal_payload_failure_keeps_available_tokens_and_exits_one(self):
+        self.run_usage.side_effect = reporter.UsageError("OMP payload has no reports", 1)
+        self.assertEqual(reporter.publish_dashboard(self.config), 1)
+        self.update.assert_called_once()
+        self.announce.assert_not_called()
+
+    def test_reset_announcement_failure_exits_two_after_both_updates(self):
         self.announce.return_value = 2
-        self.assertEqual(reporter.publish_images(self.config), 2)
+        self.assertEqual(reporter.publish_dashboard(self.config), 2)
+        self.assertEqual(self.update.call_count, 2)
 
-    def test_quota_failure_still_publishes_token_chart(self):
-        self.run_usage.side_effect = reporter.UsageError("omp usage unavailable", 2)
-        self.assertEqual(reporter.publish_images(self.config), 2)
-        self.assertEqual(self.published(), [(b"token-image", "tokens_message_id")])
-        self.failure.assert_called_once()
+    def test_failed_usage_update_exits_two_without_predictions_or_reset(self):
+        self.update.side_effect = lambda config, image, caption, **kwargs: False
+        self.assertEqual(reporter.publish_dashboard(self.config), 2)
+        self.assertEqual(self.update.call_count, 1)
+        self.announce.assert_not_called()
 
-    def test_token_collection_failure_still_publishes_limits(self):
-        self.build_tokens.side_effect = reporter.UsageError("mini-1 unavailable", 2)
-        self.assertEqual(reporter.publish_images(self.config), 2)
-        self.assertEqual(
-            self.published(),
-            [(b"forecast-image", "forecast_message_id"), (b"limits-image", "message_id")],
-        )
-        self.failure.assert_called_once()
+    def test_force_pin_flows_through_to_both_photos(self):
+        reporter.publish_dashboard(self.config, force_pin=True)
+        self.assertEqual(self.update.call_count, 2)
+        self.assertTrue(all(call.kwargs["force_pin"] for call in self.update.call_args_list))
 
-    def test_incomplete_token_snapshot_publishes_with_warning_exit(self):
-        self.build_tokens.return_value = (b"token-image", 2)
-        self.assertEqual(reporter.publish_images(self.config), 2)
-        self.assertEqual(
-            self.published(),
-            [
-                (b"forecast-image", "forecast_message_id"),
-                (b"limits-image", "message_id"),
-                (b"token-image", "tokens_message_id"),
-            ],
-        )
 
-    def test_unrecovered_tool_error_exits_one(self):
-        self.build_limits.side_effect = reporter.UsageError("no provider reports", 1)
-        self.assertEqual(reporter.publish_images(self.config), 1)
-        self.assertEqual(
-            self.published(),
-            [(b"forecast-image", "forecast_message_id"), (b"token-image", "tokens_message_id")],
-        )
-
-    def test_failed_publication_exits_two_and_attempts_every_image(self):
-        self.update.side_effect = lambda config, image, state_key: state_key == "message_id"
-        self.assertEqual(reporter.publish_images(self.config), 2)
-        self.assertEqual(len(self.update.call_args_list), 3)
-        self.assertEqual(
-            self.published(),
-            [
-                (b"forecast-image", "forecast_message_id"),
-                (b"limits-image", "message_id"),
-                (b"token-image", "tokens_message_id"),
-            ],
-        )
-
-    def test_forecast_failure_still_publishes_limits_and_tokens(self):
-        self.build_forecast.side_effect = reporter.UsageError("history unavailable", 2)
-        self.assertEqual(reporter.publish_images(self.config), 2)
-        self.assertEqual(
-            self.published(),
-            [(b"limits-image", "message_id"), (b"token-image", "tokens_message_id")],
-        )
-        self.failure.assert_called_once()
-
-    def test_payload_failure_skips_limits_and_forecast(self):
-        self.run_usage.side_effect = reporter.UsageError("omp usage unavailable", 2)
-        reporter.publish_images(self.config)
-        self.build_limits.assert_not_called()
-        self.build_forecast.assert_not_called()
+class RunModesTests(unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        self.config = {"bot_token": "unit-test-token", "chat_id": "42"}
 
     def test_run_json_prints_quota_payload_unchanged(self):
         payload = {"reports": [{"provider": "zai", "limits": []}]}
@@ -1565,26 +1842,416 @@ class PublishImagesTests(unittest.TestCase):
 
     def test_run_telegram_requires_configured_credentials(self):
         with mock.patch.object(reporter, "load_config", return_value=None), \
-                mock.patch.object(reporter, "publish_images") as publish:
+                mock.patch.object(reporter, "publish_dashboard") as publish:
             self.assertEqual(reporter.run_telegram(), 1)
         publish.assert_not_called()
 
     def test_run_telegram_delegates_to_publication(self):
         with mock.patch.object(reporter, "load_config", return_value=self.config), \
-                mock.patch.object(reporter, "publish_images", return_value=0) as publish:
+                mock.patch.object(reporter, "publish_dashboard", return_value=0) as publish:
             self.assertEqual(reporter.run_telegram(), 0)
-        publish.assert_called_once_with(self.config)
+        publish.assert_called_once()
+        self.assertEqual(publish.call_args.args, (self.config,))
+        self.assertFalse(publish.call_args.kwargs.get("force_pin", False))
 
-    def test_setup_telegram_delegates_after_validating_bot(self):
+    def test_setup_telegram_requires_configured_credentials(self):
+        with mock.patch.object(reporter, "load_config", return_value=None), \
+                mock.patch.object(reporter, "tg_call") as api, \
+                mock.patch.object(reporter, "publish_dashboard") as publish:
+            self.assertEqual(reporter.setup_telegram(), 1)
+        api.assert_not_called()
+        publish.assert_not_called()
+
+    def test_setup_telegram_verifies_bot_then_publishes_with_explicit_pin(self):
         with mock.patch.object(reporter, "load_config", return_value=self.config), \
                 mock.patch.object(
                     reporter, "tg_call", return_value={"ok": True, "result": {"username": "unitbot"}}
-                ) as get_me, \
-                mock.patch.object(reporter, "publish_images", return_value=0) as publish, \
+                ) as api, \
+                mock.patch.object(reporter, "publish_dashboard", return_value=0) as publish, \
                 contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(reporter.setup_telegram(), 0)
-        self.assertEqual(call_arg(get_me.call_args, 1, "method"), "getMe")
-        publish.assert_called_once_with(self.config)
+        self.assertEqual(call_arg(api.call_args, 1, "method"), "getMe")
+        publish.assert_called_once()
+        self.assertTrue(publish.call_args.kwargs.get("force_pin"))
+
+    def test_setup_telegram_rejects_bad_credentials_without_publishing(self):
+        with mock.patch.object(reporter, "load_config", return_value=self.config), \
+                mock.patch.object(
+                    reporter,
+                    "tg_call",
+                    side_effect=urllib.error.HTTPError(
+                        "https://api.telegram.org/bot-x/getMe", 401, "Unauthorized", {}, io.BytesIO(b"{}")
+                    ),
+                ), \
+                mock.patch.object(reporter, "publish_dashboard") as publish, \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(reporter.setup_telegram(), 1)
+        publish.assert_not_called()
+
+
+class MultipartFormTests(unittest.TestCase):
+    def test_boolean_fields_encode_as_lowercase_wire_values(self):
+        body, boundary = reporter.multipart_form(
+            {"chat_id": "42", "disable_notification": True, "caption": "<b>hi</b>"},
+            "photo",
+            "omp-usage.png",
+            b"image-bytes",
+        )
+        self.assertIn(b'name="disable_notification"\r\n\r\ntrue\r\n', body)
+        self.assertIn(b'name="caption"\r\n\r\n<b>hi</b>\r\n', body)
+        self.assertIn(b"image-bytes", body)
+        self.assertTrue(body.endswith(b"--" + boundary.encode("ascii") + b"--\r\n"))
+
+    def test_file_part_carries_png_media_with_content_type(self):
+        body, _ = reporter.multipart_form({}, "photo", "omp-usage.png", b"png-data")
+        self.assertIn(
+            b'Content-Disposition: form-data; name="photo"; filename="omp-usage.png"\r\n'
+            b"Content-Type: image/png\r\n\r\n"
+            b"png-data\r\n",
+            body,
+        )
+
+
+class UpdatePinnedTests(TelegramStateMixin):
+    CAPTION_A = "<b>OMP usage</b> · checked 2026-11-25 20:00 UTC"
+    CAPTION_B = "<b>OMP usage</b> · checked 2026-11-25 21:00 UTC"
+
+    def setUp(self):
+        super().setUp()
+        self.image = b"unit-image"
+
+    def publish(self, caption, **kwargs):
+        return reporter.update_pinned(
+            self.config,
+            self.image,
+            caption,
+            message_key=reporter.LIMITS_STATE_KEY,
+            pinned_key=reporter.PINNED_STATE_KEY,
+            **kwargs,
+        )
+
+    def photo_payload(self, message_id):
+        return {"ok": True, "result": {"message_id": message_id}}
+
+    def upload_methods(self, upload):
+        return [call_arg(call, 1, "method") for call in upload.call_args_list]
+
+    def api_methods(self, api):
+        return [call_arg(call, 1, "method") for call in api.call_args_list]
+
+    def test_edit_reuses_photo_with_html_caption_and_no_repeated_pin(self):
+        self.write_state({"message_id": 111, "pinned_message_id": 111, "reset_watch": {"keep": {}}})
+        with mock.patch.object(reporter, "tg_upload") as upload, \
+                mock.patch.object(reporter, "tg_call") as api:
+            upload.return_value = self.photo_payload(0)
+            api.return_value = {"ok": True, "result": {}}
+            self.assertTrue(self.publish(self.CAPTION_A))
+        self.assertEqual(upload.call_count, 1)
+        self.assertEqual(call_arg(upload.call_args, 1, "method"), "editMessageMedia")
+        fields = call_arg(upload.call_args, 2, "fields")
+        self.assertEqual(fields["chat_id"], "42")
+        self.assertEqual(fields["message_id"], 111)
+        self.assertNotIn("caption", fields)
+        self.assertNotIn("parse_mode", fields)
+        media = json.loads(fields["media"])
+        self.assertEqual(media["type"], "photo")
+        self.assertEqual(media["media"], "attach://photo")
+        self.assertEqual(media["caption"], self.CAPTION_A)
+        self.assertEqual(media["parse_mode"], "HTML")
+        self.assertEqual(call_arg(upload.call_args, 5, "media"), self.image)
+        self.assertNotIn("pinChatMessage", self.api_methods(api))
+        self.assertNotIn("sendMessage", self.api_methods(api))
+        self.assertEqual(
+            self.read_state(),
+            {"message_id": 111, "pinned_message_id": 111, "reset_watch": {"keep": {}}},
+        )
+
+    def test_caption_change_edits_in_place_without_resend_or_repin(self):
+        self.write_state({"message_id": 111, "pinned_message_id": 111})
+        with mock.patch.object(reporter, "tg_upload") as upload, \
+                mock.patch.object(reporter, "tg_call") as api:
+            upload.return_value = self.photo_payload(0)
+            self.assertTrue(self.publish(self.CAPTION_A))
+            self.assertTrue(self.publish(self.CAPTION_B))
+        self.assertEqual(
+            [json.loads(call_arg(call, 2, "fields")["media"])["caption"] for call in upload.call_args_list],
+            [self.CAPTION_A, self.CAPTION_B],
+        )
+        api.assert_not_called()
+
+    def test_unchanged_edit_counts_as_success_without_new_post(self):
+        self.write_state({"message_id": 111, "pinned_message_id": 111})
+        with mock.patch.object(reporter, "tg_upload") as upload, \
+                mock.patch.object(reporter, "tg_call") as api:
+            upload.side_effect = self.telegram_error("Bad Request: message is not modified")
+            self.assertTrue(self.publish(self.CAPTION_A))
+        upload.assert_called_once()
+        api.assert_not_called()
+        self.assertEqual(self.read_state(), {"message_id": 111, "pinned_message_id": 111})
+
+    def test_legacy_photo_without_pin_record_is_pinned_once(self):
+        self.write_state({"message_id": 111})
+        with mock.patch.object(reporter, "tg_upload") as upload, \
+                mock.patch.object(reporter, "tg_call") as api:
+            upload.return_value = self.photo_payload(0)
+            api.return_value = {"ok": True, "result": {}}
+            self.assertTrue(self.publish(self.CAPTION_A))
+            self.assertTrue(self.publish(self.CAPTION_A))
+        pins = [call for call in api.call_args_list if call_arg(call, 1, "method") == "pinChatMessage"]
+        self.assertEqual(len(pins), 1)
+        self.assertEqual(call_arg(pins[0], 2, "params")["message_id"], 111)
+        self.assertEqual(self.read_state(), {"message_id": 111, "pinned_message_id": 111})
+
+    def test_deleted_only_failure_replaces_photo_quietly(self):
+        self.write_state({"message_id": 111, "pinned_message_id": 111, "note": "keep"})
+        pin_state = []
+
+        def api_handle(*args, **kwargs):
+            method = args[1] if len(args) > 1 else kwargs.get("method")
+            if method == "pinChatMessage":
+                pin_state.append(self.read_state())
+            return {"ok": True, "result": {}}
+
+        with mock.patch.object(reporter, "tg_upload") as upload, \
+                mock.patch.object(reporter, "tg_call", side_effect=api_handle) as api:
+            upload.side_effect = [
+                self.telegram_error("Bad Request: message to edit not found"),
+                self.photo_payload(555),
+            ]
+            self.assertTrue(self.publish(self.CAPTION_A))
+        self.assertEqual(
+            self.upload_methods(upload),
+            ["editMessageMedia", "sendPhoto"],
+        )
+        self.assertEqual(pin_state[0]["message_id"], 555)
+        self.assertEqual(self.api_methods(api), ["pinChatMessage"])
+        self.assertEqual(call_arg(api.call_args, 2, "params")["message_id"], 555)
+        self.assertEqual(self.read_state(), {"message_id": 555, "pinned_message_id": 555, "note": "keep"})
+
+    def test_retired_images_are_deleted_after_canonical_pin_succeeds(self):
+        self.write_state({
+            "message_id": 111,
+            "pinned_message_id": 111,
+            "tokens_message_id": 42,
+            "forecast_message_id": 43,
+            "reset_watch": {"keep": {}},
+        })
+        with mock.patch.object(reporter, "tg_upload") as upload, \
+                mock.patch.object(reporter, "tg_call") as api:
+            upload.return_value = self.photo_payload(0)
+            api.return_value = {"ok": True, "result": {}}
+            self.assertTrue(self.publish(self.CAPTION_A))
+        deletions = [
+            call_arg(call, 2, "params")["message_id"]
+            for call in api.call_args_list
+            if call_arg(call, 1, "method") == "deleteMessage"
+        ]
+        self.assertEqual(deletions, [42])
+        self.assertNotIn(111, deletions)
+        self.assertEqual(
+            self.read_state(),
+            {"message_id": 111, "pinned_message_id": 111, "forecast_message_id": 43, "reset_watch": {"keep": {}}},
+        )
+
+    def test_aged_retired_image_is_unpinned_when_delete_is_refused(self):
+        self.write_state({"message_id": 111, "pinned_message_id": 42, "tokens_message_id": 42})
+        seen = []
+
+        def api_handle(*args, **kwargs):
+            method = args[1] if len(args) > 1 else kwargs.get("method")
+            params = args[2] if len(args) > 2 else (kwargs.get("params") or {})
+            seen.append((method, params.get("message_id")))
+            if method == "deleteMessage":
+                raise self.telegram_error("Bad Request: message can't be deleted")
+            return {"ok": True, "result": {}}
+
+        with mock.patch.object(reporter, "tg_upload") as upload, \
+                mock.patch.object(reporter, "tg_call", side_effect=api_handle):
+            upload.return_value = self.photo_payload(0)
+            self.assertTrue(self.publish(self.CAPTION_A))
+        self.assertIn(("deleteMessage", 42), seen)
+        self.assertIn(("unpinChatMessage", 42), seen)
+        self.assertNotIn(("deleteMessage", 111), seen)
+        self.assertEqual(self.read_state(), {"message_id": 111, "pinned_message_id": 111})
+
+    def test_transient_cleanup_failure_retries_without_new_posts_or_canonical_damage(self):
+        self.write_state({
+            "message_id": 111,
+            "pinned_message_id": 111,
+            "tokens_message_id": 42,
+            "reset_watch": {"keep": {}},
+        })
+        deletions = []
+
+        def api_handle(*args, **kwargs):
+            method = args[1] if len(args) > 1 else kwargs.get("method")
+            params = args[2] if len(args) > 2 else (kwargs.get("params") or {})
+            if method == "deleteMessage":
+                deletions.append(params.get("message_id"))
+                if len(deletions) == 1:
+                    raise OSError("temporarily unreachable")
+            return {"ok": True, "result": {}}
+
+        with mock.patch.object(reporter, "tg_upload") as upload, \
+                mock.patch.object(reporter, "tg_call", side_effect=api_handle):
+            upload.return_value = self.photo_payload(0)
+            self.assertTrue(self.publish(self.CAPTION_A))
+            self.assertEqual(self.read_state()["tokens_message_id"], 42)
+            self.assertEqual(self.read_state()["message_id"], 111)
+            self.assertTrue(self.publish(self.CAPTION_B))
+        self.assertEqual(deletions, [42, 42])
+        self.assertEqual(self.upload_methods(upload), ["editMessageMedia", "editMessageMedia"])
+        self.assertNotIn("tokens_message_id", self.read_state())
+        self.assertEqual(self.read_state()["reset_watch"], {"keep": {}})
+
+    def test_corrupt_state_is_rejected_without_posting(self):
+        self.state_path.parent.mkdir(parents=True, exist_ok=True)
+        self.state_path.write_text("not-json{{", encoding="utf-8")
+        with mock.patch.object(reporter, "tg_upload") as upload, \
+                mock.patch.object(reporter, "tg_call") as api:
+            with self.assertRaises(reporter.UsageError) as raised:
+                self.publish(self.CAPTION_A)
+        self.assertEqual(raised.exception.exit_code, 2)
+        upload.assert_not_called()
+        api.assert_not_called()
+        self.assertEqual(self.state_path.read_text(encoding="utf-8"), "not-json{{")
+
+    def test_generic_edit_failure_keeps_saved_id_without_new_post(self):
+        self.write_state({"message_id": 111, "pinned_message_id": 111})
+        with mock.patch.object(reporter, "tg_upload") as upload, \
+                mock.patch.object(reporter, "tg_call") as api:
+            upload.side_effect = self.telegram_error("Bad Request: chat not found")
+            self.assertFalse(self.publish(self.CAPTION_A))
+        upload.assert_called_once()
+        api.assert_not_called()
+        self.assertEqual(self.read_state(), {"message_id": 111, "pinned_message_id": 111})
+
+    def test_network_failure_on_edit_keeps_saved_id_without_new_post(self):
+        self.write_state({"message_id": 111, "pinned_message_id": 111})
+        with mock.patch.object(reporter, "tg_upload") as upload, \
+                mock.patch.object(reporter, "tg_call") as api:
+            upload.side_effect = TimeoutError("telegram timed out")
+            self.assertFalse(self.publish(self.CAPTION_A))
+        upload.assert_called_once()
+        api.assert_not_called()
+        self.assertEqual(self.read_state(), {"message_id": 111, "pinned_message_id": 111})
+
+    def test_rate_limited_edit_keeps_saved_id_without_new_post(self):
+        self.write_state({"message_id": 111, "pinned_message_id": 111})
+        with mock.patch.object(reporter, "tg_upload") as upload, \
+                mock.patch.object(reporter, "tg_call") as api:
+            upload.side_effect = self.telegram_error("Too Many Requests: retry after 5", code=429)
+            self.assertFalse(self.publish(self.CAPTION_A))
+        upload.assert_called_once()
+        api.assert_not_called()
+        self.assertEqual(self.read_state(), {"message_id": 111, "pinned_message_id": 111})
+
+    def test_pin_permission_failure_keeps_durable_id_and_avoids_duplicate(self):
+        self.write_state({"message_id": 111})
+        rights = {"granted": False}
+
+        def api_handle(*args, **kwargs):
+            method = args[1] if len(args) > 1 else kwargs.get("method")
+            if method == "pinChatMessage" and not rights["granted"]:
+                raise reporter.TelegramError("Telegram pinChatMessage failed: not enough rights")
+            return {"ok": True, "result": {}}
+
+        with mock.patch.object(reporter, "tg_upload") as upload, \
+                mock.patch.object(reporter, "tg_call", side_effect=api_handle):
+            upload.return_value = self.photo_payload(0)
+            self.assertFalse(self.publish(self.CAPTION_A))
+            self.assertEqual(self.read_state(), {"message_id": 111})
+            rights["granted"] = True
+            self.assertTrue(self.publish(self.CAPTION_A))
+        self.assertEqual(self.upload_methods(upload), ["editMessageMedia", "editMessageMedia"])
+        self.assertEqual(self.read_state(), {"message_id": 111, "pinned_message_id": 111})
+
+    def test_initial_send_persists_id_then_pins_quietly(self):
+        pin_params = []
+
+        def api_handle(*args, **kwargs):
+            method = args[1] if len(args) > 1 else kwargs.get("method")
+            params = args[2] if len(args) > 2 else (kwargs.get("params") or {})
+            if method == "pinChatMessage":
+                pin_params.append(params)
+            return {"ok": True, "result": {}}
+
+        with mock.patch.object(reporter, "tg_upload") as upload, \
+                mock.patch.object(reporter, "tg_call", side_effect=api_handle):
+            upload.return_value = self.photo_payload(777)
+            self.assertTrue(self.publish(self.CAPTION_A))
+        self.assertEqual(upload.call_count, 1)
+        self.assertEqual(call_arg(upload.call_args, 1, "method"), "sendPhoto")
+        fields = call_arg(upload.call_args, 2, "fields")
+        self.assertEqual(fields["chat_id"], "42")
+        self.assertEqual(fields["caption"], self.CAPTION_A)
+        self.assertEqual(fields["parse_mode"], "HTML")
+        self.assertIs(fields["disable_notification"], True)
+        self.assertEqual(call_arg(upload.call_args, 5, "media"), self.image)
+        self.assertEqual(pin_params, [{"chat_id": "42", "message_id": 777, "disable_notification": True}])
+        self.assertEqual(self.read_state(), {"message_id": 777, "pinned_message_id": 777})
+
+    def test_initial_pin_failure_keeps_sent_id_and_pins_on_next_run(self):
+        rights = {"granted": False}
+
+        def api_handle(*args, **kwargs):
+            method = args[1] if len(args) > 1 else kwargs.get("method")
+            if method == "pinChatMessage" and not rights["granted"]:
+                raise reporter.TelegramError("Telegram pinChatMessage failed: no rights")
+            return {"ok": True, "result": {}}
+
+        with mock.patch.object(reporter, "tg_upload") as upload, \
+                mock.patch.object(reporter, "tg_call", side_effect=api_handle):
+            upload.return_value = self.photo_payload(777)
+            self.assertFalse(self.publish(self.CAPTION_A))
+            self.assertEqual(self.read_state(), {"message_id": 777})
+            rights["granted"] = True
+            self.assertTrue(self.publish(self.CAPTION_A))
+        self.assertEqual(self.upload_methods(upload), ["sendPhoto", "editMessageMedia"])
+        self.assertEqual(self.read_state(), {"message_id": 777, "pinned_message_id": 777})
+
+    def test_force_pin_repins_the_canonical_message(self):
+        self.write_state({"message_id": 111, "pinned_message_id": 111})
+        with mock.patch.object(reporter, "tg_upload") as upload, \
+                mock.patch.object(reporter, "tg_call") as api:
+            upload.return_value = self.photo_payload(0)
+            api.return_value = {"ok": True, "result": {}}
+            self.assertTrue(self.publish(self.CAPTION_A, force_pin=True))
+        self.assertEqual(self.api_methods(api), ["pinChatMessage"])
+        self.assertEqual(call_arg(api.call_args, 2, "params")["message_id"], 111)
+
+    def test_predictions_photo_uses_its_own_keys_and_is_never_retired(self):
+        self.write_state({
+            "message_id": 111,
+            "pinned_message_id": 111,
+            "forecast_message_id": 222,
+            "tokens_message_id": 42,
+        })
+        with mock.patch.object(reporter, "tg_upload") as upload, \
+                mock.patch.object(reporter, "tg_call") as api:
+            upload.return_value = self.photo_payload(0)
+            api.return_value = {"ok": True, "result": {}}
+            for _ in range(2):
+                self.assertTrue(reporter.update_pinned(
+                    self.config,
+                    self.image,
+                    self.CAPTION_A,
+                    message_key=reporter.FORECAST_STATE_KEY,
+                    pinned_key=reporter.FORECAST_PINNED_STATE_KEY,
+                ))
+        self.assertEqual([call_arg(call, 2, "fields")["message_id"] for call in upload.call_args_list], [222, 222])
+        calls = [(call_arg(call, 1, "method"), call_arg(call, 2, "params")["message_id"]) for call in api.call_args_list]
+        self.assertEqual(calls.count(("pinChatMessage", 222)), 1)
+        self.assertIn(("deleteMessage", 42), calls)
+        self.assertNotIn(("deleteMessage", 222), calls)
+        self.assertNotIn(("deleteMessage", 111), calls)
+        self.assertEqual(self.read_state(), {
+            "message_id": 111,
+            "pinned_message_id": 111,
+            "forecast_message_id": 222,
+            "forecast_pinned_message_id": 222,
+        })
+
 
 def window_limit(
     limit_id="openai-codex:primary",
@@ -1597,6 +2264,7 @@ def window_limit(
     unit="percent",
     used=None,
     limit=None,
+    status="ok",
 ):
     window = {"id": window_id, "label": window_label}
     if duration_ms is not None:
@@ -1608,7 +2276,7 @@ def window_limit(
         amount["used"] = used
     if limit is not None:
         amount["limit"] = limit
-    return {"id": limit_id, "label": label, "window": window, "amount": amount, "status": "ok"}
+    return {"id": limit_id, "label": label, "window": window, "amount": amount, "status": status}
 
 
 def usage_payload(provider="openai-codex", limits=None):
@@ -1634,7 +2302,7 @@ class LongWindowKindTests(unittest.TestCase):
 
 
 class DetectWindowResetsTests(unittest.TestCase):
-    NOW_MS = 1_789_000_000_000
+    NOW_MS = FIXED_NOW_MS
 
     def entry(self, used, resets_at_ms):
         return {
@@ -1651,7 +2319,7 @@ class DetectWindowResetsTests(unittest.TestCase):
         return {"openai-codex:0:openai-codex:primary": self.entry(used, resets_at_ms)}
 
     def current(self, used=0.0, resets_at_ms=None):
-        resets = self.NOW_MS + 7 * 86_400_000 if resets_at_ms is None else resets_at_ms
+        resets = self.NOW_MS + 7 * DAY_MS if resets_at_ms is None else resets_at_ms
         return self.watch(used, resets)
 
     def test_forward_jump_with_drop_announces_closed_window(self):
@@ -1671,7 +2339,7 @@ class DetectWindowResetsTests(unittest.TestCase):
         )
 
     def test_drop_without_forward_jump_is_ignored(self):
-        same = self.NOW_MS + 7 * 86_400_000
+        same = self.NOW_MS + 7 * DAY_MS
         self.assertEqual(
             reporter.detect_window_resets(self.watch(0.95, same), self.current(used=0.0, resets_at_ms=same)),
             [],
@@ -1716,7 +2384,7 @@ class DetectWindowResetsTests(unittest.TestCase):
                 "used": 0.9,
                 "seen_at_ms": self.NOW_MS,
             }
-            current[key] = dict(previous[key], resets_at_ms=self.NOW_MS + 86_400_000, used=0.0)
+            current[key] = dict(previous[key], resets_at_ms=self.NOW_MS + DAY_MS, used=0.0)
         resets = reporter.detect_window_resets(previous, current)
         self.assertEqual(
             [(reset["provider"], reset["label"]) for reset in resets],
@@ -1737,52 +2405,42 @@ class ResetMessageTests(unittest.TestCase):
             "amount_text": "",
             "closed_used": 1.0,
             "closed_at_ms": 1_789_000_000_000,
-            "resets_at_ms": 1_789_000_000_000 + 7 * 86_400_000,
+            "resets_at_ms": 1_789_000_000_000 + 7 * DAY_MS,
             "fresh_used": 0.0,
         }
         event.update(overrides)
         return event
 
-    def test_caption_marks_weekly_reset_with_closed_usage(self):
-        caption = reporter.reset_caption([self.event()])
-        self.assertIn("🎉 <b>Weekly limit reset</b>", caption)
-        self.assertIn("<b>OpenAI Codex</b>", caption)
-        self.assertIn("closed at <b>100.0%</b> used", caption)
-        self.assertIn("fresh window resets <b>", caption)
+    def test_weekly_reset_text_marks_closed_usage(self):
+        text = reporter.reset_message([self.event()])
+        self.assertIn("<b>OpenAI Codex</b>", text)
+        self.assertIn("closed at <b>100.0%</b> used", text)
+        self.assertIn("fresh window resets <b>", text)
 
-    def test_caption_titles_follow_the_announced_kinds(self):
+    def test_titles_follow_the_announced_kinds(self):
         self.assertIn(
             "<b>Monthly limit reset</b>",
-            reporter.reset_caption([self.event(kind="monthly")]),
+            reporter.reset_message([self.event(kind="monthly")]),
         )
         self.assertIn(
             "<b>Limit resets</b>",
-            reporter.reset_caption([self.event(), self.event(kind="monthly", provider="zai", label="Monthly")]),
+            reporter.reset_message([self.event(), self.event(kind="monthly", provider="zai", label="Monthly")]),
         )
 
-    def test_caption_appends_request_amounts_when_available(self):
-        caption = reporter.reset_caption([self.event(amount_text="940/1,000 requests")])
-        self.assertIn("(940/1,000 requests)", caption)
+    def test_amounts_are_appended_when_available(self):
+        text = reporter.reset_message([self.event(amount_text="940/1,000 requests")])
+        self.assertIn("(940/1,000 requests)", text)
 
-    def test_image_text_is_plain_and_shows_fresh_capacity(self):
-        text = reporter.reset_image_text([self.event(fresh_used=0.01)])
-        self.assertIn("OpenAI Codex", text)
-        self.assertIn("7 days · fresh window", text)
-        self.assertIn("99% free · resets", text)
-        self.assertIn("closed at 100.0% used", text)
-        self.assertNotIn("<b>", text)
-
-    def test_caption_never_exceeds_the_telegram_limit(self):
+    def test_batched_text_never_exceeds_the_telegram_limit(self):
         providers = ("anthropic", "google-antigravity", "openai-codex", "opencode-go", "zai")
         events = [
             self.event(provider=provider, label=f"Long limit name {index} of {provider}")
             for provider in providers
-            for index in range(3)
+            for index in range(8)
         ]
-        caption = reporter.reset_caption(events)
-        self.assertLessEqual(len(caption), 1024)
-        self.assertRegex(caption, r"\n\+\d+ more$")
-        self.assertNotIn("2 of zai", caption)
+        text = reporter.reset_message(events)
+        self.assertLessEqual(len(text), reporter.CAPTION_MAX_CHARS)
+        self.assertRegex(text, r"\n\+\d+ more$")
 
     def test_window_amount_text_accepts_float_amounts(self):
         self.assertEqual(
@@ -1796,49 +2454,36 @@ class ResetMessageTests(unittest.TestCase):
         self.assertEqual(reporter.window_amount_text({"unit": "requests", "used": "9", "limit": 10}), "")
 
 
-class ResetAnnouncementTests(unittest.TestCase):
+class ResetAnnouncementTests(TelegramStateMixin):
     KEY = "openai-codex:0:openai-codex:primary"
+    BASE_MS = FIXED_NOW_MS
 
     def setUp(self):
         super().setUp()
-        temporary = tempfile.TemporaryDirectory(prefix="omp-reset-state-")
-        self.addCleanup(temporary.cleanup)
-        self.state_path = Path(temporary.name) / "state.json"
-        state_patcher = mock.patch.object(reporter, "CODEX_STATE_PATH", self.state_path)
-        state_patcher.start()
-        self.addCleanup(state_patcher.stop)
-        self.config = {"bot_token": "unit-test-token", "chat_id": "42"}
-
-    def write_state(self, state):
-        self.state_path.parent.mkdir(parents=True, exist_ok=True)
-        self.state_path.write_text(json.dumps(state), encoding="utf-8")
-
-    def read_state(self):
-        return json.loads(self.state_path.read_text(encoding="utf-8"))
 
     def read_watch(self):
         return self.read_state().get("reset_watch")
 
-    def payload(self, used_fraction=0.0, resets_offset_ms=7 * 86_400_000):
+    def payload(self, used_fraction=0.0, resets_offset_ms=7 * DAY_MS):
         return usage_payload(
             limits=[
                 window_limit(
-                    resets_at_ms=1_789_000_000_000 + resets_offset_ms,
+                    resets_at_ms=self.BASE_MS + resets_offset_ms,
                     used_fraction=used_fraction,
                 )
             ]
         )
 
-    def closed_watch(self):
+    def closed_watch(self, used=1.0):
         return {
             self.KEY: {
                 "provider": "openai-codex",
                 "kind": "weekly",
                 "label": "7 days",
                 "amount_text": "",
-                "resets_at_ms": 1_789_000_000_000 - 3_600_000,
-                "used": 1.0,
-                "seen_at_ms": 1_789_000_000_000 - 300_000,
+                "resets_at_ms": self.BASE_MS - HOUR_MS,
+                "used": used,
+                "seen_at_ms": self.BASE_MS - 300_000,
             }
         }
 
@@ -1847,10 +2492,10 @@ class ResetAnnouncementTests(unittest.TestCase):
             limit_id="anthropic:7d:fable",
             label="Claude 7 Day (Fable)",
             window_label="7 Day",
-            resets_at_ms=1_789_000_000_000 + 7 * 86_400_000,
+            resets_at_ms=self.BASE_MS + 7 * DAY_MS,
         )
         tracked = reporter.tracked_window_limits(
-            usage_payload(provider="anthropic", limits=[limit]), 1_789_000_000_000
+            usage_payload(provider="anthropic", limits=[limit]), self.BASE_MS
         )
         self.assertEqual(tracked["anthropic:0:anthropic:7d:fable"]["label"], "Claude 7 Day (Fable)")
 
@@ -1859,70 +2504,151 @@ class ResetAnnouncementTests(unittest.TestCase):
             limit_id="weekly",
             label="Weekly limit",
             window_label="Weekly",
-            resets_at_ms=1_789_000_000_000 + 2 * 86_400_000,
+            resets_at_ms=self.BASE_MS + 2 * DAY_MS,
             used_fraction=1.0,
         )
         fresh = window_limit(
             limit_id="weekly",
             label="Weekly limit",
             window_label="Weekly",
-            resets_at_ms=1_789_000_000_000 + 7 * 86_400_000,
+            resets_at_ms=self.BASE_MS + 7 * DAY_MS,
             used_fraction=0.0,
         )
         shared = {"reports": [{"provider": "opencode-go", "limits": [spent]}, {"provider": "opencode-go", "limits": [fresh]}]}
-        self.assertEqual(reporter.tracked_window_limits(shared, 1_789_000_000_000), {})
+        self.assertEqual(reporter.tracked_window_limits(shared, self.BASE_MS), {})
         distinct = {
             "reports": [
                 {"provider": "opencode-go", "limits": [spent]},
                 {"provider": "opencode-go", "limits": [dict(fresh, id="monthly")]},
             ]
         }
-        tracked = reporter.tracked_window_limits(distinct, 1_789_000_000_000)
+        tracked = reporter.tracked_window_limits(distinct, self.BASE_MS)
         self.assertEqual(sorted(tracked), ["opencode-go:0:weekly", "opencode-go:1:monthly"])
         self.assertEqual(tracked["opencode-go:0:weekly"]["used"], 1.0)
         self.assertEqual(tracked["opencode-go:1:monthly"]["used"], 0.0)
 
-    def test_first_run_records_baseline_without_sending(self):
-        with mock.patch.object(reporter, "tg_send_photo") as send:
+    def test_first_run_records_baseline_without_messaging(self):
+        with mock.patch.object(reporter, "tg_call") as api, \
+                mock.patch.object(reporter, "tg_upload") as upload:
             self.assertEqual(reporter.announce_window_resets(self.config, self.payload()), 0)
-        send.assert_not_called()
+        api.assert_not_called()
+        upload.assert_not_called()
         watch = self.read_watch()
         self.assertEqual(list(watch), [self.KEY])
         self.assertEqual(watch[self.KEY]["used"], 0.0)
         self.assertEqual(watch[self.KEY]["kind"], "weekly")
 
-    def test_window_rollover_sends_reset_message_and_updates_watch(self):
+    def test_window_rollover_sends_one_notifying_photo_and_updates_watch(self):
         self.write_state({"message_id": 5, "reset_watch": self.closed_watch()})
-        with mock.patch.object(reporter, "build_reset_image", return_value=b"reset-image") as build, \
-                mock.patch.object(reporter, "tg_send_photo", return_value=123) as send:
+        with mock.patch.object(reporter, "tg_upload") as upload, \
+                mock.patch.object(reporter, "tg_call") as api:
+            upload.return_value = {"ok": True, "result": {"message_id": 9}}
             self.assertEqual(reporter.announce_window_resets(self.config, self.payload()), 0)
-        build.assert_called_once()
-        send.assert_called_once()
-        self.assertEqual(call_arg(send.call_args, 1, "image"), b"reset-image")
-        caption = call_arg(send.call_args, 2, "caption")
-        self.assertIn("Weekly limit reset", caption)
-        self.assertIn("OpenAI Codex", caption)
-        self.assertEqual(self.read_watch()[self.KEY]["resets_at_ms"], 1_789_000_000_000 + 7 * 86_400_000)
+        upload.assert_called_once()
+        self.assertEqual(call_arg(upload.call_args, 0, "bot_token"), "unit-test-token")
+        self.assertEqual(call_arg(upload.call_args, 1, "method"), "sendPhoto")
+        fields = call_arg(upload.call_args, 2, "fields")
+        self.assertEqual(fields["chat_id"], "42")
+        self.assertIs(fields["disable_notification"], False)
+        self.assertIn("Weekly limit reset", fields["caption"])
+        self.assertIn("OpenAI Codex", fields["caption"])
+        image = call_arg(upload.call_args, 5, "media")
+        self.assertTrue(image.startswith(b"\x89PNG\r\n\x1a\n"))
+        api.assert_not_called()
+        self.assertEqual(self.read_watch()[self.KEY]["resets_at_ms"], self.BASE_MS + 7 * DAY_MS)
         self.assertEqual(self.read_state()["message_id"], 5)
+
+    def test_weekly_and_monthly_resets_batch_into_one_photo(self):
+        watch = self.closed_watch()
+        monthly_key = "zai:0:zai:monthly"
+        watch[monthly_key] = {
+            "provider": "zai",
+            "kind": "monthly",
+            "label": "Monthly",
+            "amount_text": "",
+            "resets_at_ms": self.BASE_MS - HOUR_MS,
+            "used": 1.0,
+            "seen_at_ms": self.BASE_MS - 300_000,
+        }
+        payload = {
+            "generatedAt": 1,
+            "reports": [
+                {
+                    "provider": "openai-codex",
+                    "limits": [window_limit(resets_at_ms=self.BASE_MS + 7 * DAY_MS, used_fraction=0.0)],
+                },
+                {
+                    "provider": "zai",
+                    "limits": [
+                        window_limit(
+                            limit_id="zai:monthly",
+                            label="Monthly",
+                            window_label="Monthly",
+                            duration_ms=30 * DAY_MS,
+                            resets_at_ms=self.BASE_MS + 30 * DAY_MS,
+                            used_fraction=0.0,
+                        )
+                    ],
+                },
+            ],
+        }
+        self.write_state({"reset_watch": watch})
+        with mock.patch.object(reporter, "tg_upload") as upload:
+            upload.return_value = {"ok": True, "result": {"message_id": 9}}
+            self.assertEqual(reporter.announce_window_resets(self.config, payload), 0)
+        upload.assert_called_once()
+        caption = call_arg(upload.call_args, 2, "fields")["caption"]
+        self.assertIn("Limit resets", caption)
+        self.assertIn("OpenAI Codex", caption)
+        self.assertIn("ZAI", caption)
+        self.assertEqual(sorted(self.read_watch()), sorted([self.KEY, monthly_key]))
 
     def test_failed_send_returns_two_and_retries_next_run(self):
         self.write_state({"reset_watch": self.closed_watch()})
-        with mock.patch.object(reporter, "build_reset_image", return_value=b"reset-image"), \
-                mock.patch.object(
-                    reporter, "tg_send_photo", side_effect=reporter.TelegramError("sendPhoto failed")
-                ) as send:
+        with mock.patch.object(
+            reporter, "tg_upload", side_effect=reporter.TelegramError("Telegram sendPhoto failed")
+        ) as upload:
             self.assertEqual(reporter.announce_window_resets(self.config, self.payload()), 2)
             self.assertEqual(reporter.announce_window_resets(self.config, self.payload()), 2)
-        self.assertEqual(send.call_count, 2)
+        self.assertEqual(upload.call_count, 2)
         self.assertEqual(self.read_watch(), self.closed_watch())
 
-    def test_below_floor_rollover_updates_watch_without_sending(self):
-        watch = self.closed_watch()
-        watch[self.KEY]["used"] = 0.03
-        self.write_state({"reset_watch": watch})
-        with mock.patch.object(reporter, "tg_send_photo") as send:
+    def test_render_failure_returns_one_and_keeps_watch_for_retry(self):
+        self.write_state({"reset_watch": self.closed_watch()})
+        with mock.patch.object(reporter, "render_reset") as render, \
+                mock.patch.object(reporter, "tg_upload", return_value={"ok": True, "result": {"message_id": 9}}) as upload:
+            render.side_effect = [reporter.UsageError("failed to load dashboard assets: logo missing", 1), b"reset-image"]
+            self.assertEqual(reporter.announce_window_resets(self.config, self.payload()), 1)
+            upload.assert_not_called()
+            self.assertEqual(self.read_watch(), self.closed_watch())
             self.assertEqual(reporter.announce_window_resets(self.config, self.payload()), 0)
-        send.assert_not_called()
+        upload.assert_called_once()
+
+    def test_reset_events_convert_fractions_to_percents(self):
+        closed_at = self.BASE_MS - HOUR_MS
+        resets_at = self.BASE_MS + 7 * DAY_MS
+        event = reporter.reset_events([{
+            "provider": "openai-codex",
+            "kind": "weekly",
+            "label": "7 days",
+            "amount_text": "940/1,000 requests",
+            "closed_used": 0.92,
+            "closed_at_ms": closed_at,
+            "resets_at_ms": resets_at,
+            "fresh_used": 0.02,
+        }])[0]
+        self.assertEqual(
+            (event.provider, event.label, event.kind, event.closed_used_percent, event.fresh_used_percent),
+            ("openai-codex", "7 days", "weekly", 92.0, 2.0),
+        )
+        self.assertEqual((event.closed_at_ms, event.resets_at_ms, event.amount_text), (closed_at, resets_at, "940/1,000 requests"))
+
+    def test_below_floor_rollover_updates_watch_without_messaging(self):
+        watch = self.closed_watch(used=0.03)
+        self.write_state({"reset_watch": watch})
+        with mock.patch.object(reporter, "tg_upload") as upload:
+            self.assertEqual(reporter.announce_window_resets(self.config, self.payload()), 0)
+        upload.assert_not_called()
         self.assertEqual(self.read_watch()[self.KEY]["used"], 0.0)
 
     def test_short_windows_are_not_tracked(self):
@@ -1932,15 +2658,15 @@ class ResetAnnouncementTests(unittest.TestCase):
             window_label="5 Hours",
             window_id="5h",
             duration_ms=18_000_000,
-            resets_at_ms=1_789_000_000_000 + 3_600_000,
+            resets_at_ms=self.BASE_MS + HOUR_MS,
             used_fraction=0.5,
         )
-        with mock.patch.object(reporter, "tg_send_photo") as send:
+        with mock.patch.object(reporter, "tg_call") as api:
             self.assertEqual(
                 reporter.announce_window_resets(self.config, usage_payload(provider="zai", limits=[limit])),
                 0,
             )
-        send.assert_not_called()
+        api.assert_not_called()
         self.assertFalse(self.state_path.exists())
 
     def test_stale_entries_past_ttl_are_pruned_on_save(self):
@@ -1960,10 +2686,11 @@ class ResetAnnouncementTests(unittest.TestCase):
                 }
             }
         )
-        with mock.patch.object(reporter, "tg_send_photo") as send:
+        with mock.patch.object(reporter, "tg_call") as api:
             self.assertEqual(reporter.announce_window_resets(self.config, self.payload()), 0)
-        send.assert_not_called()
+        api.assert_not_called()
         self.assertEqual(list(self.read_watch()), [self.KEY])
+
 
 def forecast_limit(
     used_fraction=0.24,
@@ -2017,11 +2744,11 @@ def forecast_snapshot(
     }
 
 class HistorySeriesTests(unittest.TestCase):
-    NOW_MS = 1_789_000_000_000
+    NOW_MS = FIXED_NOW_MS
 
     def snapshot(self, samples):
         return {
-            "start_ms": self.NOW_MS - 7 * 86_400_000,
+            "start_ms": self.NOW_MS - 7 * DAY_MS,
             "end_ms": self.NOW_MS,
             "samples": samples,
             "sources_ok": ["WSL", "mini-1"],
@@ -2040,58 +2767,58 @@ class HistorySeriesTests(unittest.TestCase):
     def test_samples_from_every_account_key_join_one_series(self):
         snapshot = self.snapshot(
             [
-                self.sample(self.NOW_MS - 3 * 3_600_000, 0.10, "oauth|account:a"),
-                self.sample(self.NOW_MS - 2 * 3_600_000, 0.20, "oauth|account:a|email:x"),
-                self.sample(self.NOW_MS - 1 * 3_600_000, 0.30, "oauth|account:a|email:x|org:y"),
+                self.sample(self.NOW_MS - 3 * HOUR_MS, 0.10, "oauth|account:a"),
+                self.sample(self.NOW_MS - 2 * HOUR_MS, 0.20, "oauth|account:a|email:x"),
+                self.sample(self.NOW_MS - 1 * HOUR_MS, 0.30, "oauth|account:a|email:x|org:y"),
             ]
         )
         series = reporter.history_series(snapshot, "openai-codex", "openai-codex:primary")
         self.assertEqual(
             series,
             [
-                (self.NOW_MS - 3 * 3_600_000, 0.10),
-                (self.NOW_MS - 2 * 3_600_000, 0.20),
-                (self.NOW_MS - 1 * 3_600_000, 0.30),
+                (self.NOW_MS - 3 * HOUR_MS, 0.10),
+                (self.NOW_MS - 2 * HOUR_MS, 0.20),
+                (self.NOW_MS - 1 * HOUR_MS, 0.30),
             ],
         )
 
     def test_shared_quota_reported_twice_collapses_to_the_higher_fraction(self):
         snapshot = self.snapshot(
             [
-                self.sample(self.NOW_MS - 3_600_000, 0.61, "api_key|secret:one"),
-                self.sample(self.NOW_MS - 3_600_000, 0.64, "api_key|secret:two"),
+                self.sample(self.NOW_MS - HOUR_MS, 0.61, "api_key|secret:one"),
+                self.sample(self.NOW_MS - HOUR_MS, 0.64, "api_key|secret:two"),
             ]
         )
         series = reporter.history_series(snapshot, "openai-codex", "openai-codex:primary")
-        self.assertEqual(series, [(self.NOW_MS - 3_600_000, 0.64)])
+        self.assertEqual(series, [(self.NOW_MS - HOUR_MS, 0.64)])
 
     def test_burn_rate_uses_the_full_cross_account_series(self):
         series = reporter.history_series(
             self.snapshot(
                 [
-                    self.sample(self.NOW_MS - 24 * 3_600_000, 0.0, "oauth|account:a"),
-                    self.sample(self.NOW_MS - 12 * 3_600_000, 0.12, "oauth|account:a|email:x"),
+                    self.sample(self.NOW_MS - 24 * HOUR_MS, 0.0, "oauth|account:a"),
+                    self.sample(self.NOW_MS - 12 * HOUR_MS, 0.12, "oauth|account:a|email:x"),
                 ]
             ),
             "openai-codex",
             "openai-codex:primary",
         )
-        rate = reporter.burn_rate(series, self.NOW_MS, 0.24, 24 * 3_600_000)
+        rate = reporter.burn_rate(series, self.NOW_MS, 0.24, 24 * HOUR_MS)
         self.assertAlmostEqual(rate, 0.01, places=4)
 
     def test_other_providers_and_limits_are_excluded(self):
         snapshot = self.snapshot(
             [
-                self.sample(self.NOW_MS - 3_600_000, 0.10),
+                self.sample(self.NOW_MS - HOUR_MS, 0.10),
                 {
-                    "recorded_at_ms": self.NOW_MS - 3_600_000,
+                    "recorded_at_ms": self.NOW_MS - HOUR_MS,
                     "provider": "anthropic",
                     "account_key": "acct",
                     "limit_id": "openai-codex:primary",
                     "used_fraction": 0.99,
                 },
                 {
-                    "recorded_at_ms": self.NOW_MS - 3_600_000,
+                    "recorded_at_ms": self.NOW_MS - HOUR_MS,
                     "provider": "openai-codex",
                     "account_key": "acct",
                     "limit_id": "openai-codex:spark:primary",
@@ -2100,7 +2827,7 @@ class HistorySeriesTests(unittest.TestCase):
             ]
         )
         series = reporter.history_series(snapshot, "openai-codex", "openai-codex:primary")
-        self.assertEqual(series, [(self.NOW_MS - 3_600_000, 0.10)])
+        self.assertEqual(series, [(self.NOW_MS - HOUR_MS, 0.10)])
 
 
 def forecast_shape(
@@ -2116,7 +2843,7 @@ def forecast_shape(
         "label": "7 days",
         "used": used,
         "resets_at_ms": resets_at_ms,
-        "window_ms": 7 * 24 * 3_600_000,
+        "window_ms": 7 * DAY_MS,
         "rate_per_hour": None,
         "projected": projected,
         "exhaust_in_ms": exhaust_in_ms,
@@ -2132,12 +2859,12 @@ def forecast_shape(
 class ForecastModelTests(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.now_ms = 1_789_000_000_000
+        self.now_ms = FIXED_NOW_MS
 
     def test_linear_usage_over_twenty_four_hours_projects_run_out(self):
-        duration_ms = 7 * 24 * 3_600_000
-        resets_at_ms = self.now_ms + 6 * 24 * 3_600_000
-        series = [(self.now_ms - 24 * 3_600_000, 0.0)]
+        duration_ms = 7 * DAY_MS
+        resets_at_ms = self.now_ms + 6 * DAY_MS
+        series = [(self.now_ms - 24 * HOUR_MS, 0.0)]
         limit = forecast_limit(
             used_fraction=0.24,
             resets_at_ms=resets_at_ms,
@@ -2149,17 +2876,17 @@ class ForecastModelTests(unittest.TestCase):
         self.assertEqual(f["projected"], 1.0)
         self.assertEqual(f["verdict"], "RUN OUT")
         self.assertIsNotNone(f["exhaust_in_ms"])
-        self.assertAlmostEqual(f["exhaust_in_ms"], 76 * 3_600_000, delta=60_000)
+        self.assertAlmostEqual(f["exhaust_in_ms"], 76 * HOUR_MS, delta=60_000)
         self.assertEqual(len(f["spark"]), 48)
         self.assertIsNone(f["spark"][0])
         self.assertTrue(any(v is not None for v in f["spark"]))
 
     def test_flat_history_verdict_is_spare(self):
-        series = [(self.now_ms - 24 * 3_600_000, 0.15)]
+        series = [(self.now_ms - 24 * HOUR_MS, 0.15)]
         limit = forecast_limit(
             used_fraction=0.15,
-            resets_at_ms=self.now_ms + 24 * 3_600_000,
-            duration_ms=7 * 24 * 3_600_000,
+            resets_at_ms=self.now_ms + 24 * HOUR_MS,
+            duration_ms=7 * DAY_MS,
         )
         snapshot = forecast_snapshot(series)
         f = reporter.build_forecast(limit, "openai-codex", snapshot, self.now_ms)
@@ -2170,13 +2897,13 @@ class ForecastModelTests(unittest.TestCase):
 
     def test_reset_inside_lookback_uses_only_post_drop_samples(self):
         series = [
-            (self.now_ms - 20 * 3_600_000, 0.90),
-            (self.now_ms - 10 * 3_600_000, 0.05),
+            (self.now_ms - 20 * HOUR_MS, 0.90),
+            (self.now_ms - 10 * HOUR_MS, 0.05),
         ]
         limit = forecast_limit(
             used_fraction=0.15,
-            resets_at_ms=self.now_ms + 48 * 3_600_000,
-            duration_ms=7 * 24 * 3_600_000,
+            resets_at_ms=self.now_ms + 48 * HOUR_MS,
+            duration_ms=7 * DAY_MS,
         )
         snapshot = forecast_snapshot(series)
         f = reporter.build_forecast(limit, "openai-codex", snapshot, self.now_ms)
@@ -2185,7 +2912,7 @@ class ForecastModelTests(unittest.TestCase):
     def test_used_at_one_is_exhausted(self):
         limit = forecast_limit(
             used_fraction=1.0,
-            resets_at_ms=self.now_ms + 10 * 3_600_000,
+            resets_at_ms=self.now_ms + 10 * HOUR_MS,
         )
         f = reporter.build_forecast(limit, "openai-codex", forecast_snapshot([]), self.now_ms)
         self.assertEqual(f["verdict"], "EXHAUSTED")
@@ -2194,7 +2921,7 @@ class ForecastModelTests(unittest.TestCase):
         series = [(self.now_ms - 30 * 60 * 1_000, 0.10)]
         limit = forecast_limit(
             used_fraction=0.12,
-            resets_at_ms=self.now_ms + 10 * 3_600_000,
+            resets_at_ms=self.now_ms + 10 * HOUR_MS,
         )
         f = reporter.build_forecast(limit, "openai-codex", forecast_snapshot(series), self.now_ms)
         self.assertIsNone(f["rate_per_hour"])
@@ -2203,21 +2930,21 @@ class ForecastModelTests(unittest.TestCase):
     def test_missing_used_fraction_is_no_data(self):
         limit = forecast_limit(
             used_fraction=None,
-            resets_at_ms=self.now_ms + 10 * 3_600_000,
+            resets_at_ms=self.now_ms + 10 * HOUR_MS,
         )
         f = reporter.build_forecast(limit, "openai-codex", forecast_snapshot([]), self.now_ms)
         self.assertIsNone(f["used"])
         self.assertEqual(f["verdict"], "NO DATA")
 
     def test_short_window_duration_selects_short_lookback(self):
-        duration_ms = 5 * 3_600_000
+        duration_ms = 5 * HOUR_MS
         series = [
-            (self.now_ms - 10 * 3_600_000, 0.0),
-            (self.now_ms - 2 * 3_600_000, 0.10),
+            (self.now_ms - 10 * HOUR_MS, 0.0),
+            (self.now_ms - 2 * HOUR_MS, 0.10),
         ]
         limit = forecast_limit(
             used_fraction=0.20,
-            resets_at_ms=self.now_ms + 3 * 3_600_000,
+            resets_at_ms=self.now_ms + 3 * HOUR_MS,
             duration_ms=duration_ms,
         )
         snapshot = forecast_snapshot(series)
@@ -2228,22 +2955,22 @@ class ForecastModelTests(unittest.TestCase):
         self.assertTrue(rate_text.endswith("%/h"))
 
     def test_projected_between_eighty_five_and_one_hundred_is_hot(self):
-        series = [(self.now_ms - 24 * 3_600_000, 0.0)]
+        series = [(self.now_ms - 24 * HOUR_MS, 0.0)]
         limit = forecast_limit(
             used_fraction=0.30,
-            resets_at_ms=self.now_ms + 48 * 3_600_000,
-            duration_ms=7 * 24 * 3_600_000,
+            resets_at_ms=self.now_ms + 48 * HOUR_MS,
+            duration_ms=7 * DAY_MS,
         )
         f = reporter.build_forecast(limit, "openai-codex", forecast_snapshot(series), self.now_ms)
         self.assertEqual(f["verdict"], "HOT")
         self.assertAlmostEqual(f["projected"], 0.9, places=3)
 
     def test_projected_between_fifty_and_eighty_five_is_on_pace(self):
-        series = [(self.now_ms - 24 * 3_600_000, 0.0)]
+        series = [(self.now_ms - 24 * HOUR_MS, 0.0)]
         limit = forecast_limit(
             used_fraction=0.20,
-            resets_at_ms=self.now_ms + 48 * 3_600_000,
-            duration_ms=7 * 24 * 3_600_000,
+            resets_at_ms=self.now_ms + 48 * HOUR_MS,
+            duration_ms=7 * DAY_MS,
         )
         f = reporter.build_forecast(limit, "openai-codex", forecast_snapshot(series), self.now_ms)
         self.assertEqual(f["verdict"], "ON PACE")
@@ -2251,45 +2978,89 @@ class ForecastModelTests(unittest.TestCase):
 
 
 class ForecastRowsTests(unittest.TestCase):
-    def test_forecast_rows_filters_orders_and_sorts_limits(self):
-        now_ms = 1_789_000_000_000
-        payload = {
-            "reports": [
-                {
-                    "provider": "google-antigravity",
-                    "limits": [
-                        forecast_limit(limit_id="ga:daily", label="Daily", resets_at_ms=now_ms + 1_000),
-                    ],
-                },
-                {
-                    "provider": "anthropic",
-                    "limits": [],
-                },
-                {
-                    "provider": "zai",
-                    "limits": [
-                        forecast_limit(limit_id="zai:late", label="Late", resets_at_ms=now_ms + 10_000_000),
-                        forecast_limit(limit_id="zai:early", label="Early", resets_at_ms=now_ms + 1_000_000),
-                    ],
-                },
-                {
-                    "provider": "openai-codex",
-                    "limits": [
-                        forecast_limit(limit_id="codex:primary", label="Primary", resets_at_ms=now_ms + 5_000_000),
-                    ],
-                },
-            ]
+    NOW_MS = FIXED_NOW_MS
+
+    def test_each_sorted_limit_yields_one_forecast_in_order(self):
+        limits = [
+            forecast_limit(limit_id="zai:early", label="Early", resets_at_ms=self.NOW_MS + 1_000_000),
+            forecast_limit(limit_id="zai:late", label="Late", resets_at_ms=self.NOW_MS + 10_000_000),
+        ]
+        rows = reporter.forecast_rows("zai", limits, forecast_snapshot([]), self.NOW_MS)
+        self.assertEqual([f["limit_id"] for f in rows], ["zai:early", "zai:late"])
+        self.assertTrue(all(f["provider"] == "zai" for f in rows))
+        self.assertTrue(all(f["verdict"] == "NO DATA" for f in rows))
+
+    def test_empty_limits_yield_no_forecasts(self):
+        self.assertEqual(
+            reporter.forecast_rows("zai", [], forecast_snapshot([]), self.NOW_MS),
+            [],
+        )
+
+    def test_short_window_couples_to_long_window_within_provider(self):
+        limits = [
+            forecast_limit(
+                limit_id="anthropic:5h",
+                label="Claude 5 Hour",
+                used_fraction=0.46,
+                resets_at_ms=self.NOW_MS + 2 * HOUR_MS,
+                duration_ms=5 * HOUR_MS,
+            ),
+            forecast_limit(
+                limit_id="anthropic:7d",
+                label="Claude 7 Day",
+                used_fraction=0.51,
+                resets_at_ms=self.NOW_MS + 6 * DAY_MS,
+                duration_ms=7 * DAY_MS,
+            ),
+        ]
+        samples = [
+            {
+                "recorded_at_ms": self.NOW_MS - HOUR_MS,
+                "provider": "anthropic",
+                "account_key": "acct",
+                "limit_id": "anthropic:5h",
+                "used_fraction": 0.00,
+            },
+            {
+                "recorded_at_ms": self.NOW_MS,
+                "provider": "anthropic",
+                "account_key": "acct",
+                "limit_id": "anthropic:5h",
+                "used_fraction": 0.50,
+            },
+            {
+                "recorded_at_ms": self.NOW_MS - HOUR_MS,
+                "provider": "anthropic",
+                "account_key": "acct",
+                "limit_id": "anthropic:7d",
+                "used_fraction": 0.10,
+            },
+            {
+                "recorded_at_ms": self.NOW_MS,
+                "provider": "anthropic",
+                "account_key": "acct",
+                "limit_id": "anthropic:7d",
+                "used_fraction": 0.20,
+            },
+        ]
+        snapshot = {
+            "start_ms": self.NOW_MS - 7 * DAY_MS,
+            "end_ms": self.NOW_MS,
+            "samples": samples,
+            "sources_ok": ["WSL"],
+            "issues": [],
         }
-        snapshot = forecast_snapshot([])
-        rows = reporter.forecast_rows(payload, snapshot, now_ms)
-        self.assertEqual([provider for provider, _ in rows], ["openai-codex", "zai"])
-        zai_limits = [f["limit_id"] for f in rows[1][1]]
-        self.assertEqual(zai_limits, ["zai:early", "zai:late"])
+        rows = reporter.forecast_rows("anthropic", limits, snapshot, self.NOW_MS)
+        short, long = rows
+        self.assertEqual(short["limit_id"], "anthropic:5h")
+        self.assertEqual(short["coupled_limit_id"], "anthropic:7d")
+        self.assertAlmostEqual(short["coupled_ratio"], 0.2, places=3)
+        self.assertIsNone(long["coupled_limit_id"])
 
 
 class WindowCouplingTests(unittest.TestCase):
-    NOW_MS = 1_789_000_000_000
-    HOUR_MS = 3_600_000
+    NOW_MS = FIXED_NOW_MS
+    HOUR_MS = HOUR_MS
 
     def coupled_snapshot(self, short_series, long_series, provider="anthropic", long_id="anthropic:7d"):
         samples = [
@@ -2312,7 +3083,7 @@ class WindowCouplingTests(unittest.TestCase):
             for t, frac in long_series
         ]
         return {
-            "start_ms": self.NOW_MS - 7 * 86_400_000,
+            "start_ms": self.NOW_MS - 7 * DAY_MS,
             "end_ms": self.NOW_MS,
             "samples": samples,
             "sources_ok": ["WSL"],
@@ -2481,7 +3252,7 @@ class WindowCouplingTests(unittest.TestCase):
                     for index, fraction in enumerate(fractions)
                 )
             return {
-                "start_ms": self.NOW_MS - 7 * 86_400_000,
+                "start_ms": self.NOW_MS - 7 * DAY_MS,
                 "end_ms": self.NOW_MS,
                 "samples": samples,
                 "sources_ok": ["WSL"],
@@ -2549,7 +3320,7 @@ class WindowCouplingTests(unittest.TestCase):
             },
         ]
         snapshot = {
-            "start_ms": self.NOW_MS - 7 * 86_400_000,
+            "start_ms": self.NOW_MS - 7 * DAY_MS,
             "end_ms": self.NOW_MS,
             "samples": samples,
             "sources_ok": ["WSL"],
@@ -2570,41 +3341,6 @@ class WindowCouplingTests(unittest.TestCase):
         self.assertIsNone(result[0]["coupled_limit_id"])
         self.assertIsNone(result[0]["coupled_burn"])
 
-    def test_forecast_rows_couples_short_window_to_long_window(self):
-        now_ms = self.NOW_MS
-        payload = {
-            "reports": [
-                {
-                    "provider": "anthropic",
-                    "limits": [
-                        forecast_limit(
-                            limit_id="anthropic:5h",
-                            label="Claude 5 Hour",
-                            used_fraction=0.46,
-                            resets_at_ms=now_ms + 2 * self.HOUR_MS,
-                            duration_ms=5 * self.HOUR_MS,
-                        ),
-                        forecast_limit(
-                            limit_id="anthropic:7d",
-                            label="Claude 7 Day",
-                            used_fraction=0.51,
-                            resets_at_ms=now_ms + 6 * 24 * self.HOUR_MS,
-                            duration_ms=7 * 24 * self.HOUR_MS,
-                        ),
-                    ],
-                }
-            ]
-        }
-        snapshot = self.coupled_snapshot(
-            [(now_ms - self.HOUR_MS, 0.00), (now_ms, 0.50)],
-            [(now_ms - self.HOUR_MS, 0.10), (now_ms, 0.20)],
-        )
-        rows = reporter.forecast_rows(payload, snapshot, now_ms)
-        forecasts = {f["limit_id"]: f for f in rows[0][1]}
-        self.assertAlmostEqual(forecasts["anthropic:5h"]["coupled_ratio"], 0.2, places=3)
-        self.assertEqual(forecasts["anthropic:5h"]["coupled_limit_id"], "anthropic:7d")
-        self.assertIsNone(forecasts["anthropic:7d"]["coupled_limit_id"])
-
     def test_fmt_window_short_labels_hours_days_and_unknown(self):
         self.assertEqual(reporter.fmt_window_short(5 * self.HOUR_MS), "5h")
         self.assertEqual(reporter.fmt_window_short(7 * 24 * self.HOUR_MS), "7d")
@@ -2616,7 +3352,7 @@ class FmtDurationTests(unittest.TestCase):
     def test_zero_and_negative_durations_read_as_now(self):
         self.assertEqual(reporter.fmt_duration(0), "~now")
         self.assertEqual(reporter.fmt_duration(-1), "~now")
-        self.assertEqual(reporter.fmt_duration(-3_600_000), "~now")
+        self.assertEqual(reporter.fmt_duration(-HOUR_MS), "~now")
 
     def test_minute_boundaries_round_up_to_singular_and_plural(self):
         self.assertEqual(reporter.fmt_duration(60_000), "~in 1 minute")
@@ -2628,42 +3364,42 @@ class FmtDurationTests(unittest.TestCase):
         self.assertEqual(reporter.fmt_duration(7_200_000), "~in 2 hours")
 
     def test_day_boundaries_round_up_to_singular_and_plural(self):
-        self.assertEqual(reporter.fmt_duration(86_400_000), "~in 1 day")
-        self.assertEqual(reporter.fmt_duration(172_800_000), "~in 2 days")
+        self.assertEqual(reporter.fmt_duration(DAY_MS), "~in 1 day")
+        self.assertEqual(reporter.fmt_duration(2 * DAY_MS), "~in 2 days")
 
     def test_reset_estimate_three_hours_out_matches_duration_text(self):
-        resets_at_ms = int(datetime.now(timezone.utc).timestamp() * 1000) + 3 * 3_600_000
+        resets_at_ms = int(datetime.now(timezone.utc).timestamp() * 1000) + 3 * HOUR_MS
         self.assertEqual(reporter.fmt_reset_estimate(resets_at_ms), "~in 3 hours")
-        self.assertEqual(reporter.fmt_reset_estimate(resets_at_ms), reporter.fmt_duration(3 * 3_600_000))
+        self.assertEqual(reporter.fmt_reset_estimate(resets_at_ms), reporter.fmt_duration(3 * HOUR_MS))
 
 
 class ForecastAdviceTests(unittest.TestCase):
-    NOW_MS = 1_789_000_000_000
+    NOW_MS = FIXED_NOW_MS
 
     def test_run_out_advice_counts_exhaustion_and_gap_before_reset(self):
         shape = forecast_shape(
             verdict="RUN OUT",
             used=0.5,
-            resets_at_ms=self.NOW_MS + 7 * 24 * 3_600_000,
+            resets_at_ms=self.NOW_MS + 7 * DAY_MS,
             projected=1.0,
-            exhaust_in_ms=5 * 24 * 3_600_000,
+            exhaust_in_ms=5 * DAY_MS,
         )
         self.assertEqual(
             reporter.forecast_advice(shape, self.NOW_MS),
-            "tone it down \u00b7 hits 100% ~in 5 days, ~in 2 days before reset",
+            "tone it down · hits 100% ~in 5 days, ~in 2 days before reset",
         )
 
     def test_run_out_advice_clamps_gap_before_reset_at_now(self):
         shape = forecast_shape(
             verdict="RUN OUT",
             used=0.5,
-            resets_at_ms=self.NOW_MS + 2 * 24 * 3_600_000,
+            resets_at_ms=self.NOW_MS + 2 * DAY_MS,
             projected=1.0,
-            exhaust_in_ms=5 * 24 * 3_600_000,
+            exhaust_in_ms=5 * DAY_MS,
         )
         self.assertEqual(
             reporter.forecast_advice(shape, self.NOW_MS),
-            "tone it down \u00b7 hits 100% ~in 5 days, ~now before reset",
+            "tone it down · hits 100% ~in 5 days, ~now before reset",
         )
 
     def test_advice_uses_passed_now_not_wall_clock(self):
@@ -2671,38 +3407,38 @@ class ForecastAdviceTests(unittest.TestCase):
         shape = forecast_shape(
             verdict="RUN OUT",
             used=0.5,
-            resets_at_ms=now_ms + 7 * 24 * 3_600_000,
+            resets_at_ms=now_ms + 7 * DAY_MS,
             projected=1.0,
-            exhaust_in_ms=5 * 24 * 3_600_000,
+            exhaust_in_ms=5 * DAY_MS,
         )
         self.assertEqual(
             reporter.forecast_advice(shape, now_ms),
-            "tone it down \u00b7 hits 100% ~in 5 days, ~in 2 days before reset",
+            "tone it down · hits 100% ~in 5 days, ~in 2 days before reset",
         )
 
     def test_exhausted_advice_names_reset_three_days_out(self):
-        resets_at_ms = int(datetime.now(timezone.utc).timestamp() * 1000) + 3 * 86_400_000
+        resets_at_ms = int(datetime.now(timezone.utc).timestamp() * 1000) + 3 * DAY_MS
         shape = forecast_shape(verdict="EXHAUSTED", used=1.0, resets_at_ms=resets_at_ms)
         self.assertEqual(
             reporter.forecast_advice(shape, self.NOW_MS),
-            "exhausted \u00b7 wait, resets ~in 3 days",
+            "exhausted · wait, resets ~in 3 days",
         )
 
     def test_exhausted_advice_without_reset_time_is_bare_wait(self):
         shape = forecast_shape(verdict="EXHAUSTED", used=1.0, resets_at_ms=None)
-        self.assertEqual(reporter.forecast_advice(shape, self.NOW_MS), "exhausted \u00b7 wait")
+        self.assertEqual(reporter.forecast_advice(shape, self.NOW_MS), "exhausted · wait")
 
     def test_hot_advice_reports_projected_percent(self):
         shape = forecast_shape(verdict="HOT", used=0.7, projected=0.92)
-        self.assertEqual(reporter.forecast_advice(shape, self.NOW_MS), "ease off \u00b7 ~92% by reset")
+        self.assertEqual(reporter.forecast_advice(shape, self.NOW_MS), "ease off · ~92% by reset")
 
     def test_on_pace_advice_reports_projected_percent(self):
         shape = forecast_shape(verdict="ON PACE", used=0.5, projected=0.69)
-        self.assertEqual(reporter.forecast_advice(shape, self.NOW_MS), "keep going \u00b7 ~69% by reset")
+        self.assertEqual(reporter.forecast_advice(shape, self.NOW_MS), "keep going · ~69% by reset")
 
     def test_spare_advice_reports_spare_percent(self):
         shape = forecast_shape(verdict="SPARE", used=0.24, projected=0.24)
-        self.assertEqual(reporter.forecast_advice(shape, self.NOW_MS), "crank it up \u00b7 ~76% spare by reset")
+        self.assertEqual(reporter.forecast_advice(shape, self.NOW_MS), "crank it up · ~76% spare by reset")
 
     def test_no_data_without_usage_reports_no_usage(self):
         self.assertEqual(reporter.forecast_advice(forecast_shape(), self.NOW_MS), "no usage reported")
@@ -2714,29 +3450,29 @@ class ForecastAdviceTests(unittest.TestCase):
     def test_spare_advice_appends_long_window_cost(self):
         shape = forecast_shape(verdict="SPARE", used=0.24, projected=0.24)
         shape["coupled_burn"] = 0.076
-        shape["coupled_window_ms"] = 7 * 24 * 3_600_000
+        shape["coupled_window_ms"] = 7 * DAY_MS
         self.assertEqual(
             reporter.forecast_advice(shape, self.NOW_MS),
-            "crank it up \u00b7 ~76% spare by reset \u00b7 ~8% of 7d",
+            "crank it up · ~76% spare by reset · ~8% of 7d",
         )
 
     def test_on_pace_advice_appends_long_window_cost(self):
         shape = forecast_shape(verdict="ON PACE", used=0.5, projected=0.69)
         shape["coupled_burn"] = 0.076
-        shape["coupled_window_ms"] = 7 * 24 * 3_600_000
+        shape["coupled_window_ms"] = 7 * DAY_MS
         self.assertEqual(
             reporter.forecast_advice(shape, self.NOW_MS),
-            "keep going \u00b7 ~69% by reset \u00b7 ~8% of 7d",
+            "keep going · ~69% by reset · ~8% of 7d",
         )
 
     def test_gated_advice_reports_burn_and_room(self):
         shape = forecast_shape(verdict="GATED", used=0.24)
         shape["coupled_burn"] = 0.38
         shape["coupled_room"] = 0.2
-        shape["coupled_window_ms"] = 7 * 24 * 3_600_000
+        shape["coupled_window_ms"] = 7 * DAY_MS
         self.assertEqual(
             reporter.forecast_advice(shape, self.NOW_MS),
-            "7d gates it \u00b7 full burn ~38%, room ~20%",
+            "7d gates it · full burn ~38%, room ~20%",
         )
 
 

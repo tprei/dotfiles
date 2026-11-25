@@ -1,24 +1,23 @@
 #!/usr/bin/env python3
-"""OMP usage reporter: provider limits and thirty-day token usage for Telegram.
+"""OMP usage reporter: provider quotas, pace forecasts, and token usage for Telegram.
 
 Modes:
   codex-usage-check                  print the validated OMP JSON payload
-  codex-usage-check --telegram       update the pinned limits, token, and forecast images
-  codex-usage-check --setup-telegram verify the Telegram config and pin all three images
+  codex-usage-check --telegram       refresh the pinned usage and predictions images
+  codex-usage-check --setup-telegram verify the Telegram config and pin both photos
 
 The Telegram bot token and chat come from ~/.config/claude-usage/config only;
-delivery state lives in ~/.config/codex-usage/state.json with separate image IDs.
+delivery state lives in ~/.config/codex-usage/state.json, keyed by "message_id",
+"pinned_message_id", "forecast_message_id", and "forecast_pinned_message_id".
+Window resets post a new, notifying alert photo.
 """
 
 from __future__ import annotations
 
-import colorsys
 import fcntl
-import hashlib
 import json
 import math
 import os
-import re
 import subprocess
 import sys
 import tempfile
@@ -26,8 +25,9 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from html import escape, unescape
+from html import escape
 from pathlib import Path
 from typing import IO, TypedDict
 from uuid import uuid4
@@ -37,31 +37,11 @@ CODEX_STATE_PATH = Path.home() / ".config" / "codex-usage" / "state.json"
 TELEGRAM_API_BASE = "https://api.telegram.org"
 OMP_TIMEOUT_SECONDS = 60
 FFMPEG_TIMEOUT_SECONDS = 30
-DEFAULT_FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
 TELEGRAM_TIMEOUT_SECONDS = 30
-WARNING_PERCENT = 80.0
-USE_RESET_SECONDS = 3_600
-BAR_CELLS = 10
-BAR_FILLED = "█"
-BAR_EMPTY = "░"
-LOGO_INSET = 3
-IMAGE_TEXT_COLOR = "0xf4f7ff"
-IMAGE_MUTED_COLOR = "0xaab4c3"
-IMAGE_GOOD_COLOR = "0x8fe388"
-IMAGE_USE_COLOR = "0xffd166"
-IMAGE_WARNING_COLOR = "0xffc857"
-IMAGE_BAD_COLOR = "0xff6b6b"
-LOGO_DIR = Path(__file__).resolve().parents[1] / "share" / "codex-usage" / "logos"
 TOKEN_USAGE_DIR = Path(__file__).resolve().parents[1] / "share" / "codex-usage"
 TOKEN_USAGE_PATH = TOKEN_USAGE_DIR / "token_usage.py"
 USAGE_HISTORY_PATH = TOKEN_USAGE_DIR / "usage_history.py"
-PROVIDER_LOGOS = {
-    "OpenAI Codex": ("openai.svg", True),
-    "ZAI": ("zai.svg", False),
-    "OpenCode Go": ("opencode.svg", True),
-    "Google Antigravity": ("google.svg", False),
-    "Anthropic": ("anthropic.svg", False),
-}
+FONTCONFIG_PATH = TOKEN_USAGE_DIR / "fonts.conf"
 PROVIDER_DISPLAY_NAMES = {
     "openai-codex": "OpenAI Codex",
     "google-antigravity": "Google Antigravity",
@@ -71,30 +51,6 @@ PROVIDER_DISPLAY_NAMES = {
     "openai": "OpenAI",
     "openrouter": "OpenRouter",
 }
-TOKEN_BASELINE_PROVIDERS = (
-    "openai-codex",
-    "anthropic",
-    "google-antigravity",
-    "opencode-go",
-    "zai",
-)
-TOKEN_PROVIDER_COLORS = {
-    "openai-codex": "0x34d399",
-    "anthropic": "0xfb923c",
-    "google-antigravity": "0x60a5fa",
-    "opencode-go": "0xc084fc",
-    "zai": "0xfacc15",
-    "openai": "0xf472b6",
-    "openrouter": "0x22d3ee",
-}
-TOKEN_BG_COLOR = "0x111827"
-TOKEN_PANEL_COLOR = "0x1f2937"
-TOKEN_GRID_COLOR = "0x374151"
-TOKEN_AXIS_COLOR = "0x94a3b8"
-TOKEN_TEXT_COLOR = "0xf8fafc"
-TOKEN_MUTED_COLOR = "0xe2e8f0"
-TOKEN_WARNING_COLOR = "0xfbbf24"
-TOKEN_ESTIMATE_COLOR = "0x5eead4"
 TOKEN_LOOKBACK_DAYS = 30
 HISTORY_LOOKBACK_DAYS = 7
 TOKEN_DAY_MS = 86_400_000
@@ -104,8 +60,10 @@ TOKEN_SSH_PYTHON = "/usr/bin/python3"
 TOKEN_SSH_BINARY = "/usr/bin/ssh"
 LIMITS_STATE_KEY = "message_id"
 LOCK_PATH = CODEX_STATE_PATH.parent / "update.lock"
-TOKENS_STATE_KEY = "tokens_message_id"
+PINNED_STATE_KEY = "pinned_message_id"
 FORECAST_STATE_KEY = "forecast_message_id"
+FORECAST_PINNED_STATE_KEY = "forecast_pinned_message_id"
+RETIRED_STATE_KEYS = ("tokens_message_id",)
 RESET_WATCH_STATE_KEY = "reset_watch"
 RESET_FORWARD_TOLERANCE_MS = 60_000
 CAPTION_MAX_CHARS = 1024
@@ -144,6 +102,14 @@ except ImportError as error:
 else:
     USAGE_HISTORY_IMPORT_ERROR = None
 
+try:
+    import dashboard
+except ImportError as error:
+    dashboard = None
+    DASHBOARD_IMPORT_ERROR = error
+else:
+    DASHBOARD_IMPORT_ERROR = None
+
 
 def require_token_usage():
     if token_usage is None:
@@ -155,6 +121,12 @@ def require_usage_history():
     if usage_history is None:
         raise UsageError("usage history collector not available", 1) from USAGE_HISTORY_IMPORT_ERROR
     return usage_history
+
+
+def require_dashboard():
+    if dashboard is None:
+        raise UsageError("dashboard renderer not available", 1) from DASHBOARD_IMPORT_ERROR
+    return dashboard
 
 
 def usable_report(report) -> bool:
@@ -199,38 +171,11 @@ def run_omp_usage() -> dict:
     return payload
 
 
-def utc_today() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
-
 def to_percent(used) -> float | None:
     if isinstance(used, bool) or not isinstance(used, (int, float)):
         return None
     value = float(used) * 100.0
     return max(0.0, min(100.0, value)) if math.isfinite(value) else None
-
-
-def bar(percent: float | None) -> str:
-    if percent is None:
-        return BAR_EMPTY * BAR_CELLS
-    filled = round(max(0.0, min(100.0, percent)) / 100 * BAR_CELLS)
-    return BAR_FILLED * filled + BAR_EMPTY * (BAR_CELLS - filled)
-
-
-def status_mark(percent: float | None, status) -> str:
-    if status == "exhausted":
-        return " 🚫"
-    if status == "warning":
-        return " ⚠️"
-    if status == "unknown" or percent is None:
-        return " (unknown)"
-    if status == "ok":
-        return ""
-    if percent >= 100:
-        return " 🚫"
-    if percent >= WARNING_PERCENT:
-        return " ⚠️"
-    return ""
 
 
 def reset_datetime(value) -> datetime | None:
@@ -304,12 +249,12 @@ def limit_reset_key(limit: dict) -> tuple[int, datetime]:
 
 def plan_metadata(plan) -> str:
     if isinstance(plan, str) and plan.strip():
-        return escape(plan.strip())
+        return plan.strip()
     if isinstance(plan, dict):
         for key in ("name", "plan", "id", "title"):
             value = plan.get(key)
             if isinstance(value, str) and value.strip():
-                return escape(value.strip())
+                return value.strip()
     return ""
 
 
@@ -336,24 +281,7 @@ def limit_label(limit: dict) -> str:
         additions.append(unit)
     if additions:
         label_text += f" ({', '.join(additions)})"
-    return escape(label_text)
-
-
-def format_limit(limit: dict, label_width: int) -> str:
-    window = limit.get("window")
-    window = window if isinstance(window, dict) else {}
-    label_text = limit_label(limit)
-    amount = limit.get("amount")
-    amount = amount if isinstance(amount, dict) else {}
-    percent = to_percent(amount.get("usedFraction"))
-    percent_text = "?" if percent is None else f"{percent:5.1f}%"
-    line = f"{bar(percent)} {percent_text:>6} · {label_text:<{label_width}}"
-    raw_reset = window.get("resetsAt")
-    when = fmt_reset_estimate(raw_reset)
-    if when:
-        line += f" · resets {when}"
-    line += status_mark(percent, limit.get("status"))
-    return f"<code>{line}</code>"
+    return label_text
 
 
 def provider_display(provider: str) -> str:
@@ -362,51 +290,6 @@ def provider_display(provider: str) -> str:
         return escape(known)
     words = [part.title() for part in provider.split("-") if part]
     return escape(" ".join(words) if words else provider)
-
-
-def format_message(payload: dict) -> str:
-    header = f"<b>OMP usage</b> · {utc_today()}"
-    updated = fmt_reset(payload.get("generatedAt"))
-    if updated:
-        header += f" · last updated {updated}"
-    grouped: dict[str, list[dict]] = {}
-    for report in usable_reports(payload):
-        grouped.setdefault(report["provider"], []).append(report)
-    label_width = 0
-    for reports in grouped.values():
-        for report in reports:
-            limits = report.get("limits")
-            if not isinstance(limits, list):
-                continue
-            for limit in limits:
-                if isinstance(limit, dict):
-                    label_width = max(label_width, len(limit_label(limit)))
-    blocks = []
-    for provider, reports in grouped.items():
-        block = [f"<b>{provider_display(provider)}</b>"]
-        for index, report in enumerate(reports, start=1):
-            entry = []
-            if len(reports) > 1:
-                entry.append(f"<i>account {index}</i>")
-            metadata = report.get("metadata")
-            metadata = metadata if isinstance(metadata, dict) else {}
-            plan = plan_metadata(metadata.get("planType"))
-            if plan:
-                entry.append(f"<i>plan: {plan}</i>")
-            limits = report.get("limits")
-            if isinstance(limits, list):
-                for limit in sorted(
-                    (limit for limit in limits if isinstance(limit, dict)),
-                    key=limit_reset_key,
-                ):
-                    entry.append(format_limit(limit, label_width))
-            if not entry:
-                entry.append("No limits reported.")
-            block.extend(entry)
-        blocks.append("\n".join(block))
-    if not blocks:
-        return f"{header}\nNo provider reports."
-    return "\n\n".join([header] + blocks)
 
 
 FORECAST_PROVIDERS = ("openai-codex", "anthropic", "zai", "opencode-go")
@@ -494,7 +377,6 @@ def spark_buckets(series: list[tuple[int, float]], now_ms: int, buckets: int = 4
     return result
 
 
-
 def pair_series(
     series_a: list[tuple[int, float]], series_b: list[tuple[int, float]], tolerance_ms: int
 ) -> list[tuple[int, float, float]]:
@@ -557,9 +439,16 @@ def coupled_gain_ratio(
     return ratio, total_short
 
 
+def window_duration_ms(window: dict) -> int | None:
+    duration = window.get("durationMs")
+    if isinstance(duration, int) and not isinstance(duration, bool) and duration > 0:
+        return duration
+    return None
+
+
 def build_forecast(limit: dict, provider: str, snapshot: dict, now_ms: int) -> Forecast:
     limit_id = str(limit.get("id") or "")
-    label = unescape(limit_label(limit))
+    label = limit_label(limit)
     amount = limit.get("amount")
     amount = amount if isinstance(amount, dict) else {}
     used_percent = to_percent(amount.get("usedFraction"))
@@ -568,8 +457,7 @@ def build_forecast(limit: dict, provider: str, snapshot: dict, now_ms: int) -> F
     window = window if isinstance(window, dict) else {}
     moment = reset_datetime(window.get("resetsAt"))
     resets_at_ms = int(moment.timestamp() * 1000) if moment is not None else None
-    duration = window.get("durationMs")
-    window_ms = duration if isinstance(duration, int) and not isinstance(duration, bool) and duration > 0 else None
+    window_ms = window_duration_ms(window)
     lookback_ms = SHORT_LOOKBACK_MS if window_ms is not None and window_ms <= SHORT_WINDOW_MS else LONG_LOOKBACK_MS
     series = history_series(snapshot, provider, limit_id)
     rate = burn_rate(series, now_ms, used, lookback_ms) if used is not None else None
@@ -603,33 +491,19 @@ def build_forecast(limit: dict, provider: str, snapshot: dict, now_ms: int) -> F
         "projected": projected,
         "exhaust_in_ms": exhaust_in_ms,
         "verdict": verdict,
-        "spark": spark,
         "coupled_limit_id": None,
         "coupled_window_ms": None,
         "coupled_ratio": None,
         "coupled_burn": None,
         "coupled_room": None,
+        "spark": spark,
     }
 
 
-def forecast_rows(payload: dict, snapshot: dict, now_ms: int) -> list[tuple[str, list[Forecast]]]:
-    reports = usable_reports(payload)
-    rows: list[tuple[str, list[Forecast]]] = []
-    for provider in FORECAST_PROVIDERS:
-        provider_reports = [report for report in reports if report.get("provider") == provider]
-        limits: list[dict] = []
-        for report in provider_reports:
-            raw_limits = report.get("limits")
-            if isinstance(raw_limits, list):
-                limits.extend(limit for limit in raw_limits if isinstance(limit, dict))
-        limits.sort(key=limit_reset_key)
-        if not limits:
-            continue
-        forecasts = apply_window_coupling(
-            [build_forecast(limit, provider, snapshot, now_ms) for limit in limits], snapshot
-        )
-        rows.append((provider, forecasts))
-    return rows
+def forecast_rows(provider: str, limits: list[dict], snapshot: dict, now_ms: int) -> list[Forecast]:
+    return apply_window_coupling(
+        [build_forecast(limit, provider, snapshot, now_ms) for limit in limits], snapshot
+    )
 
 
 def apply_window_coupling(forecasts: list[Forecast], snapshot: dict) -> list[Forecast]:
@@ -735,201 +609,6 @@ def fmt_rate(f: Forecast | dict) -> str:
     return f"+{rate * 100 * 24:.1f}%/day"
 
 
-def plain_image_text(html_text: str) -> str:
-    text = re.sub(r"</?[A-Za-z][^>]*>", "", html_text)
-    text = unescape(text)
-    lines = []
-    for raw_line in text.splitlines():
-        line = raw_line.replace("\t", "    ")
-        line = "".join(char if char.isprintable() else " " for char in line)
-        line = line.replace("⚠️", "[!]").replace("🚫", "[X]")
-        lines.append(line.rstrip())
-    return "\n".join(lines).strip("\n")
-
-
-def reset_estimate_seconds(line: str) -> int | None:
-    match = re.search(r"resets ~in (\d+) (minutes?|hours?|days?)\b", line)
-    if match is None:
-        return None
-    count = int(match.group(1))
-    unit = match.group(2)
-    if unit.startswith("minute"):
-        return count * 60
-    if unit.startswith("hour"):
-        return count * 3_600
-    if unit.startswith("day"):
-        return count * 86_400
-    return None
-
-
-def image_line_color(line: str) -> str:
-    if not line.startswith((BAR_FILLED, BAR_EMPTY)):
-        return IMAGE_TEXT_COLOR
-    if "[X]" in line:
-        return IMAGE_BAD_COLOR
-    if "[!]" in line:
-        return IMAGE_WARNING_COLOR
-    match = re.search(r"\s(\d+(?:\.\d+)?)%\s·", line)
-    if match:
-        percent = float(match.group(1))
-        if percent >= 100:
-            return IMAGE_BAD_COLOR
-        if percent >= WARNING_PERCENT:
-            return IMAGE_WARNING_COLOR
-        reset_seconds = reset_estimate_seconds(line)
-        if reset_seconds is not None and reset_seconds <= USE_RESET_SECONDS:
-            return IMAGE_USE_COLOR
-    if "?" in line:
-        return IMAGE_MUTED_COLOR
-    return IMAGE_GOOD_COLOR
-
-
-def ffmpeg_filter_path(path: str) -> str:
-    return path.replace("\\", "\\\\").replace(":", "\\:").replace(",", "\\,").replace("'", "\\'")
-
-
-def render_image(text: str) -> bytes:
-    lines = text.splitlines() or [""]
-    if not any(lines):
-        raise UsageError("usage image has no text", 2)
-    longest = max(len(line) for line in lines)
-    font_size = 28
-    if longest > 70:
-        font_size = 24
-    if longest > 100:
-        font_size = 20
-    line_height = font_size + 14
-    logo_size = font_size + 8
-    logo_content_size = logo_size - 2 * LOGO_INSET
-    content_width = longest * font_size * 0.62 + 96
-    logo_specs = []
-    for index, line in enumerate(lines):
-        logo = PROVIDER_LOGOS.get(line)
-        if logo:
-            logo_filename, invert = logo
-            logo_path = LOGO_DIR / logo_filename
-            if not logo_path.is_file():
-                raise UsageError(f"logo asset not found for {line}: {logo_path}", 2)
-            logo_specs.append((index, logo_path, invert))
-            content_width = max(
-                content_width,
-                len(line) * font_size * 0.62 + logo_size + 112,
-            )
-    width = max(900, int(content_width))
-    height = max(180, 72 + len(lines) * line_height)
-    if width % 2:
-        width += 1
-    if height % 2:
-        height += 1
-    ffmpeg = os.environ.get("FFMPEG_BIN", "ffmpeg")
-    font_path = os.environ.get("OMP_USAGE_FONT", DEFAULT_FONT_PATH)
-    try:
-        with tempfile.TemporaryDirectory(prefix="omp-usage-") as directory:
-            drawtext_filters = []
-            logo_inputs = []
-            logo_overlays = []
-            logo_by_index = {
-                index: (logo_path, invert)
-                for index, logo_path, invert in logo_specs
-            }
-            for index, line in enumerate(lines):
-                if not line:
-                    continue
-                y = 36 + index * line_height
-                line_path = Path(directory) / f"line-{index:03d}.txt"
-                line_path.write_text(line, encoding="utf-8")
-                text_x = 48
-                logo = logo_by_index.get(index)
-                if logo:
-                    logo_path, invert = logo
-                    text_x += logo_size + 16
-                    input_index = 1 + len(logo_overlays)
-                    logo_inputs.extend(
-                        ["-f", "svg_pipe", "-loop", "1", "-i", str(logo_path)]
-                    )
-                    logo_overlays.append((input_index, y, invert))
-                drawtext_filters.append(
-                    f"drawtext=fontfile={ffmpeg_filter_path(font_path)}:"
-                    f"textfile={ffmpeg_filter_path(str(line_path))}:"
-                    f"fontcolor={image_line_color(line)}:fontsize={font_size}:"
-                    f"expansion=none:x={text_x}:y={y}"
-                )
-            if not drawtext_filters:
-                raise UsageError("usage image has no text", 2)
-            filter_parts = [f"[0:v]{','.join(drawtext_filters)}[base]"]
-            last_label = "base"
-            for index, (input_index, y, invert) in enumerate(logo_overlays):
-                logo_label = f"logo{index}"
-                logo_filters = []
-                if invert:
-                    logo_filters.append("lutrgb=r=negval:g=negval:b=negval")
-                logo_filters.extend(
-                    [
-                        f"scale={logo_content_size}:{logo_content_size}:"
-                        "force_original_aspect_ratio=decrease,"
-                        f"pad={logo_size}:{logo_size}:(ow-iw)/2:(oh-ih)/2:color=0x00000000,"
-                        "format=rgba",
-                    ]
-                )
-                filter_parts.append(
-                    f"[{input_index}:v]{','.join(logo_filters)}[{logo_label}]"
-                )
-                output_label = f"stage{index}"
-                overlay_y = y + int(0.6 * font_size - logo_size / 2)
-                filter_parts.append(
-                    f"[{last_label}][{logo_label}]overlay=x=48:y={overlay_y}:"
-                    f"eof_action=repeat:repeatlast=1[{output_label}]"
-                )
-                last_label = output_label
-            filter_parts.append(f"[{last_label}]format=rgb24[out]")
-            command = [
-                ffmpeg,
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-y",
-                "-f",
-                "lavfi",
-                "-i",
-                f"color=c=0x26263f:s={width}x{height}",
-                *logo_inputs,
-                "-filter_complex",
-                ";".join(filter_parts),
-                "-map",
-                "[out]",
-                "-frames:v",
-                "1",
-                "-f",
-                "image2pipe",
-                "-vcodec",
-                "png",
-                "pipe:1",
-            ]
-            try:
-                completed = subprocess.run(
-                    command,
-                    capture_output=True,
-                    timeout=FFMPEG_TIMEOUT_SECONDS,
-                    check=False,
-                )
-            except FileNotFoundError:
-                raise UsageError(f"ffmpeg binary not found: {ffmpeg}", 1) from None
-            except subprocess.TimeoutExpired:
-                raise UsageError(f"ffmpeg image render timed out after {FFMPEG_TIMEOUT_SECONDS}s", 2) from None
-            except OSError as error:
-                raise UsageError(f"failed to render usage image: {error}", 2) from error
-            if completed.returncode != 0 or not completed.stdout:
-                raise UsageError(
-                    f"ffmpeg failed to render usage image (exit {completed.returncode})",
-                    2,
-                )
-            return completed.stdout
-    except UsageError:
-        raise
-    except OSError as error:
-        raise UsageError(f"failed to prepare usage image: {error}", 2) from error
-
-
 def load_config() -> dict | None:
     try:
         raw = CLAUDE_CONFIG_PATH.read_text(encoding="utf-8")
@@ -961,13 +640,17 @@ def credentials(config: dict | None) -> tuple[str, object] | None:
 def load_state() -> dict:
     try:
         raw = CODEX_STATE_PATH.read_text(encoding="utf-8")
-    except OSError:
+    except FileNotFoundError:
         return {}
+    except OSError as error:
+        raise UsageError(f"codex usage state is unreadable: {error}", 2) from error
     try:
         state = json.loads(raw)
-    except json.JSONDecodeError:
-        return {}
-    return state if isinstance(state, dict) else {}
+    except json.JSONDecodeError as error:
+        raise UsageError(f"codex usage state is corrupt: {error}", 2) from error
+    if not isinstance(state, dict):
+        raise UsageError("codex usage state is corrupt: not a JSON object", 2)
+    return state
 
 
 def save_state(state: dict) -> None:
@@ -1018,11 +701,12 @@ def multipart_form(
     boundary = f"----omp-usage-{uuid4().hex}"
     parts = []
     for name, value in fields.items():
+        text = str(value).lower() if isinstance(value, bool) else str(value)
         parts.extend(
             [
                 f"--{boundary}\r\n".encode("ascii"),
                 f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("ascii"),
-                str(value).encode("utf-8"),
+                text.encode("utf-8"),
                 b"\r\n",
             ]
         )
@@ -1073,11 +757,13 @@ def tg_upload(
     return payload
 
 
-def tg_send_photo(config: dict, image: bytes, caption: str | None = None) -> int:
-    fields: dict[str, object] = {"chat_id": config["chat_id"]}
-    if caption is not None:
-        fields["caption"] = caption
-        fields["parse_mode"] = "HTML"
+def tg_send_photo(config: dict, image: bytes, caption: str, *, notify: bool = False) -> int:
+    fields: dict[str, object] = {
+        "chat_id": config["chat_id"],
+        "caption": caption,
+        "parse_mode": "HTML",
+        "disable_notification": not notify,
+    }
     payload = tg_upload(
         config["bot_token"],
         "sendPhoto",
@@ -1088,13 +774,13 @@ def tg_send_photo(config: dict, image: bytes, caption: str | None = None) -> int
     )
     result = payload.get("result")
     result = result if isinstance(result, dict) else {}
-    message_id = result.get("message_id")
-    if not isinstance(message_id, int):
+    message_id = valid_message_id(result.get("message_id"))
+    if message_id is None:
         raise TelegramError("Telegram sendPhoto returned no message_id")
     return message_id
 
 
-def tg_edit_photo(config: dict, message_id: int, image: bytes) -> None:
+def tg_edit_photo(config: dict, message_id: int, image: bytes, caption: str) -> None:
     tg_upload(
         config["bot_token"],
         "editMessageMedia",
@@ -1102,7 +788,12 @@ def tg_edit_photo(config: dict, message_id: int, image: bytes) -> None:
             "chat_id": config["chat_id"],
             "message_id": message_id,
             "media": json.dumps(
-                {"type": "photo", "media": "attach://photo"},
+                {
+                    "type": "photo",
+                    "media": "attach://photo",
+                    "caption": caption,
+                    "parse_mode": "HTML",
+                },
                 separators=(",", ":"),
             ),
         },
@@ -1124,17 +815,6 @@ def tg_pin(config: dict, message_id: int) -> None:
     )
 
 
-def tg_delete(config: dict, message_id: int) -> None:
-    try:
-        tg_call(
-            config["bot_token"],
-            "deleteMessage",
-            {"chat_id": config["chat_id"], "message_id": message_id},
-        )
-    except (urllib.error.HTTPError, OSError, TimeoutError, TelegramError) as error:
-        print(f"codex-usage-check: failed to delete superseded message {message_id}: {error}", file=sys.stderr)
-
-
 def edit_failure_action(description: str) -> str:
     lowered = description.casefold()
     if "message is not modified" in lowered:
@@ -1144,62 +824,149 @@ def edit_failure_action(description: str) -> str:
     return "fail"
 
 
-def update_pinned(config: dict, image: bytes, state_key: str) -> bool:
-    state = load_state()
-    message_id = state.get(state_key)
-    if isinstance(message_id, int):
-        try:
-            tg_edit_photo(config, message_id, image)
-        except urllib.error.HTTPError as error:
-            try:
-                description = error.read().decode("utf-8", "replace")
-            except (AttributeError, OSError, ValueError):
-                description = ""
-            action = edit_failure_action(description)
-            if action == "ok":
-                return True
-            if action != "replace":
-                return False
-        except TelegramError as error:
-            action = edit_failure_action(str(error))
-            if action == "ok":
-                return True
-            if action != "replace":
-                return False
-        except (OSError, TimeoutError):
-            return False
-        else:
-            try:
-                tg_pin(config, message_id)
-            except (urllib.error.HTTPError, OSError, TimeoutError, TelegramError):
-                return False
-            return True
+def deletion_failure_action(description: str) -> str:
+    lowered = description.casefold()
+    if "message to delete not found" in lowered or "message not found" in lowered:
+        return "gone"
+    if "can't be deleted" in lowered or "cannot be deleted" in lowered:
+        return "pinned"
+    return "retry"
+
+
+def valid_message_id(value: object) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return None
+    return value
+
+
+def telegram_failure_description(error: urllib.error.HTTPError) -> str:
     try:
-        new_message_id = tg_send_photo(config, image)
-    except (OSError, TimeoutError, TelegramError):
+        return error.read().decode("utf-8", "replace")
+    except (AttributeError, OSError, ValueError):
+        return ""
+
+
+def pin_dashboard(config: dict, state: dict, pinned_key: str, message_id: int) -> bool:
+    try:
+        tg_pin(config, message_id)
+    except (urllib.error.HTTPError, OSError, TimeoutError, TelegramError) as error:
+        print(f"codex-usage-check: failed to pin the dashboard message: {error}", file=sys.stderr)
         return False
-    state[state_key] = new_message_id
+    state[pinned_key] = message_id
     try:
         save_state(state)
-    except OSError:
+    except OSError as error:
+        print(f"codex-usage-check: failed to save pinned message id: {error}", file=sys.stderr)
         return False
-    try:
-        tg_pin(config, new_message_id)
-    except (urllib.error.HTTPError, OSError, TimeoutError, TelegramError):
-        return False
-    if isinstance(message_id, int):
-        tg_delete(config, message_id)
     return True
 
 
-def build_image(payload: dict) -> tuple[bytes, int]:
+def clear_retired_key(state: dict, state_key: str) -> None:
+    state.pop(state_key, None)
     try:
-        text = format_message(payload)
-        return render_image(plain_image_text(text)), 0
-    except UsageError:
-        raise
-    except (TypeError, ValueError, KeyError, AttributeError, OSError) as error:
-        raise UsageError(f"failed to render usage image: {error}", 2) from error
+        save_state(state)
+    except OSError as error:
+        print(f"codex-usage-check: failed to save retired state: {error}", file=sys.stderr)
+
+
+def unpin_retired_message(config: dict, state: dict, state_key: str, message_id: int) -> None:
+    try:
+        tg_call(
+            config["bot_token"],
+            "unpinChatMessage",
+            {"chat_id": config["chat_id"], "message_id": message_id},
+        )
+    except (urllib.error.HTTPError, OSError, TimeoutError, TelegramError) as error:
+        print(f"codex-usage-check: failed to unpin superseded {state_key} message {message_id}: {error}", file=sys.stderr)
+        return
+    clear_retired_key(state, state_key)
+
+
+def retire_message(config: dict, state: dict, state_key: str, message_id: int) -> None:
+    try:
+        tg_call(
+            config["bot_token"],
+            "deleteMessage",
+            {"chat_id": config["chat_id"], "message_id": message_id},
+        )
+    except urllib.error.HTTPError as error:
+        description = telegram_failure_description(error)
+        action = deletion_failure_action(description)
+        if action == "gone":
+            clear_retired_key(state, state_key)
+        elif action == "pinned":
+            unpin_retired_message(config, state, state_key, message_id)
+        else:
+            print(f"codex-usage-check: failed to delete superseded {state_key} message {message_id}: {description}", file=sys.stderr)
+    except TelegramError as error:
+        action = deletion_failure_action(str(error))
+        if action == "gone":
+            clear_retired_key(state, state_key)
+        elif action == "pinned":
+            unpin_retired_message(config, state, state_key, message_id)
+        else:
+            print(f"codex-usage-check: failed to delete superseded {state_key} message {message_id}: {error}", file=sys.stderr)
+    except (OSError, TimeoutError) as error:
+        print(f"codex-usage-check: failed to delete superseded {state_key} message {message_id}: {error}", file=sys.stderr)
+    else:
+        clear_retired_key(state, state_key)
+
+
+def retire_superseded_messages(config: dict, state: dict) -> None:
+    live_ids = {
+        valid_message_id(state.get(key))
+        for key in (LIMITS_STATE_KEY, PINNED_STATE_KEY, FORECAST_STATE_KEY, FORECAST_PINNED_STATE_KEY)
+    }
+    for state_key in RETIRED_STATE_KEYS:
+        stale_id = valid_message_id(state.get(state_key))
+        if stale_id is None or stale_id in live_ids:
+            continue
+        retire_message(config, state, state_key, stale_id)
+
+
+def update_pinned(
+    config: dict,
+    image: bytes,
+    caption: str,
+    *,
+    message_key: str,
+    pinned_key: str,
+    force_pin: bool = False,
+) -> bool:
+    state = load_state()
+    message_id = valid_message_id(state.get(message_key))
+    if message_id is not None:
+        action = ""
+        try:
+            tg_edit_photo(config, message_id, image, caption)
+            action = "ok"
+        except urllib.error.HTTPError as error:
+            action = edit_failure_action(telegram_failure_description(error)) if error.code == 400 else "fail"
+        except (TelegramError, OSError, TimeoutError):
+            action = "fail"
+        if action == "ok":
+            needs_pin = force_pin or valid_message_id(state.get(pinned_key)) != message_id
+            if needs_pin and not pin_dashboard(config, state, pinned_key, message_id):
+                return False
+            retire_superseded_messages(config, state)
+            return True
+        if action != "replace":
+            return False
+    try:
+        new_message_id = tg_send_photo(config, image, caption)
+    except (OSError, TimeoutError, TelegramError) as error:
+        print(f"codex-usage-check: failed to send the dashboard image: {error}", file=sys.stderr)
+        return False
+    state[message_key] = new_message_id
+    try:
+        save_state(state)
+    except OSError as error:
+        print(f"codex-usage-check: failed to save dashboard message id: {error}", file=sys.stderr)
+        return False
+    if not pin_dashboard(config, state, pinned_key, new_message_id):
+        return False
+    retire_superseded_messages(config, state)
+    return True
 
 
 class WindowReset(TypedDict):
@@ -1216,8 +983,8 @@ class WindowReset(TypedDict):
 def long_window_kind(limit: dict) -> str | None:
     window = limit.get("window")
     window = window if isinstance(window, dict) else {}
-    duration = window.get("durationMs")
-    if isinstance(duration, int) and not isinstance(duration, bool) and duration > 0:
+    duration = window_duration_ms(window)
+    if duration is not None:
         if duration < WEEKLY_WINDOW_MS:
             return None
         return "monthly" if duration >= MONTHLY_WINDOW_MS else "weekly"
@@ -1365,7 +1132,7 @@ def persist_watch(merged: dict) -> bool:
     return True
 
 
-def reset_caption(resets: list[WindowReset]) -> str:
+def reset_message(resets: list[WindowReset]) -> str:
     kinds = {reset["kind"] for reset in resets}
     if kinds == {"weekly"}:
         title = "Weekly limit reset"
@@ -1373,7 +1140,7 @@ def reset_caption(resets: list[WindowReset]) -> str:
         title = "Monthly limit reset"
     else:
         title = "Limit resets"
-    lines = [f"🎉 <b>{title}</b>"]
+    lines = [f"<b>{title}</b>"]
     grouped: dict[str, list[WindowReset]] = {}
     for reset in resets:
         grouped.setdefault(reset["provider"], []).append(reset)
@@ -1401,30 +1168,20 @@ def reset_caption(resets: list[WindowReset]) -> str:
     return "\n".join(lines)
 
 
-def reset_image_text(resets: list[WindowReset]) -> str:
-    blocks = []
-    for reset in resets:
-        free_percent = 100.0 - reset["fresh_used"] * 100.0
-        blocks.append(
-            "\n".join(
-                [
-                    unescape(provider_display(reset["provider"])),
-                    f"{reset['label']} · fresh window",
-                    f"{bar(free_percent)} {free_percent:.0f}% free · resets {fmt_reset(reset['resets_at_ms'])}",
-                    f"closed at {reset['closed_used'] * 100:.1f}% used · {fmt_reset(reset['closed_at_ms'])}",
-                ]
-            )
+def reset_events(resets: list[WindowReset]) -> list[dashboard.ResetEvent]:
+    return [
+        dashboard.ResetEvent(
+            provider=reset["provider"],
+            label=reset["label"],
+            kind=reset["kind"],
+            closed_used_percent=reset["closed_used"] * 100.0,
+            closed_at_ms=reset["closed_at_ms"],
+            fresh_used_percent=reset["fresh_used"] * 100.0,
+            resets_at_ms=reset["resets_at_ms"],
+            amount_text=reset["amount_text"],
         )
-    return "\n\n".join(blocks)
-
-
-def build_reset_image(resets: list[WindowReset]) -> bytes:
-    try:
-        return render_image(plain_image_text(reset_image_text(resets)))
-    except UsageError:
-        raise
-    except (TypeError, ValueError, KeyError, AttributeError, OSError) as error:
-        raise UsageError(f"failed to render reset image: {error}", 2) from error
+        for reset in resets
+    ]
 
 
 def announce_window_resets(config: dict, payload: dict) -> int:
@@ -1436,34 +1193,17 @@ def announce_window_resets(config: dict, payload: dict) -> int:
     merged = merged_watch(watch, current, now_ms)
     if resets:
         try:
-            tg_send_photo(config, build_reset_image(resets), reset_caption(resets))
+            image = render_reset(reset_events(resets), now_ms)
         except UsageError as error:
-            print(f"codex-usage-check: failed to send limit reset message: {error}", file=sys.stderr)
-            return 2
-        except (OSError, TimeoutError, TelegramError) as error:
+            return fail(error)
+        try:
+            tg_send_photo(config, image, reset_message(resets), notify=True)
+        except (urllib.error.HTTPError, OSError, TimeoutError, TelegramError) as error:
             print(f"codex-usage-check: failed to send limit reset message: {error}", file=sys.stderr)
             return 2
     if not persist_watch(merged):
         return 2
     return 0
-
-
-def token_display_name(provider: str) -> str:
-    known = PROVIDER_DISPLAY_NAMES.get(provider)
-    if known:
-        return known
-    words = [part for part in provider.split("-") if part]
-    return " ".join(word[:1].upper() + word[1:] for word in words) if words else provider
-
-
-def token_provider_color(provider: str) -> str:
-    known = TOKEN_PROVIDER_COLORS.get(provider)
-    if known:
-        return known
-    digest = hashlib.sha256(provider.encode("utf-8")).digest()
-    hue = int.from_bytes(digest[:2], "big") / 65536.0
-    red, green, blue = colorsys.hsv_to_rgb(hue, 0.5, 0.9)
-    return f"0x{round(red * 255):02x}{round(green * 255):02x}{round(blue * 255):02x}"
 
 
 def valid_ssh_host(value: object) -> str | None:
@@ -1614,536 +1354,273 @@ def collect_history_snapshot(now_ms: int) -> usage_history.HistorySnapshot:
     return snapshot
 
 
-def format_compact_tokens(tokens: int) -> str:
-    if tokens < 1000:
-        return str(tokens)
-    if tokens < 1_000_000:
-        value = tokens / 1000
-        text = f"{value:.1f}".rstrip("0").rstrip(".")
-        return f"{text}K"
-    if tokens < 1_000_000_000:
-        value = tokens / 1_000_000
-        text = f"{value:.1f}".rstrip("0").rstrip(".")
-        return f"{text}M"
-    value = tokens / 1_000_000_000
-    text = f"{value:.1f}".rstrip("0").rstrip(".")
-    return f"{text}B"
-
-
-def token_axis_max(maximum: int) -> int:
-    if maximum <= 0:
-        return 1
-    magnitude = 10 ** (len(str(maximum)) - 1)
-    for multiple in (1, 2, 5, 10):
-        ceiling = multiple * magnitude
-        if ceiling >= maximum:
-            return ceiling
-    return 10 * magnitude
-
-
-def format_price_label(provider: dict, incomplete: bool) -> str:
-    tokens = provider.get("tokens", 0)
-    cost = provider.get("estimated_usd", 0.0)
-    unpriced = provider.get("unpriced_records", 0)
-    prefix = "Known " if incomplete or unpriced else "Est. "
-    if unpriced and tokens > 0 and (not isinstance(cost, (int, float)) or cost <= 0):
-        return "Price unavailable"
-    if tokens <= 0:
-        return "$0.00"
-    if unpriced:
-        return f"{prefix}${cost:,.2f} + unpriced"
-    if cost > 0 and cost < 0.01:
-        return f"{prefix}<$0.01"
-    return f"{prefix}${cost:,.2f}"
-
-
-def format_estimate_label(value: float) -> str:
-    if value <= 0:
-        return ""
-    if value < 0.01:
-        return "~<$0.01"
-    return f"~${value:,.2f}"
-
-
-def render_token_chart(snapshot: token_usage.TokenSnapshot) -> bytes:
-    providers = snapshot.get("providers", [])
-    if not providers:
-        raise UsageError("token chart has no providers", 2)
-    days = snapshot.get("days", [])
-    if not days:
-        raise UsageError("token chart has no days", 2)
-    count = len(days)
-    total_tokens = sum(int(provider.get("tokens", 0)) for provider in providers)
-    total_cost = math.fsum(float(provider.get("estimated_usd", 0.0)) for provider in providers)
-    total_unpriced = sum(int(provider.get("unpriced_records", 0)) for provider in providers)
-    total_estimated = math.fsum(float(provider.get("unpriced_estimated_usd", 0.0)) for provider in providers)
-    day_totals = [int(day.get("tokens", 0)) for day in days]
-    active_days = sum(1 for value in day_totals if value > 0)
-    table_providers = sorted(
-        providers,
-        key=lambda item: (-int(item.get("tokens", 0)), str(item.get("provider", ""))),
-    )
-    width = 1600
-    footer_y = 842 + 40 * len(table_providers) + 20
-    height = footer_y + 104
-    if height % 2:
-        height += 1
-    left, right, top, baseline = 104, 48, 350, 700
-    plot_width = width - left - right
-    plot_height = baseline - top
-    axis_max = token_axis_max(max(day_totals) if day_totals else 0)
-    slot = plot_width / count
-    bar_width = max(1, int(min(64, slot * 0.72)))
-    ffmpeg = os.environ.get("FFMPEG_BIN", "ffmpeg")
-    font_path = os.environ.get("OMP_USAGE_FONT", DEFAULT_FONT_PATH)
-    start = datetime.fromtimestamp(snapshot["start_ms"] / 1000, tz=timezone.utc)
-    end = datetime.fromtimestamp(snapshot["end_ms"] / 1000, tz=timezone.utc)
-    updated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    sources_ok = snapshot.get("sources_ok", [])
-    issues = snapshot.get("issues", [])
-    incomplete = bool(issues)
-    available = " + ".join(sources_ok) if sources_ok else "no sources"
-    try:
-        with tempfile.TemporaryDirectory(prefix="omp-tokens-") as directory:
-            drawboxes: list[str] = []
-            drawtexts: list[str] = []
-
-            def text_filter(text: str, x: object, y: object, size: int, color: str) -> str:
-                path = Path(directory) / f"token-{len(drawtexts):03d}.txt"
-                path.write_text(text, encoding="utf-8")
-                return (
-                    f"drawtext=fontfile={ffmpeg_filter_path(font_path)}:"
-                    f"textfile={ffmpeg_filter_path(str(path))}:"
-                    f"fontcolor={color}:fontsize={size}:"
-                    f"expansion=none:x={x}:y={y}"
-                )
-
-            def fit_size(text: str, base: int, minimum: int, max_width: int) -> int:
-                size = base
-                while size > minimum and len(text) * size * 0.62 > max_width:
-                    size -= 1
-                return size
-
-            drawtexts.append(text_filter(f"OMP token usage \u00b7 Last {count} days", 48, 28, 36, TOKEN_TEXT_COLOR))
-            drawtexts.append(text_filter(f"{start.strftime('%Y-%m-%d %H:%M UTC')} to {end.strftime('%Y-%m-%d %H:%M UTC')}", 48, 76, 22, TOKEN_MUTED_COLOR))
-            drawtexts.append(text_filter(f"{available} \u00b7 Updated {updated}", 48, 106, 21, TOKEN_MUTED_COLOR))
-            if incomplete:
-                failed = []
-                for issue in issues:
-                    head = issue.split(":")[0]
-                    if head and head not in failed:
-                        failed.append(head)
-                failure_text = "; ".join(failed)
-                if len(failure_text) > 78:
-                    failure_text = f"{failure_text[:77]}\u2026"
-                warning = f"INCOMPLETE \u00b7 {available}"
-                if failure_text:
-                    warning = f"{warning} \u00b7 {failure_text}"
-                if len(warning) > 118:
-                    warning = f"{warning[:117]}\u2026"
-                drawtexts.append(text_filter(warning, 48, 134, 20, TOKEN_WARNING_COLOR))
-            observed = "Observed " if incomplete else ""
-            panel_x = (48, 432, 816, 1200)
-            panel_w, panel_h = 352, 112
-            for x in panel_x:
-                drawboxes.append(f"drawbox=x={x}:y=180:w={panel_w}:h={panel_h}:c={TOKEN_PANEL_COLOR}:t=fill")
-            aggregate_cost = format_price_label(
-                {"tokens": total_tokens, "estimated_usd": total_cost, "unpriced_records": total_unpriced},
-                incomplete,
-            )
-            cost_note = (
-                f"Unpriced est. {format_estimate_label(total_estimated)}" if total_estimated > 0 else None
-            )
-            panels = [
-                (f"{observed}total tokens", f"{total_tokens:,}", None, TOKEN_MUTED_COLOR),
-                (f"{observed}recorded cost", aggregate_cost, cost_note, TOKEN_ESTIMATE_COLOR),
-                (f"{observed}avg/day", format_compact_tokens(round(total_tokens / count)), f"Active days: {active_days}/{count}", TOKEN_MUTED_COLOR),
-                (f"{observed}peak day", None, None, TOKEN_MUTED_COLOR),
-            ]
-            if active_days:
-                peak_index = max(range(count), key=day_totals.__getitem__)
-                peak_date = datetime.fromtimestamp(int(days[peak_index].get("start_ms", snapshot["start_ms"])) / 1000, tz=timezone.utc)
-                panels[3] = (
-                    f"{observed}peak day",
-                    format_compact_tokens(day_totals[peak_index]),
-                    peak_date.strftime("%b %d %Y"),
-                    TOKEN_MUTED_COLOR,
-                )
-            else:
-                panels[3] = (f"{observed}peak day", "No activity", None, TOKEN_MUTED_COLOR)
-            for x, (label, value, note, note_color) in zip(panel_x, panels):
-                drawtexts.append(text_filter(label.capitalize(), x + 20, 194, 19, TOKEN_MUTED_COLOR))
-                drawtexts.append(text_filter(value, x + 20, 222, fit_size(value, 27, 16, panel_w - 40), TOKEN_TEXT_COLOR))
-                if note:
-                    drawtexts.append(text_filter(note, x + 20, 260, 19, note_color))
-            drawtexts.append(text_filter("Daily tokens \u00b7 UTC \u00b7 today is partial", 48, 318, 20, TOKEN_MUTED_COLOR))
-            for level in range(6):
-                value = axis_max * level // 5
-                y = baseline - round(plot_height * level / 5)
-                drawboxes.append(f"drawbox=x={left}:y={y}:w={plot_width}:h=1:c={TOKEN_GRID_COLOR}:t=fill")
-                drawtexts.append(text_filter(format_compact_tokens(value), "(96)-tw", y - 14, 19, TOKEN_MUTED_COLOR))
-            drawboxes.append(f"drawbox=x={left}:y={baseline}:w={plot_width}:h=2:c={TOKEN_AXIS_COLOR}:t=fill")
-            if count <= 10:
-                label_indexes = list(range(count))
-            else:
-                label_indexes = list(range(0, count, 5))
-                final_index = count - 1
-                if label_indexes[-1] != final_index:
-                    if final_index - label_indexes[-1] <= 2:
-                        label_indexes[-1] = final_index
-                    else:
-                        label_indexes.append(final_index)
-            point_coords: list[tuple[int, int]] = []
-            for index, day in enumerate(days):
-                center = left + slot * index + slot / 2
-                bar_x = int(center - bar_width / 2)
-                day_providers = day.get("providers", [])
-                totals_by_name = {str(item.get("provider", "")): int(item.get("tokens", 0)) for item in day_providers}
-                cumulative = 0
-                edge = 0
-                for provider in providers:
-                    name = str(provider.get("provider", ""))
-                    seg_tokens = max(0, totals_by_name.get(name, 0))
-                    if seg_tokens <= 0:
-                        continue
-                    cumulative += seg_tokens
-                    next_edge = round(plot_height * cumulative / axis_max)
-                    if next_edge > edge:
-                        drawboxes.append(f"drawbox=x={bar_x}:y={baseline - next_edge}:w={bar_width}:h={next_edge - edge}:c={token_provider_color(name)}:t=fill")
-                        edge = next_edge
-                if day_totals[index] <= 0:
-                    drawboxes.append(f"drawbox=x={bar_x}:y={baseline - 4}:w={bar_width}:h=4:c={TOKEN_AXIS_COLOR}:t=fill")
-                if index in label_indexes:
-                    day_start = datetime.fromtimestamp(int(day.get("start_ms", snapshot["start_ms"])) / 1000, tz=timezone.utc)
-                    drawtexts.append(text_filter(day_start.strftime("%b %d"), f"({center})-tw/2", baseline + 18, 19, TOKEN_TEXT_COLOR))
-                point_y = baseline - round(plot_height * day_totals[index] / axis_max)
-                point_coords.append((int(center), point_y))
-                if day_totals[index] > 0:
-                    total_y = max(point_y - 21, top + 2)
-                    drawtexts.append(text_filter(format_compact_tokens(day_totals[index]), f"({center})-tw/2", total_y, 16, TOKEN_MUTED_COLOR))
-            for first, second in zip(point_coords, point_coords[1:]):
-                steps = max(abs(second[0] - first[0]), abs(second[1] - first[1]), 1) // 3
-                for step in range(int(steps) + 1):
-                    fraction = step / steps if steps else 0
-                    line_x = round(first[0] + (second[0] - first[0]) * fraction) - 1
-                    line_y = round(first[1] + (second[1] - first[1]) * fraction) - 1
-                    drawboxes.append(f"drawbox=x={line_x}:y={line_y}:w=3:h=3:c={TOKEN_TEXT_COLOR}:t=fill")
-            for point_x, point_y in point_coords:
-                drawboxes.append(f"drawbox=x={point_x - 3}:y={point_y - 3}:w=6:h=6:c={TOKEN_TEXT_COLOR}:t=fill")
-            if total_tokens > 0:
-                average_value = total_tokens / count
-                average_y = baseline - round(plot_height * average_value / axis_max)
-                dash_x = left
-                dash_on = True
-                while dash_x < left + plot_width:
-                    dash_end = min(dash_x + (14 if dash_on else 10), left + plot_width)
-                    if dash_on:
-                        drawboxes.append(f"drawbox=x={int(dash_x)}:y={average_y}:w={int(dash_end - dash_x)}:h=2:c={TOKEN_WARNING_COLOR}:t=fill")
-                    dash_x = dash_end
-                    dash_on = not dash_on
-                drawtexts.append(text_filter(f"Avg {format_compact_tokens(round(average_value))}/day", f"({width - right})-tw", average_y - 24, 19, TOKEN_WARNING_COLOR))
-            drawtexts.append(text_filter("Provider breakdown", 48, 768, 22, TOKEN_TEXT_COLOR))
-            drawtexts.append(text_filter("Provider", 88, 804, 19, TOKEN_MUTED_COLOR))
-            drawtexts.append(text_filter("Recorded cost", "(1130)-tw", 804, 19, TOKEN_MUTED_COLOR))
-            drawtexts.append(text_filter("Est. unpriced", "(1340)-tw", 804, 19, TOKEN_MUTED_COLOR))
-            drawtexts.append(text_filter("Unpriced", "(1536)-tw", 804, 19, TOKEN_MUTED_COLOR))
-            for row_index, provider in enumerate(table_providers):
-                row_y = 842 + row_index * 40
-                name = str(provider.get("provider", ""))
-                display = token_display_name(name)
-                if len(display) > 38:
-                    display = f"{display[:37]}\u2026"
-                tokens = int(provider.get("tokens", 0))
-                share = tokens / total_tokens * 100 if total_tokens > 0 else 0.0
-                estimate = format_estimate_label(float(provider.get("unpriced_estimated_usd", 0.0)))
-                recorded = format_price_label(provider, incomplete)
-                if estimate and recorded == "Price unavailable":
-                    recorded = "$0.00"
-                unpriced_count = int(provider.get("unpriced_records", 0))
-                drawboxes.append(f"drawbox=x=48:y={row_y}:w=20:h=20:c={token_provider_color(name)}:t=fill")
-                drawtexts.append(text_filter(display, 88, row_y, 20, TOKEN_TEXT_COLOR))
-                drawtexts.append(text_filter(f"{tokens:,}", "(640)-tw", row_y, 20, TOKEN_MUTED_COLOR))
-                drawtexts.append(text_filter(f"{share:.1f}%", "(800)-tw", row_y, 20, TOKEN_MUTED_COLOR))
-                drawtexts.append(text_filter(recorded, "(1130)-tw", row_y, 20, TOKEN_MUTED_COLOR))
-                if estimate:
-                    drawtexts.append(text_filter(estimate, "(1340)-tw", row_y, 20, TOKEN_ESTIMATE_COLOR))
-                elif unpriced_count:
-                    drawtexts.append(text_filter("n/a", "(1340)-tw", row_y, 20, TOKEN_MUTED_COLOR))
-                drawtexts.append(text_filter(str(unpriced_count), "(1536)-tw", row_y, 20, TOKEN_MUTED_COLOR))
-            drawtexts.append(text_filter("Reported OMP tokens \u00b7 Recorded USD estimates, not subscription charges", 48, footer_y + 12, 19, TOKEN_MUTED_COLOR))
-            drawtexts.append(text_filter("Antigravity includes AGY CLI; unavailable prices are not counted as free.", 48, footer_y + 42, 19, TOKEN_MUTED_COLOR))
-            drawtexts.append(text_filter("Teal ~$ figures estimate unpriced tokens at logged blended model rates.", 48, footer_y + 72, 19, TOKEN_ESTIMATE_COLOR))
-            command = [
-                ffmpeg,
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-y",
-                "-f",
-                "lavfi",
-                "-i",
-                f"color=c={TOKEN_BG_COLOR}:s={width}x{height}",
-                "-filter_complex",
-                f"[0:v]format=rgb24,{','.join([*drawboxes, *drawtexts])}[out]",
-                "-map",
-                "[out]",
-                "-frames:v",
-                "1",
-                "-f",
-                "image2pipe",
-                "-vcodec",
-                "png",
-                "pipe:1",
-            ]
-            try:
-                completed = subprocess.run(
-                    command,
-                    capture_output=True,
-                    timeout=FFMPEG_TIMEOUT_SECONDS,
-                    check=False,
-                )
-            except FileNotFoundError:
-                raise UsageError(f"ffmpeg binary not found: {ffmpeg}", 1) from None
-            except subprocess.TimeoutExpired:
-                raise UsageError(f"ffmpeg token render timed out after {FFMPEG_TIMEOUT_SECONDS}s", 2) from None
-            except OSError as error:
-                raise UsageError(f"failed to render token chart: {error}", 2) from error
-            if completed.returncode != 0 or not completed.stdout:
-                raise UsageError(
-                    f"ffmpeg failed to render token chart (exit {completed.returncode})",
-                    2,
-                )
-            return completed.stdout
-    except UsageError:
-        raise
-    except OSError as error:
-        raise UsageError(f"failed to prepare token chart: {error}", 2) from error
-
-
-def render_forecast_chart(rows: list[tuple[str, list[Forecast]]], snapshot: dict, now_ms: int) -> bytes:
-    if not rows or not any(forecasts for _, forecasts in rows):
-        raise UsageError("forecast chart has no limits", 2)
-    width = 1600
-    ffmpeg = os.environ.get("FFMPEG_BIN", "ffmpeg")
-    font_path = os.environ.get("OMP_USAGE_FONT", DEFAULT_FONT_PATH)
-    updated = datetime.fromtimestamp(now_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    sources_ok = snapshot.get("sources_ok", [])
-    available = " + ".join(sources_ok) if sources_ok else "no sources"
-    issues = snapshot.get("issues", [])
-    incomplete = bool(issues)
-    try:
-        with tempfile.TemporaryDirectory(prefix="omp-forecast-") as directory:
-            drawboxes: list[str] = []
-            drawtexts: list[str] = []
-
-            def text_filter(text: str, x: object, y: object, size: int, color: str) -> str:
-                path = Path(directory) / f"forecast-{len(drawtexts):03d}.txt"
-                path.write_text(text, encoding="utf-8")
-                return (
-                    f"drawtext=fontfile={ffmpeg_filter_path(font_path)}:"
-                    f"textfile={ffmpeg_filter_path(str(path))}:"
-                    f"fontcolor={color}:fontsize={size}:"
-                    f"expansion=none:x={x}:y={y}"
-                )
-
-            drawtexts.append(text_filter("OMP forecast \u00b7 at current pace", 48, 28, 36, TOKEN_TEXT_COLOR))
-            drawtexts.append(text_filter(f"{available} \u00b7 history {HISTORY_LOOKBACK_DAYS}d \u00b7 Updated {updated}", 48, 76, 22, TOKEN_MUTED_COLOR))
-            if incomplete:
-                failed = []
-                for issue in issues:
-                    head = issue.split(":")[0]
-                    if head and head not in failed:
-                        failed.append(head)
-                failure_text = "; ".join(failed)
-                if len(failure_text) > 78:
-                    failure_text = f"{failure_text[:77]}\u2026"
-                warning = f"INCOMPLETE \u00b7 {available}"
-                if failure_text:
-                    warning = f"{warning} \u00b7 {failure_text}"
-                if len(warning) > 118:
-                    warning = f"{warning[:117]}\u2026"
-                drawtexts.append(text_filter(warning, 48, 106, 20, TOKEN_WARNING_COLOR))
-            drawtexts.append(text_filter("sparkline = last 48h used % (hourly) \u00b7 rate over last 24h (3h for 5h windows) \u00b7 5h advice prices the long-window cost", 48, 134, 20, TOKEN_MUTED_COLOR))
-
-            y = 190
-            for provider, forecasts in rows:
-                drawboxes.append(f"drawbox=x=48:y={y + 6}:w=20:h=20:c={token_provider_color(provider)}:t=fill")
-                display_name = unescape(provider_display(provider))
-                drawtexts.append(text_filter(display_name, 88, y, 26, TOKEN_TEXT_COLOR))
-                y += 44
-                for f in forecasts:
-                    drawboxes.append(f"drawbox=x=48:y={y}:w=336:h=48:c={TOKEN_PANEL_COLOR}:t=fill")
-                    spark = f.get("spark") or []
-                    for i, v in enumerate(spark):
-                        if v is None:
-                            continue
-                        bar_h = max(1, round(v * 46))
-                        bar_color = IMAGE_BAD_COLOR if v >= 1.0 else IMAGE_WARNING_COLOR if v >= 0.8 else IMAGE_GOOD_COLOR
-                        drawboxes.append(f"drawbox=x={48 + i * 7}:y={y + 48 - bar_h}:w=6:h={bar_h}:c={bar_color}:t=fill")
-
-                    label = f.get("label", "")
-                    if len(label) > 58:
-                        label = f"{label[:57]}\u2026"
-                    drawtexts.append(text_filter(label, 416, y, 24, TOKEN_TEXT_COLOR))
-
-                    used = f.get("used")
-                    used_str = f"{used * 100:.1f}%" if used is not None else "?"
-                    projected = f.get("projected")
-                    projected_str = f"{projected * 100:.0f}%" if projected is not None else "?"
-                    rate_str = fmt_rate(f)
-                    resets_str = fmt_reset_estimate(f.get("resets_at_ms"))
-                    detail = f"now {used_str} \u2192 {projected_str} at reset \u00b7 {rate_str}"
-                    if resets_str:
-                        detail += f" \u00b7 resets {resets_str}"
-                    if len(detail) > 66:
-                        detail = f"{detail[:65]}\u2026"
-                    drawtexts.append(text_filter(detail, 416, y + 32, 21, TOKEN_MUTED_COLOR))
-
-                    advice = forecast_advice(f, now_ms)
-                    if len(advice) > 66:
-                        advice = f"{advice[:65]}\u2026"
-                    verdict = f.get("verdict", "NO DATA")
-                    verdict_color = (
-                        IMAGE_BAD_COLOR
-                        if verdict in ("EXHAUSTED", "RUN OUT")
-                        else IMAGE_WARNING_COLOR
-                        if verdict in ("HOT", "GATED")
-                        else IMAGE_GOOD_COLOR
-                        if verdict == "ON PACE"
-                        else TOKEN_ESTIMATE_COLOR
-                        if verdict == "SPARE"
-                        else TOKEN_AXIS_COLOR
-                    )
-                    drawtexts.append(text_filter(advice, 416, y + 62, 21, verdict_color))
-
-                    drawboxes.append(f"drawbox=x=1300:y={y + 4}:w=252:h=36:c={verdict_color}:t=fill")
-                    drawtexts.append(text_filter(verdict, 1316, y + 10, 22, "0x111827"))
-                    y += 96
-                y += 16
-
-            height = y + 32
-            if height % 2:
-                height += 1
-
-            command = [
-                ffmpeg,
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-y",
-                "-f",
-                "lavfi",
-                "-i",
-                f"color=c={TOKEN_BG_COLOR}:s={width}x{height}",
-                "-filter_complex",
-                f"[0:v]format=rgb24,{','.join([*drawboxes, *drawtexts])}[out]",
-                "-map",
-                "[out]",
-                "-frames:v",
-                "1",
-                "-f",
-                "image2pipe",
-                "-vcodec",
-                "png",
-                "pipe:1",
-            ]
-            try:
-                completed = subprocess.run(
-                    command,
-                    capture_output=True,
-                    timeout=FFMPEG_TIMEOUT_SECONDS,
-                    check=False,
-                )
-            except FileNotFoundError:
-                raise UsageError(f"ffmpeg binary not found: {ffmpeg}", 1) from None
-            except subprocess.TimeoutExpired:
-                raise UsageError(f"ffmpeg forecast render timed out after {FFMPEG_TIMEOUT_SECONDS}s", 2) from None
-            except OSError as error:
-                raise UsageError(f"failed to render forecast chart: {error}", 2) from error
-            if completed.returncode != 0 or not completed.stdout:
-                raise UsageError(
-                    f"ffmpeg failed to render forecast chart (exit {completed.returncode})",
-                    2,
-                )
-            return completed.stdout
-    except UsageError:
-        raise
-    except OSError as error:
-        raise UsageError(f"failed to prepare forecast chart: {error}", 2) from error
-
-
-def build_token_image(now_ms: int | None = None) -> tuple[bytes, int]:
-    if now_ms is None:
-        now_ms = time.time_ns() // 1_000_000
-    snapshot = collect_token_snapshot(now_ms)
-    try:
-        image = render_token_chart(snapshot)
-    except UsageError:
-        raise
-    except (TypeError, ValueError, KeyError, AttributeError, OSError) as error:
-        raise UsageError(f"failed to render token chart: {error}", 2) from error
-    return image, 2 if snapshot.get("issues") else 0
-
-
-def build_forecast_image(payload: dict, now_ms: int | None = None) -> tuple[bytes, int]:
-    if now_ms is None:
-        now_ms = time.time_ns() // 1_000_000
-    snapshot = collect_history_snapshot(now_ms)
-    rows = forecast_rows(payload, snapshot, now_ms)
-    try:
-        image = render_forecast_chart(rows, snapshot, now_ms)
-    except UsageError:
-        raise
-    except (TypeError, ValueError, KeyError, AttributeError, OSError) as error:
-        raise UsageError(f"failed to render forecast chart: {error}", 2) from error
-    return image, 2 if snapshot.get("issues") else 0
-
-
-def publish_images(config: dict) -> int:
-    status = 0
-    try:
-        payload = run_omp_usage()
-    except UsageError as error:
-        payload, payload_code = None, fail(error)
-    else:
-        payload_code = 0
+def payload_updated_ms(payload: dict | None, checked_ms: int) -> int | None:
     if payload is None:
-        limits_code = forecast_code = payload_code
+        return None
+    moment = reset_datetime(payload.get("generatedAt"))
+    return int(moment.timestamp() * 1000) if moment is not None else checked_ms
+
+
+def dashboard_caption(view: dashboard.Dashboard) -> str:
+    checked = datetime.fromtimestamp(view.now_ms / 1000, timezone.utc)
+    caption = f"OMP usage · checked {checked:%Y-%m-%d %H:%M UTC}"
+    if not view.quotas:
+        caption += f" · {view.quota_issue or 'provider quotas unavailable'}"
+    return caption
+
+
+def forecast_caption(checked_ms: int) -> str:
+    checked = datetime.fromtimestamp(checked_ms / 1000, timezone.utc)
+    return f"OMP predictions · checked {checked:%Y-%m-%d %H:%M UTC}"
+
+
+def build_dashboard(
+    payload: dict | None,
+    tokens: token_usage.TokenSnapshot | None,
+    history: usage_history.HistorySnapshot | None,
+    now_ms: int,
+) -> dashboard.Dashboard:
+    require_dashboard()
+    quotas: list[dashboard.ProviderQuota] = []
+    quota_issue: str | None = None
+    if payload is None:
+        quota_issue = "OMP usage unavailable"
     else:
-        try:
-            limits_image, limits_code = build_image(payload)
-        except UsageError as error:
-            limits_image, limits_code = None, fail(error)
-        else:
-            if not update_pinned(config, limits_image, LIMITS_STATE_KEY):
-                print("codex-usage-check: failed to update the limits Telegram message", file=sys.stderr)
-                limits_code = 2
+        reports = usable_reports(payload)
+        if not reports:
+            quota_issue = "No provider reports"
+        for report in reports:
+            metadata = report.get("metadata")
+            metadata = metadata if isinstance(metadata, dict) else {}
+            provider = report["provider"]
+            raw_limits = report.get("limits")
+            limits = (
+                [limit for limit in raw_limits if isinstance(limit, dict)]
+                if isinstance(raw_limits, list)
+                else []
+            )
+            limits.sort(key=limit_reset_key)
+            forecasts = (
+                forecast_rows(provider, limits, history if history is not None else {}, now_ms)
+                if provider in FORECAST_PROVIDERS
+                else None
+            )
+            windows = []
+            for index, limit in enumerate(limits):
+                forecast = forecasts[index] if forecasts is not None else None
+                window = limit.get("window")
+                window = window if isinstance(window, dict) else {}
+                amount = limit.get("amount")
+                amount = amount if isinstance(amount, dict) else {}
+                moment = reset_datetime(window.get("resetsAt"))
+                status = limit.get("status")
+                pace = None
+                if forecast is not None:
+                    projected = forecast.get("projected")
+                    pace = dashboard.Pace(
+                        verdict=forecast["verdict"],
+                        projected_percent=projected * 100.0 if projected is not None else None,
+                        rate=fmt_rate(forecast),
+                        detail=forecast_advice(forecast, now_ms),
+                        exhaust_in_ms=forecast["exhaust_in_ms"],
+                        spark=tuple(forecast["spark"]),
+                    )
+                windows.append(
+                    dashboard.QuotaWindow(
+                        label=limit_label(limit),
+                        used_percent=to_percent(amount.get("usedFraction")),
+                        reset_ms=int(moment.timestamp() * 1000) if moment is not None else None,
+                        status=status if isinstance(status, str) and status else None,
+                        pace=pace,
+                        window_ms=window_duration_ms(window),
+                    )
+                )
+            quotas.append(
+                dashboard.ProviderQuota(provider=provider, account="", plan=plan_metadata(metadata.get("planType")), windows=windows)
+            )
+    return dashboard.Dashboard(
+        now_ms=now_ms,
+        quota_updated_ms=payload_updated_ms(payload, now_ms),
+        quotas=quotas,
+        quota_issue=quota_issue,
+        tokens=tokens,
+        history_sources=list(history["sources_ok"]) if history else [],
+        history_partial=history is None or bool(history.get("issues")),
+    )
+
+
+def render_png(svg: bytes) -> bytes:
+    ffmpeg = os.environ.get("FFMPEG_BIN", "ffmpeg")
+    command = [
+        ffmpeg,
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "svg_pipe",
+        "-frame_size",
+        str(len(svg)),
+        "-i",
+        "pipe:0",
+        "-frames:v",
+        "1",
+        "-c:v",
+        "png",
+        "-pix_fmt",
+        "rgb24",
+        "-threads",
+        "1",
+        "-f",
+        "image2pipe",
+        "pipe:1",
+    ]
     try:
-        token_image, token_code = build_token_image()
+        completed = subprocess.run(
+            command,
+            input=svg,
+            capture_output=True,
+            timeout=FFMPEG_TIMEOUT_SECONDS,
+            check=False,
+            env={**os.environ, "FONTCONFIG_FILE": str(FONTCONFIG_PATH)},
+        )
+    except FileNotFoundError:
+        raise UsageError(f"ffmpeg binary not found: {ffmpeg}", 1) from None
+    except subprocess.TimeoutExpired:
+        raise UsageError(f"image render timed out after {FFMPEG_TIMEOUT_SECONDS}s", 2) from None
+    except OSError as error:
+        raise UsageError(f"failed to render image: {error}", 2) from error
+    if completed.returncode != 0 or not completed.stdout:
+        raise UsageError(f"ffmpeg failed to render image (exit {completed.returncode})", 2)
+    return completed.stdout
+
+
+def render_dashboard(view: dashboard.Dashboard) -> bytes:
+    require_dashboard()
+    try:
+        svg = dashboard.render_svg(view)
+    except OSError as error:
+        raise UsageError(f"failed to load dashboard assets: {error}", 1) from error
+    return render_png(svg)
+
+
+def render_forecast(view: dashboard.Dashboard) -> bytes:
+    require_dashboard()
+    try:
+        svg = dashboard.render_forecast_svg(view)
+    except OSError as error:
+        raise UsageError(f"failed to load dashboard assets: {error}", 1) from error
+    return render_png(svg)
+
+
+def render_reset(events: list[dashboard.ResetEvent], now_ms: int) -> bytes:
+    require_dashboard()
+    try:
+        svg = dashboard.render_reset_svg(events, now_ms)
+    except OSError as error:
+        raise UsageError(f"failed to load dashboard assets: {error}", 1) from error
+    return render_png(svg)
+
+
+def omp_payload_section() -> tuple[dict | None, int]:
+    try:
+        return run_omp_usage(), 0
     except UsageError as error:
-        token_image, token_code = None, fail(error)
-    else:
-        if not update_pinned(config, token_image, TOKENS_STATE_KEY):
-            print("codex-usage-check: failed to update the token Telegram message", file=sys.stderr)
-            token_code = 2
-    if payload is not None:
-        try:
-            forecast_image, forecast_code = build_forecast_image(payload)
-        except UsageError as error:
-            forecast_image, forecast_code = None, fail(error)
-        else:
-            if not update_pinned(config, forecast_image, FORECAST_STATE_KEY):
-                print("codex-usage-check: failed to update the forecast Telegram message", file=sys.stderr)
-                forecast_code = 2
+        print(f"codex-usage-check: {error}", file=sys.stderr)
+        return None, error.exit_code
+
+
+def token_snapshot_section(start_ms: int) -> tuple[token_usage.TokenSnapshot | None, int]:
+    try:
+        snapshot = collect_token_snapshot(start_ms)
+    except UsageError as error:
+        print(f"codex-usage-check: {error}", file=sys.stderr)
+        return None, error.exit_code
+    except (OSError, ValueError, TypeError, KeyError, AttributeError) as error:
+        print(f"codex-usage-check: token collection failed: {error}", file=sys.stderr)
+        return None, 2
+    return snapshot, 2 if snapshot.get("issues") else 0
+
+
+def history_snapshot_section(start_ms: int) -> tuple[usage_history.HistorySnapshot | None, int]:
+    try:
+        snapshot = collect_history_snapshot(start_ms)
+    except UsageError as error:
+        print(f"codex-usage-check: {error}", file=sys.stderr)
+        return None, error.exit_code
+    except (OSError, ValueError, TypeError, KeyError, AttributeError) as error:
+        print(f"codex-usage-check: history collection failed: {error}", file=sys.stderr)
+        return None, 2
+    return snapshot, 2 if snapshot.get("issues") else 0
+
+
+def section_exit_code(codes: list[int]) -> int:
+    if 1 in codes:
+        return 1
+    if 2 in codes:
+        return 2
+    return 0
+
+
+def publish_predictions(config: dict, view: dashboard.Dashboard, *, force_pin: bool) -> int:
+    try:
+        image = render_forecast(view)
+        updated = update_pinned(
+            config,
+            image,
+            forecast_caption(view.now_ms),
+            message_key=FORECAST_STATE_KEY,
+            pinned_key=FORECAST_PINNED_STATE_KEY,
+            force_pin=force_pin,
+        )
+    except UsageError as error:
+        return fail(error)
+    if not updated:
+        print("codex-usage-check: failed to update the predictions message", file=sys.stderr)
+        return 2
+    return 0
+
+
+def publish_dashboard(config: dict, *, force_pin: bool = False) -> int:
+    started_ms = time.time_ns() // 1_000_000
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        payload_task = pool.submit(omp_payload_section)
+        tokens_task = pool.submit(token_snapshot_section, started_ms)
+        history_task = pool.submit(history_snapshot_section, started_ms)
+        payload, payload_code = payload_task.result()
+        tokens, tokens_code = tokens_task.result()
+        history, history_code = history_task.result()
+    codes = [payload_code, tokens_code, history_code]
+    quotas_usable = payload is not None
+    tokens_usable = tokens is not None and bool(tokens.get("sources_ok"))
+    if not quotas_usable and not tokens_usable:
+        return section_exit_code(codes)
+    checked_ms = time.time_ns() // 1_000_000
+    try:
+        view = build_dashboard(payload, tokens, history, checked_ms)
+        image = render_dashboard(view)
+        updated = update_pinned(
+            config,
+            image,
+            dashboard_caption(view),
+            message_key=LIMITS_STATE_KEY,
+            pinned_key=PINNED_STATE_KEY,
+            force_pin=force_pin,
+        )
+    except UsageError as error:
+        return fail(error)
+    if not updated:
+        print("codex-usage-check: failed to update the usage dashboard message", file=sys.stderr)
+        return 2
+    predictions_code = 0
     reset_code = 0
-    if payload is not None:
-        reset_code = announce_window_resets(config, payload)
-    for code in (limits_code, token_code, forecast_code, reset_code):
-        if code == 1:
-            return 1
-        if code == 2:
-            status = 2
-    return status
+    if quotas_usable:
+        predictions_code = publish_predictions(config, view, force_pin=force_pin)
+        try:
+            reset_code = announce_window_resets(config, payload)
+        except UsageError as error:
+            print(f"codex-usage-check: {error}", file=sys.stderr)
+            reset_code = error.exit_code
+    return section_exit_code([*codes, predictions_code, reset_code])
 
 
 def fail(error: Exception) -> int:
@@ -2186,7 +1663,7 @@ def run_telegram() -> int:
             file=sys.stderr,
         )
         return 1
-    return publish_images(config)
+    return publish_dashboard(config)
 
 
 def setup_telegram() -> int:
@@ -2212,8 +1689,11 @@ def setup_telegram() -> int:
     result = me.get("result")
     result = result if isinstance(result, dict) else {}
     bot_username = result.get("username") or "unknown"
-    code = publish_images(config)
-    print(f"Telegram bot @{bot_username} verified; OMP provider usage, token chart, and forecast pinned in the Claude chat.")
+    code = publish_dashboard(config, force_pin=True)
+    if code == 0:
+        print(f"Telegram bot @{bot_username} verified; dashboard photos pinned in the Claude chat.")
+    else:
+        print(f"Telegram bot @{bot_username} verified; dashboard publish reported issues (exit {code}).")
     return code
 
 

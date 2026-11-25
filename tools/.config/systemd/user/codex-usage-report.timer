@@ -1,10 +1,10 @@
 [Unit]
-Description=OMP provider usage pinned-message refresh, every 5 minutes
+Description=OMP provider usage one pinned dashboard refresh
 
 [Timer]
 OnBootSec=1min
-OnUnitActiveSec=5min
-RandomizedDelaySec=20s
+OnUnitInactiveSec=1min
+AccuracySec=1s
 
 [Install]
 WantedBy=timers.target
