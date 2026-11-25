@@ -84,4 +84,5 @@ hideThinkingBlock: true
 composer:
   shape: box
 codexResets:
-  autoRedeem: "no"
+  autoRedeem5h: "no"
+  autoRedeemWeekly: "no"
