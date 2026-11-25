@@ -1,0 +1,46 @@
+# Stow reads this file instead of its built-in list, so the built-ins come first.
+RCS
+.+,v
+CVS
+\.#.+
+\.cvsignore
+\.svn
+_darcs
+\.hg
+\.git
+\.gitignore
+.+~
+\#.*\#
+^/README.*
+^/LICENSE.*
+^/COPYING
+
+# Build output and the state omp writes into the package at runtime.
+node_modules
+config\.yml\.lock
+\.dev-cwd
+last-changelog-version
+codex-client-version\.json
+gpu_cache\.json
+(agent|history|models|skill-descriptions|autoqa|stats)\.db(-shm|-wal)?
+cache
+logs
+sessions
+blobs
+run
+predict
+natives
+puppeteer
+remote-host
+ssh-control
+webcache
+terminal-sessions
+custom-session-files
+browser-profiles
+
+# The state agy writes when ~/.gemini resolves into this package.
+\.gemini/antigravity-cli
+\.gemini/config/\.migrated
+\.gemini/config/config\.json
+\.gemini/config/mcp_config\.json
+\.gemini/config/projects

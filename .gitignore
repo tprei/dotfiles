@@ -5,6 +5,12 @@ nvim.log
 herdr/.config/herdr/checkpoints/
 karabiner/.config/karabiner/automatic_backups/
 omp/.omp/**/config.yml.lock
+omp/.gemini/*
+!omp/.gemini/config/
+omp/.gemini/config/*
+!omp/.gemini/config/agents/
+omp/.gemini/config/agents/*
+!omp/.gemini/config/agents/omp-provider/
 pi/.pi/agent/auth.json
 pi/.pi/agent/codex-rate-history.jsonl
 pi/.pi/agent/npm/
