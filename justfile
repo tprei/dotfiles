@@ -1,7 +1,7 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 home := env_var("HOME")
-omp_src := env_var_or_default("OMP_SRC", home / ".worktrees/oh-my-pi-main-driver-no-agy-v18.12.4")
+omp_src := env_var_or_default("OMP_SRC", home / ".worktrees/oh-my-pi-main-driver-no-agy-v19.2.1")
 packages := "aerospace alacritty borders claude codex ghostty herdr karabiner nvim omp pi starship tmux tools vim zsh"
 
 _default:
@@ -105,9 +105,9 @@ omp-config-check:
     # Level-less `zai/glm-5.3:` keys under retry.fallbackChains name a failing
     # route, so only a populated non-max level is drift.
     drift=0
-    grep -rPn 'zai/glm-5\.3(-flash)?:(low|medium|high)' omp/ && drift=1
+    grep -rPn 'zai/glm-5\.(4|3(-flash)?):(low|medium|high)' omp/ && drift=1
     for agent in shared/agents/*/*.md; do
-        grep -q '^model: zai/glm-5\.3' "$agent" || continue
+        grep -qE '^model: zai/glm-5\.(4|3(-flash)?)' "$agent" || continue
         grep -qx 'thinking: max' "$agent" || { grep -Hn '^thinking:' "$agent"; drift=1; }
     done
     if [ "$drift" -ne 0 ]; then
@@ -144,8 +144,11 @@ omp-rebuild:
     bun --cwd="$src" install --frozen-lockfile
     version=$(sed -n 's/^Release: v//p' omp-runtime/PIN)
     tag="$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')"
+    natives_tmp=$(mktemp -d)
+    trap 'rm -rf "$natives_tmp"' EXIT
     curl --fail --location "https://registry.npmjs.org/@oh-my-pi/pi-natives-$tag/-/pi-natives-$tag-$version.tgz" \
-        | tar -xzO "package/pi_natives.$tag.node" > "$src/packages/natives/native/pi_natives.$tag.node"
+        | tar -xz -C "$natives_tmp"
+    cp "$natives_tmp"/package/pi_natives."$tag"*.node "$src/packages/natives/native/"
     sh "$src/scripts/link-omp.sh"
     wrapper=$(readlink -f "$src/packages/coding-agent/scripts/omp")
     for bin in "$HOME/.bun/bin" "$HOME/.local/bin"; do

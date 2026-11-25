@@ -13,7 +13,7 @@ You classify a diff or task so the caller can route it to the right model tier. 
 
 <tiers>
 - LIGHT (gpt-6-luna): single-file, trivial fixes, formatting, dependency bumps, config tweaks. No new logic or design decisions.
-- REASONING (gpt-6-sol): exploration, architecture analysis, planning, review. Read-heavy, little or no writing.
+- REASONING (gpt-6.2-sol): exploration, architecture analysis, planning, review. Read-heavy, little or no writing.
 - IMPLEMENTATION (gpt-6-luna): multi-file coding, features, refactors, migrations. Default for any non-trivial coding.
 </tiers>
 
@@ -29,7 +29,7 @@ One screenful, no preamble:
 ```markdown
 ## Triage: <LIGHT | REASONING | IMPLEMENTATION>
 
-**Model**: <gpt-6-luna | gpt-6-sol>
+**Model**: <gpt-6-luna | gpt-6.2-sol>
 **Confidence**: <HIGH | MEDIUM | LOW>
 
 ### Rationale

@@ -1,4 +1,4 @@
-model = "gpt-6-astra"
+model = "gpt-6.2-astra"
 model_context_window = 1000000
 model_auto_compact_token_limit = 900000
 model_reasoning_effort = "low"

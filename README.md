@@ -102,11 +102,11 @@ just stow omp
 Layout:
 - `omp/.omp/agent/config.yml`: root profile (model roles, thinking level, subagent overrides, retry fallback chains).
 - `omp/.omp/agent/{rules,extensions}/`: global rules and TypeScript extensions.
-- `omp/.omp/agent/models.yml`: model definitions merged over the bundled catalog; each profile symlinks it. Narrows GPT-6 Astra (OpenAI Codex, OpenRouter) to `low` and `medium`.
-- `omp/.omp/profiles/{mix,claude,codex,china}/agent/`: per-profile `config.yml`, `agents/`, and optional `rules/`, `APPEND_SYSTEM.md`, `WATCHDOG.md`. `codex` pins every role, agent override, and fallback chain to OpenAI Codex GPT-6/6.1 only.
+- `omp/.omp/agent/models.yml`: model definitions merged over the bundled catalog; each profile symlinks it. Caps GPT-6.2 Astra (OpenAI Codex, OpenRouter) thinking at `low`, `medium`, and `high` with a `medium` default.
+- `omp/.omp/profiles/{mix,claude,codex,china}/agent/`: per-profile `config.yml`, `agents/`, and optional `rules/`, `APPEND_SYSTEM.md`, `WATCHDOG.md`. `codex` pins every role, agent override, and fallback chain to OpenAI Codex GPT-6.2 only.
 - `omp/.gemini/config/agents/omp-provider/agent.md`: isolated AGY transport agent.
 
-`just omp-verify` fails when `~/.omp/agent/config.yml` resolves outside the repo. `just omp-config-check` fails when a `zai/glm-5.3` or `zai/glm-5.3-flash` selector uses a level other than `max`, or a `shared/agents/*/*.md` pinned to `model: zai/glm-5.3` declares anything but `thinking: max`. Level-less keys under `retry.fallbackChains` name a failing route and stay level-less.
+`just omp-verify` fails when `~/.omp/agent/config.yml` resolves outside the repo. `just omp-config-check` fails when a `zai/glm-5.4`, `zai/glm-5.3-flash`, or legacy `zai/glm-5.3` selector uses a level other than `max`, or a `shared/agents/*/*.md` pinned to one of those models declares anything but `thinking: max`. Level-less keys under `retry.fallbackChains` name a failing route and stay level-less. Current picks: ZAI flagship `zai/glm-5.4` with `zai/glm-5.3-flash` on fast roles, `opencode-go/kimi-k3.1-pro`, OpenAI Codex `gpt-6.2-sol` and `gpt-6.2-astra`, and Anthropic `claude-fable-5-2`.
 
 Edit configs here, never in `~/.omp`. A real file under `~/.omp` is drift: reconcile it into the repo and re-stow. `agent.db`, `history.db`, `models.db`, `sessions/`, `logs/`, and `cache/` are untracked runtime state.
 
@@ -136,15 +136,15 @@ readlink -f ~/.omp/profiles/mix/agent/extensions/antigravity-cli.ts
 
 ### Patched OMP runtime
 
-`omp-runtime/` holds the patches this machine's `omp` is built from; the checkout lives outside the repo with no fork. The pinned source is upstream v18.12.4, bootstrapped into `~/.worktrees/oh-my-pi-main-driver-no-agy-v18.12.4` (`OMP_SRC` overrides the path). Running sessions keep the executable they started with; restart them to load the new runtime.
+`omp-runtime/` holds the patches this machine's `omp` is built from; the checkout lives outside the repo with no fork. The pinned source is upstream v19.2.1, bootstrapped into `~/.worktrees/oh-my-pi-main-driver-no-agy-v19.2.1` (`OMP_SRC` overrides the path). Building it needs Bun >= 1.4.4 (upstream CI pins 1.4.5); older Bun fails the frozen lockfile install. Running sessions keep the executable they started with; restart them to load the new runtime.
 
 - `PIN`: upstream release, baseline commit, tarball URL, ordered patch list.
 - `NNNN-*.patch`: `git format-patch` output above the baseline.
 - `0001` scopes provider bans to the main driver and stays required: upstream's only knob, the global `disabledProviders` setting, also restricts subagents. Root, `mix`, and `china` bar `antigravity-cli` for the main driver through the patch's `mainAgent.disabledProviders` key while advisor and commit side agents and the surveyor and git-commit-specialist subagents keep using it.
 
-Upstream v18.12.4 ships a native `/effort` command that owns the slash picker and explicit levels, so the thinking-picker extension no longer registers its own; Alt+J still opens its direct effort picker. `/m` keeps fuzzy ranking and latest-version preference, and `/use` keeps session-only role lineups, unlike the persistent native `/modelpreset`.
+Upstream ships a native `/effort` command that owns the slash picker and explicit levels, so the thinking-picker extension no longer registers its own; Alt+J still opens its direct effort picker. `/m` keeps fuzzy ranking and latest-version preference, and `/use` keeps session-only role lineups, unlike the persistent native `/modelpreset`.
 
-`just omp-rebuild` works on any machine: it bootstraps the pinned tarball into `~/.worktrees/oh-my-pi-main-driver-no-agy-v18.12.4` (or `OMP_SRC`), applies patches, builds, and relinks every launcher holding an `omp`. After committing in the checkout, run `just omp-runtime-export` then `just omp-rebuild`. `just omp-runtime-check` fails when a patch differs from its source commit (ignoring the sha line), is missing from `PIN`, or `PIN` names a missing file. Run it after upstream bumps.
+`just omp-rebuild` works on any machine: it bootstraps the pinned tarball into `~/.worktrees/oh-my-pi-main-driver-no-agy-v19.2.1` (or `OMP_SRC`), applies patches, installs dependencies, drops the pinned release's prebuilt natives from npm into `packages/natives/native/` (x64 platforms ship `-baseline` and `-modern` CPU variants, arm64 the plain name; the loader picks the fastest one the CPU supports), and relinks every launcher holding an `omp`. After committing in the checkout, run `just omp-runtime-export` then `just omp-rebuild`. `just omp-runtime-check` fails when a patch differs from its source commit (ignoring the sha line), is missing from `PIN`, or `PIN` names a missing file. Run it after upstream bumps.
 
 ## Private workspaces
 

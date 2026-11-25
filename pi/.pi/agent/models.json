@@ -3,8 +3,8 @@
     "openai-codex": {
       "models": [
         {
-          "id": "gpt-6-sol",
-          "name": "GPT-6 Sol",
+          "id": "gpt-6.2-sol",
+          "name": "GPT-6.2 Sol",
           "api": "openai-codex-responses",
           "baseUrl": "https://chatgpt.com/backend-api",
           "reasoning": true,
@@ -16,7 +16,7 @@
             "text",
             "image"
           ],
-          "contextWindow": 272000,
+          "contextWindow": 500000,
           "maxTokens": 128000
         },
         {

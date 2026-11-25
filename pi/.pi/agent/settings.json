@@ -1,7 +1,7 @@
 {
   "lastChangelogVersion": "0.79.0",
   "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-6-sol",
+  "defaultModel": "gpt-6.2-sol",
   "defaultThinkingLevel": "xhigh",
   "terminal": {
     "showTerminalProgress": true

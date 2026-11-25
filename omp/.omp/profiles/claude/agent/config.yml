@@ -43,16 +43,16 @@ retry:
       - anthropic/claude-haiku-5-5:max
     anthropic/claude-haiku-5-5:max:
       - google-antigravity/gemini-4-hydrogen
-    zai/glm-5.3:
+    zai/glm-5.4:
       - google-antigravity/gemini-4-hydrogen
       - openai-codex/gpt-6-luna:max
     anthropic/claude-opus-5-5:
       - anthropic/claude-sonnet-5-5:max
       - openai-codex/gpt-6-luna:max
-      - zai/glm-5.3:max
+      - zai/glm-5.4:max
     anthropic/claude-sonnet-5-5:
       - openai-codex/gpt-6-luna:max
-      - zai/glm-5.3:max
+      - zai/glm-5.4:max
     openai-codex/gpt-6-luna:
       - anthropic/claude-haiku-5-5:max
   maxDelayMs: 0
