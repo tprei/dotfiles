@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import base64
-import colorsys
-import hashlib
 import math
 import re
 import unicodedata
@@ -99,7 +97,6 @@ _USED_INSET = 232
 _GAUGE_INSET = 338
 _WARM_PERCENT = 75.0
 _BURNING_PERCENT = 90.0
-_HOT_PROJECTION = 85.0
 _HOT_TOKEN_SHARE = 0.4
 
 _TILES_WIDTH = 944
@@ -150,12 +147,12 @@ _FLAME_YELLOW = "#FDE047"
 _RAINBOW = ("#F87171", "#FB923C", "#FACC15", "#4ADE80", "#60A5FA", "#A78BFA")
 
 _PROVIDER_STYLE = {
-    "openai-codex": ("OpenAI Codex", "#34D399"),
-    "google-antigravity": ("Google Antigravity", "#60A5FA"),
-    "opencode-go": ("OpenCode Go", "#C084FC"),
-    "zai": ("ZAI", "#FACC15"),
-    "anthropic": ("Anthropic", "#FB923C"),
-    "openai": ("OpenAI", "#F472B6"),
+    "openai-codex": ("OpenAI Codex", "#ECECEC"),
+    "google-antigravity": ("Google Antigravity", "#3186FF"),
+    "opencode-go": ("OpenCode Go", "#AEAEAE"),
+    "zai": ("ZAI", "#858BAC"),
+    "anthropic": ("Anthropic", "#D97757"),
+    "openai": ("OpenAI", "#ECECEC"),
     "openrouter": ("OpenRouter", "#22D3EE"),
 }
 _PROVIDER_ALIASES = {"antigravity-cli": "google-antigravity"}
@@ -169,8 +166,8 @@ _LOGOS = {
     "opencode-go": ("opencode.svg", True),
 }
 _CHIPS = {
-    "EXHAUSTED": ("Exhausted", _CORAL, "flame"),
-    "RUN OUT": ("Runs out", _CORAL, "flame"),
+    "EXHAUSTED": ("Exhausted", _CORAL, "lock"),
+    "RUN OUT": ("Runs out", _CORAL, "alert"),
     "GATED": ("Gated", _AMBER, "lock"),
     "HOT": ("Hot", _AMBER, "bolt"),
     "WARNING": ("Near limit", _AMBER, "bolt"),
@@ -190,7 +187,6 @@ _FLAME_PATH = (
 )
 _ICONS = {
     "clock": ('<circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/>', True),
-    "flame": (f'<path d="{_FLAME_PATH}"/>', False),
     "bolt": ('<path d="M13.5 2 4.5 13.6h6.3L9.6 22l9.4-11.9h-6.4z"/>', False),
     "lock": ('<rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/>', True),
     "check": ('<path d="M5 12.5l4.5 4.5L19 7.5"/>', True),
@@ -241,9 +237,7 @@ def _provider_color(provider: str) -> str:
     key = _PROVIDER_ALIASES.get(provider, provider)
     if key in _PROVIDER_STYLE:
         return _PROVIDER_STYLE[key][1]
-    digest = hashlib.sha256(key.encode("utf-8", errors="replace")).digest()
-    hue = int.from_bytes(digest[:2], "big") / 65536
-    return "#" + "".join(f"{round(channel * 255):02X}" for channel in colorsys.hsv_to_rgb(hue, 0.48, 0.95))
+    return _SLATE
 
 
 @cache
@@ -461,24 +455,17 @@ class _Svg:
         self.rect(x, y, width, height, "none", radius, stroke=self.rainbow_stroke(), stroke_opacity=opacity, stroke_width=2)
 
     def card(self, x: float, y: float, width: float, height: float, accent: str, *, rainbow: bool = False) -> None:
-        edge = ""
         if rainbow:
             border = self.rainbow_stroke()
-            opacity = 0.86
+            opacity = 0.9
             stroke_width = 2.5
         else:
-            clip_id = self.clip(x, y, width, height, _RADIUS)
-            edge = (
-                f'<rect x="{x:.1f}" y="{y:.1f}" width="{width:.1f}" height="4" fill="{accent}"'
-                f' clip-path="url(#{clip_id})"/>'
-            )
             border = accent
-            opacity = 0.22
+            opacity = 0.42
             stroke_width = 1.5
         self.backdrop.append(
             f'<rect x="{x:.1f}" y="{y:.1f}" width="{width:.1f}" height="{height:.1f}" rx="{_RADIUS}" fill="{_PANEL}"'
             f' stroke="{border}" stroke-opacity="{opacity:g}" stroke-width="{stroke_width:g}"/>'
-            + edge
         )
 
     def finish(self, height: int, *, width: int = _WIDTH, title: str, desc: str) -> bytes:
@@ -729,10 +716,7 @@ def _alerts(svg: _Svg, dashboard: Dashboard, accounts: list[str], y: int) -> int
         x = _MARGIN + index * (width + _GAP)
         svg.rect(x, y, width, 64, tone, 20, opacity=0.1, stroke=tone, stroke_opacity=0.4)
         svg.circle(x + 36, y + 32, 20, tone, opacity=0.2)
-        if icon == "flame":
-            svg.flame(x + 24, y + 19, 24)
-        else:
-            svg.icon(icon, x + 24, y + 20, 24, tone)
+        svg.icon(icon, x + 24, y + 20, 24, tone)
         title_text = _fit(title, _BODY, width - 96, 700)
         runs = [_Run(title_text, tone, 700)]
         room = width - 72 - _width(title_text, _BODY, 700) - 14 - 28
@@ -747,29 +731,18 @@ def _card_height(quota: ProviderQuota) -> int:
     return _CARD_TOP + rows + 16
 
 
-def _pill(svg: _Svg, x: float, y: float, chip: _Chip, room: float, *, rainbow: bool = False) -> None:
+def _pill(svg: _Svg, x: float, y: float, chip: _Chip, room: float) -> None:
     text = _fit(chip.text, _SMALL, room - 52, 700)
     width = 56 + _width(text, _SMALL, 700)
-    if rainbow:
-        svg.rect(x, y, width, 34, chip.tone, 17, opacity=0.15)
-        svg.rainbow_outline(x, y, width, 34, 17, 0.86)
-    else:
-        svg.rect(x, y, width, 34, chip.tone, 17, opacity=0.15, stroke=chip.tone, stroke_opacity=0.32)
+    svg.rect(x, y, width, 34, chip.tone, 17, opacity=0.15, stroke=chip.tone, stroke_opacity=0.32)
     svg.icon(chip.icon, x + 13, y + 8, 18, chip.tone)
     svg.text(x + 39, y + 23, text, _SMALL, chip.tone, weight=700)
 
 
-def _fill_bar(svg: _Svg, x: float, y: float, fill_width: float, color: str, heat: int) -> None:
-    radius = _BAR_HEIGHT / 2
-    if heat == 2:
-        svg.rect(x, y, fill_width, _BAR_HEIGHT, _FLAME_YELLOW, radius)
-        svg.rect(x, y, max(_BAR_HEIGHT, fill_width - 28), _BAR_HEIGHT, _FLAME_ORANGE, radius)
-        svg.rect(x, y, max(_BAR_HEIGHT, fill_width * 0.55), _BAR_HEIGHT, _FLAME_RED, radius)
-    elif heat == 1:
-        svg.rect(x, y, fill_width, _BAR_HEIGHT, _FLAME_ORANGE, radius)
-        svg.rect(x, y, max(_BAR_HEIGHT, fill_width - min(72.0, fill_width * 0.3)), _BAR_HEIGHT, color, radius)
-    else:
-        svg.rect(x, y, fill_width, _BAR_HEIGHT, color, radius)
+def _opportunity_row(svg: _Svg, left: float, right: float, y: float, height: int, opportunity: int) -> None:
+    if opportunity:
+        opacity = 0.92 if opportunity == 2 else 0.7
+        svg.rainbow_outline(left - 12, y + 2, right - left + 24, height - 4, 12, opacity)
 
 
 def _quota_row(svg: _Svg, x: float, right: float, y: float, window: QuotaWindow, provider: str, now_ms: int) -> None:
@@ -780,9 +753,6 @@ def _quota_row(svg: _Svg, x: float, right: float, y: float, window: QuotaWindow,
     verdict = _verdict(window)
     chip = _chip(window, now_ms)
     heat = _heat(window)
-    opportunity = _opportunity(window, now_ms)
-    if opportunity == 2:
-        svg.rainbow_outline(x - 12, y - 3, right - x + 24, _ROW_HEIGHT - 3, 12, 0.55)
     reset = _countdown(window, now_ms)
     reset_width = 0.0
     if reset:
@@ -798,7 +768,8 @@ def _quota_row(svg: _Svg, x: float, right: float, y: float, window: QuotaWindow,
     if used is not None and used > 0:
         fill_width = max(_BAR_HEIGHT, bar_width * min(used, 100.0) / 100)
         fill_end = x + fill_width
-        _fill_bar(svg, x, bar_y, fill_width, _provider_color(provider), heat)
+        ink = _FLAME_ORANGE if heat else _provider_color(provider)
+        svg.rect(x, bar_y, fill_width, _BAR_HEIGHT, ink, _BAR_HEIGHT / 2)
     projected = _projection(window)
     tone = chip.tone if chip is not None else _MUTED
     marker = fill_end
@@ -807,8 +778,6 @@ def _quota_row(svg: _Svg, x: float, right: float, y: float, window: QuotaWindow,
         if marker > fill_end:
             start = max(x, fill_end - _BAR_HEIGHT / 2)
             svg.rect(start, bar_y, marker - start, _BAR_HEIGHT, tone, _BAR_HEIGHT / 2, opacity=0.3)
-    if opportunity:
-        svg.rainbow_outline(x - 2, bar_y - 2, bar_width + 4, _BAR_HEIGHT + 4, 8, 0.85)
     if projected is not None:
         svg.circle(marker, bar_y + _BAR_HEIGHT / 2, 7, tone, stroke=_PANEL, stroke_width=3)
     if used is None:
@@ -832,7 +801,7 @@ def _quota_row(svg: _Svg, x: float, right: float, y: float, window: QuotaWindow,
         _pill(svg, pace_x, y, chip, _PACE_WIDTH)
         svg.text(pace_x + 14, y + 54, _fit(chip.note, _TINY, _PACE_WIDTH - 14), _TINY, _MUTED)
     else:
-        _pill(svg, pace_x, y + 11, chip, _PACE_WIDTH, rainbow=bool(opportunity) and verdict == "SPARE")
+        _pill(svg, pace_x, y + 11, chip, _PACE_WIDTH)
 
 
 def _card_header(svg: _Svg, left: float, right: float, y: float, quota: ProviderQuota, account: str) -> None:
@@ -852,7 +821,8 @@ def _card_header(svg: _Svg, left: float, right: float, y: float, quota: Provider
 def _provider_card(
     svg: _Svg, x: float, y: float, width: float, height: float, quota: ProviderQuota, account: str, now_ms: int
 ) -> None:
-    rainbow = bool(quota.windows) and all(_opportunity(window, now_ms) for window in quota.windows)
+    opportunities = [_opportunity(window, now_ms) for window in quota.windows]
+    rainbow = bool(opportunities) and all(opportunities)
     svg.card(x, y, width, height, _provider_color(quota.provider), rainbow=rainbow)
     left = x + _PAD
     right = x + width - _PAD
@@ -860,7 +830,9 @@ def _provider_card(
     row_y = y + _CARD_TOP
     if not quota.windows:
         svg.text(left, row_y + 24, "No windows reported", 20, _MUTED)
-    for window in quota.windows:
+    for window, opportunity in zip(quota.windows, opportunities):
+        if not rainbow:
+            _opportunity_row(svg, left, right, row_y - 5, _ROW_HEIGHT, opportunity)
         _quota_row(svg, left, right, row_y, window, quota.provider, now_ms)
         row_y += _ROW_HEIGHT
 
@@ -1161,16 +1133,11 @@ def _forecast_row(
     tone = chip.tone if chip is not None else _MUTED
     color = _provider_color(provider)
     projected = pace.projected_percent
-    hot_projection = projected is not None and projected >= _HOT_PROJECTION
-    opportunity = _forecast_opportunity(window, now_ms)
-    if opportunity == 2:
-        svg.rainbow_outline(left - 12, y + 4, right - left + 24, _FORECAST_ROW - 8, 14, 0.55)
+    heat = _heat(window)
     svg.text(left, y + 36, _fit(_window_label(window, provider), _BODY, _SPARK_OFFSET - 28), _BODY)
     _reset_label(svg, left, y + 66, window, now_ms)
     spark_x = left + _SPARK_OFFSET
     _sparkline(svg, spark_x, y + 14, pace.spark, color, projected, tone)
-    if opportunity:
-        svg.rainbow_outline(spark_x, y + 14, _SPARK_WIDTH, _SPARK_HEIGHT, 12, 0.85)
     numbers_x = left + _NUMBERS_OFFSET
     x = numbers_x
     used = window.used_percent
@@ -1186,21 +1153,19 @@ def _forecast_row(
         projected_text = _percent(projected)
         svg.text(x + 42, y + 44, projected_text, 26, tone, weight=700, mono=True)
         x += 42 + _width(projected_text, 26, mono=True)
-    if hot_projection:
-        svg.flame(x + 8, y + 21, 22)
-        x += 30
+    if heat:
+        size = 24 if heat == 2 else 18
+        svg.flame(x + 8, y + 32 - size / 2, size)
+        x += size + 8
     if "?" not in pace.rate:
         svg.text(x + 20, y + 43, pace.rate, _SMALL, _MUTED, mono=True)
     if chip is not None:
         text = _fit(chip.text, _SMALL, _PACE_WIDTH - 52, 700)
-        _pill(svg, right - 56 - _width(text, _SMALL, 700), y + 16, chip, _PACE_WIDTH, rainbow=bool(opportunity))
+        _pill(svg, right - 56 - _width(text, _SMALL, 700), y + 16, chip, _PACE_WIDTH)
     svg.text(numbers_x, y + 80, _fit(_advice(window, pace, now_ms), _SMALL, right - numbers_x), _SMALL, _MUTED)
 
 
 def _compact_row(svg: _Svg, left: float, right: float, y: float, window: QuotaWindow, provider: str, now_ms: int) -> None:
-    opportunity = _forecast_opportunity(window, now_ms)
-    if opportunity == 2:
-        svg.rainbow_outline(left - 12, y + 3, right - left + 24, _COMPACT_ROW - 6, 12, 0.55)
     svg.text(left, y + 34, _fit(_window_label(window, provider), 20, _SPARK_OFFSET - 28), 20, _MUTED)
     _reset_label(svg, left + _SPARK_OFFSET, y + 34, window, now_ms)
     numbers_x = left + _NUMBERS_OFFSET
@@ -1211,9 +1176,10 @@ def _compact_row(svg: _Svg, left: float, right: float, y: float, window: QuotaWi
         used_color = _CORAL if _verdict(window) == "EXHAUSTED" else _MUTED
         used_text = _percent(used)
         svg.text(numbers_x, y + 35, used_text, 20, used_color, weight=700, mono=True)
-        if opportunity:
-            width = _width(used_text, 20, mono=True)
-            svg.rainbow_outline(numbers_x - 9, y + 12, width + 18, 30, 10, 0.85)
+        heat = _heat(window)
+        if heat:
+            size = 24 if heat == 2 else 18
+            svg.flame(numbers_x + _width(used_text, 20, mono=True) + 8, y + 26 - size / 2, size)
     chip = _chip(window, now_ms)
     pill_left = right
     if chip is not None:
@@ -1225,15 +1191,9 @@ def _compact_row(svg: _Svg, left: float, right: float, y: float, window: QuotaWi
     svg.text(note_x, y + 34, _fit(note, _SMALL, pill_left - note_x - 16), _SMALL, _MUTED)
 
 
-def _forecast_opportunity(window: QuotaWindow, now_ms: int) -> int:
-    projected = window.pace.projected_percent if window.pace is not None else None
-    if projected is not None and projected >= _HOT_PROJECTION:
-        return 0
-    return _opportunity(window, now_ms)
-
-
 def _forecast_card(svg: _Svg, y: float, height: float, quota: ProviderQuota, account: str, now_ms: int) -> None:
-    rainbow = bool(quota.windows) and all(_forecast_opportunity(window, now_ms) for window in quota.windows)
+    opportunities = [_opportunity(window, now_ms) for window in quota.windows]
+    rainbow = bool(opportunities) and all(opportunities)
     svg.card(_MARGIN, y, _RIGHT - _MARGIN, height, _provider_color(quota.provider), rainbow=rainbow)
     left = _MARGIN + _PAD
     right = _RIGHT - _PAD
@@ -1241,15 +1201,19 @@ def _forecast_card(svg: _Svg, y: float, height: float, quota: ProviderQuota, acc
     row_y = y + _CARD_TOP
     if not quota.windows:
         svg.text(left, row_y + 24, "No windows reported", 20, _MUTED)
-    for index, window in enumerate(quota.windows):
+    for index, (window, opportunity) in enumerate(zip(quota.windows, opportunities)):
+        pace = window.pace
+        ready = pace is not None and _forecast_ready(window)
+        row_height = _FORECAST_ROW if ready else _COMPACT_ROW
+        if not rainbow:
+            _opportunity_row(svg, left, right, row_y, row_height, opportunity)
         if index:
             svg.rule(left, row_y, right, _WHITE, 0.07)
-        if window.pace is not None and _forecast_ready(window):
-            _forecast_row(svg, left, right, row_y, window, window.pace, quota.provider, now_ms)
-            row_y += _FORECAST_ROW
+        if pace is not None and ready:
+            _forecast_row(svg, left, right, row_y, window, pace, quota.provider, now_ms)
         else:
             _compact_row(svg, left, right, row_y, window, quota.provider, now_ms)
-            row_y += _COMPACT_ROW
+        row_y += row_height
 
 
 def render_forecast_svg(dashboard: Dashboard) -> bytes:
@@ -1274,20 +1238,10 @@ def render_forecast_svg(dashboard: Dashboard) -> bytes:
     )
 
 
-def _confetti(svg: _Svg, x: float, y: float) -> None:
-    pieces = (
-        (0, 18, _RAINBOW[0], 20), (26, 4, _RAINBOW[2], -30), (50, 26, _RAINBOW[4], 45), (78, 8, _MINT, -10),
-        (102, 30, _RAINBOW[5], 30), (124, 12, _RAINBOW[1], -45),
-    )
-    for dx, dy, color, angle in pieces:
-        cx = x + dx
-        cy = y + dy
-        svg.raw(
-            f'<rect x="{cx - 6:.1f}" y="{cy - 2.5:.1f}" width="12" height="5" rx="2" fill="{color}" '
-            f'transform="rotate({angle} {cx:.1f} {cy:.1f})"/>'
-        )
-    for dx, dy, color in ((12, 40, _RAINBOW[3]), (64, 46, _PINK), (114, 48, _FLAME_YELLOW)):
-        svg.circle(x + dx, y + dy, 3.5, color)
+def _reset_sparks(svg: _Svg, right: float, y: float, color: str) -> None:
+    svg.icon("spark", right - 70, y + 26, 48, color)
+    svg.icon("spark", right - 100, y + 40, 16, color)
+    svg.icon("spark", right - 25, y + 20, 20, color)
 
 
 def _reset_card(svg: _Svg, y: float, event: ResetEvent, now_ms: int) -> None:
@@ -1312,7 +1266,7 @@ def _reset_card(svg: _Svg, y: float, event: ResetEvent, now_ms: int) -> None:
     svg.text(center_x, center_y + 8, _percent(fresh), 28, weight=700, anchor="middle", mono=True)
     svg.text(center_x, center_y + 30, "left", _MICRO, _MUTED, anchor="middle")
     text_x = x + _PAD + 128 + 40
-    _confetti(svg, right - 130, y + 22)
+    _reset_sparks(svg, right, y, color)
     svg.badge(text_x, y + 28, event.provider, color=color)
     name = _fit(provider_name(event.provider), 24, right - 170 - text_x - 58, 700)
     runs = [_Run(name, _WHITE, 700)]
