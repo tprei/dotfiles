@@ -1,0 +1,11 @@
+# Polish
+
+Includes modified guidance from Impeccable. See [sources](SOURCES.md).
+
+Finish the actual path without changing the identity, facts, behavior, or anything outside scope. If the core concept fails, say so; do not quietly redesign. A static scan is defect evidence, not a taste verdict.
+
+1. **Orient.** Read design tokens, shared controls, nearby flows, and real rendered states. If no formal guide exists, use coherent observed conventions. Classify findings as a missing reusable role, a one-off that should reuse an existing control, a conceptual mismatch in a path or hierarchy, or an isolated implementation defect. Fix at the narrowest correct boundary.
+2. **Walk the flow.** Use intended devices, input modes, copy, data extremes, permissions and failure. Preserve any current critique's material backlog, especially P0/P1, as one input; test independently anyway. Changed assumptions may make older findings stale. Do not close a previous review unless its own priority findings are resolved or shown obsolete.
+3. **Triage.** Fix broken paths, data loss, misleading state and accessibility first. Then fill material state holes. Repair responsive flow, accessibility and system drift before visual and motion cleanup. Make the full path hold before perfecting one corner.
+4. **Refine at system level.** Match mental models, save and feedback patterns, disclosure and naming; correct priorities, rhythm, measured and optical alignment, type roles, and spacing. Use semantic color, consistent meaningful icons, stable image aspect and purposeful fallback. Cover all material control states. Reuse shared controls or values when the problem really is shared. Standardize tone, terms, interactions and navigation. Keep current source of truth for facts and ask before altering claims.
+5. **Recheck in batches.** Use the [pre-ship checklist](pre-ship.md), with mouse, keyboard, touch, correct engine or device, both themes where supported, translated/overlong or missing content, reduced motion, real assets, and visible input focus. Verify transitions and recovery through actual behavior. Remove dead styles, variants, unused assets and debug UI without unrelated churn. Report what is fixed, any deliberate exception and any untested dimension. Do not call unresolved material defects polish-complete.

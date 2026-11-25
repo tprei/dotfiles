@@ -1,0 +1,24 @@
+# Data and dashboards
+
+Includes modified guidance from Impeccable. See [sources](SOURCES.md).
+
+## Start with the operator's decision
+
+List the top jobs and who performs them at what frequency, risk, and available time. Lead with the actionable fact and put controls above the data they scope. Show filters and range visibly; distinguish global from local filters. Put related evidence at the decision, not in another panel the user has to remember. Use a work area and optional inspector, not a hero or equal-sized card mosaic. Chunk decisions into at most four items when practical. In a glance, headings, labels, and numbers should identify current scope, state, and next action. Use one row per comparable object and show secondary detail only when it changes a decision; use progressive disclosure to preserve the full record.
+
+## Give a figure something to mean
+
+- Show task, unit, denominator and period; include comparator, target or threshold when it explains the decision. Make it clear whether a change is absolute, relative, or percentage points. Do not rely on red or green without direction, label, or state. A changing lead metric often needs recent history and the moment a change began, not a large number alone.
+- Choose the chart for the question: line for ordered change over time; aligned bars or dots for comparable values; distribution or scatter for variation and relationships; a table when exact lookup matters. Give bars a zero baseline; for lines, disclose a cropped scale or breaks when they would change interpretation. Show gaps rather than fake continuity across missing readings. Be explicit about totals, rounding, scope, and aggregations.
+- Keep axes and redundant gridlines quiet, not illegible. Label series, units, thresholds, and meaningful events. Highlight the one signal the user needs now; use an accessible legend and visible summaries, and provide exact values without hover only. Never draw a sparkline, progress ring, or trend from fake production data. Label demos as sample data and make ranges and units plausible. A progress bar reports completed of known total; an indeterminate process shows no invented percentage.
+- Use semantics before color: service topology as a transit map, intensity for heavy use, a discrete marker for degraded service, or a reward accent for remaining capacity. Keep the meaning stable across summary, filter and drill-down. Use labels or shapes alongside hue, perceptually ordered ramps for magnitude, a true midpoint for divergent ramps, and distinguishable category encodings rather than a rainbow. Never turn a metaphor into an invented control or use heat where users need exact precision.
+
+## Build comparative tables
+
+Use real headers and row associations, sort controls with communicated sort direction, tabular digits, and aligned numeric columns. Keep names distinguishable with the relevant handle, disambiguator, or accessible full value. Preserve units across views, retain filter and selection on drill-down, and make bulk actions and counts explicit. Use sticky headers or key columns only if they do not hide focused content. With dense data, decide what must remain comparable on mobile: preserve a horizontally scrollable, labeled table for column comparison; switch to an independently understandable list or detail view only when that is the task. Verify keyboard, touch, copy, and screen reader paths; a visual card conversion that loses header relationships is not equivalent. For long lists use pagination or virtualization while preserving position, discovery, and selection.
+
+## Treat freshness and absence as states
+
+Show timestamp, time zone and data window as applicable, last successful update, and which sources or series are unavailable. Distinguish confirmed zero, no data, filtered out, not applicable, stale, partial and permission restricted. Mark unknown values with a meaningful label or annotated dash and explain scope; never show zero for missing. Prefer existing data with a visible refreshing/stale indicator to blanking the workspace. Indicate failed refresh and next action without wiping previously useful data. Surface whether totals exclude missing sources. Announce material changes without announcing every tick. Let real-time views pause or summarize updates when movement breaks reading or selection.
+
+For a static SVG or PNG report, test the actual export at target resolution and print size. Preserve title, dates, units, sources, context, and any synthetic or stale label in the artifact itself. Provide a text summary or accessible table alongside an image when the medium cannot expose data. A terminal dashboard needs sensible columns at small window sizes, no reliance on color, and stable plain-text/export output as appropriate. See [adapt](adapt.md) and [pre-ship](pre-ship.md).

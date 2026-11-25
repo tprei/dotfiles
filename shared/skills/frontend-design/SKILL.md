@@ -1,95 +1,72 @@
 ---
 name: frontend-design
-description: Design, redesign, critique, or polish anything a user sees (web and native UI, dashboards, generated images, SVG reports, terminal UIs) so it reads as chosen rather than generated. Use before any visual edit, including small refinements.
+description: Design, redesign, critique, audit, or polish any visual surface, including web, native and desktop apps, dashboards, generated SVG or PNG reports, games, and terminal UIs. Use before visual edits, even small ones. Skip backend-only work.
 ---
 
 # Frontend design
 
-Design that reads as chosen, not generated. Distilled from [Impeccable](https://impeccable.style/) (Paul Bakaus, Apache-2.0), Anthropic's `frontend-design` skill, OpenAI's frontend guide, and [frontend-slop-guard](https://github.com/airtaxi/frontend-slop-guard).
+Includes modified guidance from Impeccable and Anthropic. See [source attribution](references/SOURCES.md).
 
-## Process
+Make choices for this subject, audience, and job, not for its category.
 
-1. Name the mode from the surface, not the product:
-   - **Operate:** the user does a task: apps, dashboards, tools, status reports. Ambition shows as precision and restraint; familiar patterns earn their place.
-   - **Read:** the user understands something: docs, articles.
-   - **Persuade:** the user decides: landing pages, pricing. Full commitment and a point of view.
-   - **Experience:** the work itself: portfolios, galleries.
-2. Ground in the subject and the incumbent system. Read the existing tokens, components, and type before deciding. The brief wins over your taste: honor pinned fonts, palettes, and eras.
-3. Plan before code. Write down:
-   - 4 to 6 named colors, each with a role
-   - 1 or 2 clearly different typefaces with their roles and a type scale
-   - an ASCII layout sketch with alignment
-   - the one memorable move
+## Choose the mode
 
-   Then compare the plan against the default you'd produce for any similar brief, and revise every part that matches it.
-4. Build to the craft floor below.
-5. Look at the rendered result at the size it ships at (browser screenshot, PNG, phone width). Batch fixes per look. Critique it against the refuse list, then remove one accessory before shipping.
+- **Operate:** complete a task. Prefer scanability, stable controls, and native expectations.
+- **Read:** understand something. Put measure, wayfinding, and sustained comprehension first.
+- **Persuade:** decide and act. Put the offer, proof, and working action inside one committed opening.
+- **Experience:** encounter the work itself. Let the artifact lead and the interface recede.
 
-## Craft floor
+Mode belongs to the surface, not the product. See [mode guidance](references/modes.md).
 
-- **Contrast:** body text ≥ 4.5:1, large text ≥ 3:1. Secondary text on a colored surface is tinted from that hue, never gray.
-- **Spacing:**
-  - Tight groups, generous separation, and more space above a heading than below it.
-  - Content never touches a container edge.
-  - Equal gaps everywhere hide grouping.
-- **Type:**
-  - Product UI uses a 1.125 to 1.2 scale ratio; emphasis comes from weight and color, not giant sizes.
-  - Use tabular figures for aligned numbers.
-  - Prose runs 65 to 75 characters per line.
-  - Choose a face with character for the subject; never fall back to a default stack (Inter, Roboto, Arial, DejaVu, the system font).
-- **Depth:** neutral shadows with an offset and a soft blur. Declare elevation once: a border or a shadow, not both.
-- **Color:** color carries meaning (state, category, identity). Follow 70-30-10, with one accent for action and state. Inactive states never get full saturation.
-- **Icons:** one drawn set in a consistent stroke and weight, or real brand logos for real entities. Never emoji or Unicode glyphs standing in for icons.
-- **States:** loading, empty, error, partial, stale, disabled. Empty states direct the next action; partial data is marked and never reads as zero.
-- **Copy:** the product's own words. Each element does one job; cut until deleting more would lose meaning.
-- **Motion:** it conveys state or answers an action, in 150 to 250 ms for product UI. Use one authored moment at most; never give every section the same entrance.
+## Plan, build, look
 
-## Refuse
+1. Read the brief, representative renders, components, tokens, assets, and real content. Name who uses this, where, and what success looks like. Refine within the existing identity; replace it only on a redesign. Honor explicit direction within the floor below.
+2. Before code, write 4 to 6 named colors with roles, one or two typefaces with a scale and roles, an ASCII layout with alignment and responsive changes, content order, and one memorable move. Compare with what you would produce for a similar generic brief. Revise every unpinned choice that matches without a job-specific reason; say what changed and why.
+3. Read the relevant playbook and the [craft floor](references/craft-floor.md) before editing. Design all material states and paths. Use real content and assets; label demonstrations. Build within project conventions and preserve working behavior.
+4. Render at shipping sizes, including the actual target size when known. Open the captures, drive the real interaction, and check focus, contrast, reading order, long content, and failure states. Batch fixes, then look again. Remove one accessory that does not serve the task. Use the [pre-ship checklist](references/pre-ship.md); report unverified areas, not an imagined pass.
 
-These are defaults, not choices. Use one only when the brief asks for it.
+If the surface cannot run, use current visual fixtures or regression captures after checking their target, theme, and source. Label that evidence as a reference, not verification of the new build.
 
-- **Gradients and glows:**
-  - More than one gradient per screen, or a gradient that isn't on the focal point.
-  - Gradient text.
-  - Colored glows, radial halos, ambient blobs, glassmorphism as decoration, neon on dark.
-- **Cards:**
-  - Identical card grids as the page structure.
-  - Nested cards.
-  - An icon tile stacked above a heading.
-  - A colored stripe down one side of a rounded box.
-  - Thick colored borders on rounded cards.
-- **Labels and headings:**
-  - Eyebrow kickers above headings.
-  - Section numbers unless the content is a real sequence.
-  - A badge above the headline.
-  - The hero-metric template (big number, small label, stat strip, accent) as a reflex.
-  - One accented word in a headline.
-  - All-caps labels.
-- **Strings:**
-  - Meta strings joined with middle dots (`A · B · C`); separate with layout.
-  - `Word — fragment` labels.
-  - `→` appended to every link.
-- **Type and palette:**
-  - Monospace as a "technical" costume; reserve it for code and measured data.
-  - AI palettes by habit: purple to cyan on near-black, cream with a serif and terracotta, black with one acid accent.
-  - Rainbow palettes where color means nothing.
-- **Status and chrome:**
-  - Status badges that never change.
-  - Decorative dashboard chrome or sparklines that don't come from real data.
-- **Motion:** pulsing dots, bounce, marquees, fake liveliness.
+## Absolute bans
 
-## Operate surfaces and data
+- No decorative eyebrow or kicker above a heading, including a hero badge in that slot. Real navigation and sequence are not eyebrows.
+- No cards inside cards, gradient-filled text, decorative glows or halos, or accent stripes on rounded containers.
+- No emoji or arbitrary Unicode as a substitute for drawn icons. Real user content and terminal-native glyph conventions are not decoration.
+- No fake data, fabricated claims, decorative extremist or supremacist symbols, or hidden prompt and design commentary in shipped artifacts.
+- No inaccessible or dead primary paths, or core content that requires an entrance animation to become visible.
 
-- One family often carries everything. Size follows importance; the most actionable fact leads.
-- Chunk into groups of 4 or fewer. One row per item when possible; secondary detail appears only when it changes a decision.
-- Charts come from real data. Axes stay quiet; highlight the one thing that matters (today, the peak, the threshold).
-- Visual metaphors that encode state (heat for heavy use, a reward accent for untapped capacity) beat ornament. Keep each metaphor consistent across every view.
-- Show freshness: when the data was taken and which sources are missing.
+**House taste:** Leave breathing room. Use modest, characterful type, drawn icons, real logos, concise copy, and visual state metaphors that mean something. Keep color restrained, with at most one focal gradient and no glows.
 
-## Critique checklist
+## Commands
 
-- Can someone who scans only headings, labels, and numbers understand the screen in 5 seconds?
-- Is there one primary element, 2 or 3 secondary, and everything else muted?
-- Does every color, border, icon, and container earn its place? Remove any that don't.
-- Does anything on the refuse list appear without the brief asking for it?
-- Does it hold up at the shipping size, with real content, long names, and empty and error states?
+Treat these as intents, not shell commands. For an explicit or clear intent, read its playbook. For a workflow question, recommend the next step without editing. For unspecific new work, start with [shape](references/shape.md).
+
+If asked where to start, offer the two or three most useful intents for the actual state: shape unknown work, critique a working surface, audit measurable failures, or polish an actionable backlog.
+
+| Intent | Playbook |
+|---|---|
+| Shape: define the job and direction before code | [Shape](references/shape.md) |
+| Critique: judge design and usability | [Critique rubric](references/critique-rubric.md) |
+| Audit: report technical quality | [Audit](references/audit.md) |
+| Polish: finish the shipped path | [Polish](references/polish.md) |
+| Bolder: amplify one move in the existing language | [Bolder](references/bolder.md) |
+| Quieter: reduce intensity without losing identity | [Quieter](references/quieter.md) |
+| Distill: remove needless complexity | [Distill](references/distill.md) |
+| Harden: cover failure, boundaries, and unusual inputs | [Harden](references/harden.md) |
+| Onboard: get new users to first value | [Onboard](references/onboard.md) |
+| Animate: make state and continuity legible | [Motion](references/motion.md) |
+| Colorize: assign color a hierarchy and purpose | [Color](references/color.md) |
+| Typeset: tune faces, roles, and measure | [Typography](references/typography.md) |
+| Layout: fix structure, rhythm, and spacing | [Layout and spacing](references/layout-and-spacing.md) |
+| Delight: add a specific moment of character | [Delight](references/delight.md) |
+| Overdrive: use ambitious technique for one payoff | [Overdrive](references/overdrive.md) |
+| Clarify: repair product language and recovery copy | [UX copy](references/ux-copy.md) |
+| Adapt: restructure for a different context | [Adapt](references/adapt.md), [native](references/native.md) |
+| Optimize: measure and remove a performance bottleneck | [Optimize](references/optimize.md) |
+
+## Reference index
+
+- **Before any visual edit:** [Craft floor](references/craft-floor.md), [modes](references/modes.md).
+- **When shaping or building:** [Design systems](references/design-systems.md), [imagery and comps](references/imagery-and-comps.md), [data and dashboards](references/data-and-dashboards.md), [native platforms](references/native.md).
+- **When reviewing or finishing:** [Slop catalog](references/slop-catalog.md), [pre-ship checklist](references/pre-ship.md).
+- **Attribution and source differences:** [Sources](references/SOURCES.md).
