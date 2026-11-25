@@ -1,4 +1,4 @@
-From 8bb6d5f20b65905c9b37ba84d5fc7a4725f58098 Mon Sep 17 00:00:00 2001
+From cac666611141a1d716329d266d09aa802e08b7cb Mon Sep 17 00:00:00 2001
 From: tprei <37089330+tprei@users.noreply.github.com>
 Date: Mon, 14 Sep 2026 22:09:29 +0100
 Subject: [PATCH] Prevent main sessions from using disabled providers
@@ -31,7 +31,7 @@ Subject: [PATCH] Prevent main sessions from using disabled providers
  create mode 100644 packages/coding-agent/test/acp-api-key-binding.test.ts
 
 diff --git a/packages/coding-agent/src/config/model-settings.ts b/packages/coding-agent/src/config/model-settings.ts
-index 58967122..cc078a58 100644
+index 589671227896c72c59bc14615905704ebbf967d5..cc078a58a7d9f771db9b29d18319d3bd64bd20e2 100644
 --- a/packages/coding-agent/src/config/model-settings.ts
 +++ b/packages/coding-agent/src/config/model-settings.ts
 @@ -112,6 +112,12 @@ export const cfgDisabledProviders = register({
@@ -48,7 +48,7 @@ index 58967122..cc078a58 100644
  	id: "modelRoleStorage",
  	type: "enum",
 diff --git a/packages/coding-agent/src/main.ts b/packages/coding-agent/src/main.ts
-index 78d41d38..8d72e7f8 100644
+index 78d41d38096fc74588ee3525766344b9595d20a9..8d72e7f8fffee0b32dd1904f1be8aff6dfc1acd2 100644
 --- a/packages/coding-agent/src/main.ts
 +++ b/packages/coding-agent/src/main.ts
 @@ -52,7 +52,7 @@ import { getLatestRelease, isSourceCheckout } from "./cli/update-cli";
@@ -219,7 +219,7 @@ index 78d41d38..8d72e7f8 100644
  			if (apiKeyProvider) {
  				authStorage.keys.setRuntime(apiKeyProvider, parsedArgs.apiKey);
 diff --git a/packages/coding-agent/src/sdk.ts b/packages/coding-agent/src/sdk.ts
-index 671e8f40..4b6ddc99 100644
+index 671e8f40eece19902a747ed621ddc887774f7c21..4b6ddc9987dcc8b8402064122fb017cca40afaae 100644
 --- a/packages/coding-agent/src/sdk.ts
 +++ b/packages/coding-agent/src/sdk.ts
 @@ -449,7 +449,14 @@ import {
@@ -468,7 +468,7 @@ index 671e8f40..4b6ddc99 100644
  			);
  			prewalk = selection.prewalk;
 diff --git a/packages/coding-agent/src/session/agent-session.ts b/packages/coding-agent/src/session/agent-session.ts
-index b385d8ca..fd2df578 100644
+index b385d8cadffdcb38ef838634e7cb56a506c5292d..fd2df578afdac45f37b1b2c4fe47d2388f371fc9 100644
 --- a/packages/coding-agent/src/session/agent-session.ts
 +++ b/packages/coding-agent/src/session/agent-session.ts
 @@ -436,6 +436,7 @@ import {
@@ -614,7 +614,7 @@ index b385d8ca..fd2df578 100644
  			// differently or stands on another compaction boundary.
 diff --git a/packages/coding-agent/src/session/main-agent-model-policy.ts b/packages/coding-agent/src/session/main-agent-model-policy.ts
 new file mode 100644
-index 00000000..f5bf2dc5
+index 0000000000000000000000000000000000000000..f5bf2dc53ae75aef182313666923206a5b448ba2
 --- /dev/null
 +++ b/packages/coding-agent/src/session/main-agent-model-policy.ts
 @@ -0,0 +1,14 @@
@@ -633,7 +633,7 @@ index 00000000..f5bf2dc5
 +	}
 +}
 diff --git a/packages/coding-agent/src/session/model-controls.ts b/packages/coding-agent/src/session/model-controls.ts
-index 72e3e86e..f59d80f9 100644
+index 72e3e86ee741e646679fcfbad085075b14264b84..f59d80f9ce280dcb0ac7d656f2f079829295af50 100644
 --- a/packages/coding-agent/src/session/model-controls.ts
 +++ b/packages/coding-agent/src/session/model-controls.ts
 @@ -51,6 +51,7 @@ import type { EditModeSetting } from "../edit/settings";
@@ -744,7 +744,7 @@ index 72e3e86e..f59d80f9 100644
  		if (!patterns || patterns.length === 0) return all;
  		return filterAvailableModelsByEnabledPatterns(all, patterns, this.#host.settings, roleLookup);
 diff --git a/packages/coding-agent/src/session/turn-recovery.ts b/packages/coding-agent/src/session/turn-recovery.ts
-index c814ba30..4b967972 100644
+index c814ba30b112713703e33943fa63b197cbbfa79a..4b967972f307f0c5f2f629bffa777902c870cdec 100644
 --- a/packages/coding-agent/src/session/turn-recovery.ts
 +++ b/packages/coding-agent/src/session/turn-recovery.ts
 @@ -34,6 +34,7 @@ import type { ModelRegistry } from "../config/model-registry";
@@ -835,7 +835,7 @@ index c814ba30..4b967972 100644
  		const apiKey = await this.#host.modelRegistry.getApiKey(primaryModel, this.#host.sessionId());
  		if (!apiKey) return false;
 diff --git a/packages/coding-agent/src/slash-commands/builtin-modes.ts b/packages/coding-agent/src/slash-commands/builtin-modes.ts
-index 68f3f6e0..28490ece 100644
+index 68f3f6e067fa4778e15fe7b7e30505207e78214e..28490ece121eb5a1855e40d2fcccffc08187bfc0 100644
 --- a/packages/coding-agent/src/slash-commands/builtin-modes.ts
 +++ b/packages/coding-agent/src/slash-commands/builtin-modes.ts
 @@ -25,6 +25,7 @@ import { describeLoopLimitRuntime } from "../modes/loop-limit";
@@ -867,7 +867,7 @@ index 68f3f6e0..28490ece 100644
  					return usage(`No API key for ${source.model.provider}/${source.model.id}`, runtime);
  				}
 diff --git a/packages/coding-agent/src/thread/remote-agent-session.ts b/packages/coding-agent/src/thread/remote-agent-session.ts
-index 3615733b..dbce783f 100644
+index 3615733bddec912ac7d2b65d9ff9639edb8a12b8..dbce783f6aaa2da68c98e67d56ad5fcbb822f4f2 100644
 --- a/packages/coding-agent/src/thread/remote-agent-session.ts
 +++ b/packages/coding-agent/src/thread/remote-agent-session.ts
 @@ -595,6 +595,7 @@ export class RemoteAgentSession implements AgentViewSession {
@@ -880,7 +880,7 @@ index 3615733b..dbce783f 100644
  
 diff --git a/packages/coding-agent/test/acp-api-key-binding.test.ts b/packages/coding-agent/test/acp-api-key-binding.test.ts
 new file mode 100644
-index 00000000..feebb916
+index 0000000000000000000000000000000000000000..feebb9163817e9223472dfd63ab2b2491f8a3e46
 --- /dev/null
 +++ b/packages/coding-agent/test/acp-api-key-binding.test.ts
 @@ -0,0 +1,110 @@
@@ -995,7 +995,7 @@ index 00000000..feebb916
 +	});
 +});
 diff --git a/packages/coding-agent/test/agent-session-model-switch-auth.test.ts b/packages/coding-agent/test/agent-session-model-switch-auth.test.ts
-index 8d7f15e7..39f1382f 100644
+index 8d7f15e78a756175c7ecd70bbd5d66b2e329dd70..39f1382fc73678ff6cf81f95077d97f4af0b4148 100644
 --- a/packages/coding-agent/test/agent-session-model-switch-auth.test.ts
 +++ b/packages/coding-agent/test/agent-session-model-switch-auth.test.ts
 @@ -2,12 +2,15 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, spyOn } from "bun
@@ -1165,7 +1165,7 @@ index 8d7f15e7..39f1382f 100644
 +	});
  });
 diff --git a/packages/coding-agent/test/agent-session-new-session-boundary.test.ts b/packages/coding-agent/test/agent-session-new-session-boundary.test.ts
-index 617525ea..f00721eb 100644
+index 617525eac297f3d0948fc95649b836367b1749c4..f00721ebd7f7fb20f1f1979ffd9064ea155a51f0 100644
 --- a/packages/coding-agent/test/agent-session-new-session-boundary.test.ts
 +++ b/packages/coding-agent/test/agent-session-new-session-boundary.test.ts
 @@ -1,8 +1,9 @@
@@ -1358,7 +1358,7 @@ index 617525ea..f00721eb 100644
 +	});
  });
 diff --git a/packages/coding-agent/test/agent-session-prewalk-auto.test.ts b/packages/coding-agent/test/agent-session-prewalk-auto.test.ts
-index e6c0903e..27c2ec2f 100644
+index e6c0903e2579af45a1644f92c9e01e2e55809822..27c2ec2fdf5380855092a3337527cd621cd56e61 100644
 --- a/packages/coding-agent/test/agent-session-prewalk-auto.test.ts
 +++ b/packages/coding-agent/test/agent-session-prewalk-auto.test.ts
 @@ -12,6 +12,7 @@ import {
@@ -1397,7 +1397,7 @@ index e6c0903e..27c2ec2f 100644
  		const calls = stubJudge([PREWALK]);
  		const f = createFixture([done("one"), done("two")], { auto: "on", agentKind: "sub" });
 diff --git a/packages/coding-agent/test/agent-session-prewalk.test.ts b/packages/coding-agent/test/agent-session-prewalk.test.ts
-index 2e2f0191..eee016ae 100644
+index 2e2f019160e09973a0942b062d1fe813707841b2..eee016aec33ff1641bd1999fedbc5048fb25eb38 100644
 --- a/packages/coding-agent/test/agent-session-prewalk.test.ts
 +++ b/packages/coding-agent/test/agent-session-prewalk.test.ts
 @@ -7,6 +7,7 @@ import { createMockModel, type MockResponse } from "@oh-my-pi/pi-ai/providers/mo
@@ -1748,7 +1748,7 @@ index 2e2f0191..eee016ae 100644
  		const primary = modelOrThrow("claude-sonnet-4-5");
  		const target = modelOrThrow("claude-sonnet-4-6");
 diff --git a/packages/coding-agent/test/agent-session-retry-fallback.test.ts b/packages/coding-agent/test/agent-session-retry-fallback.test.ts
-index 17b9b0e0..416c021c 100644
+index 17b9b0e08716c91d2ebc3b324e6e17883a18e2d9..416c021c0d379e366d1630884b34e8ec52e344c2 100644
 --- a/packages/coding-agent/test/agent-session-retry-fallback.test.ts
 +++ b/packages/coding-agent/test/agent-session-retry-fallback.test.ts
 @@ -9825,4 +9825,166 @@ describe("AgentSession retry fallback", () => {
@@ -1919,7 +1919,7 @@ index 17b9b0e0..416c021c 100644
 +	});
  });
 diff --git a/packages/coding-agent/test/issue-2750-subagent-runtime-fallback.test.ts b/packages/coding-agent/test/issue-2750-subagent-runtime-fallback.test.ts
-index 3183bcc4..c149b51c 100644
+index 3183bcc440f3335465bc08f72690db4785a0892f..c149b51cc9ad7a78e6e59392943aa6f366fde6bc 100644
 --- a/packages/coding-agent/test/issue-2750-subagent-runtime-fallback.test.ts
 +++ b/packages/coding-agent/test/issue-2750-subagent-runtime-fallback.test.ts
 @@ -123,6 +123,7 @@ describe("subagent runtime model resolution", () => {
@@ -1939,7 +1939,7 @@ index 3183bcc4..c149b51c 100644
  				thinkingLevel: () => undefined,
  				sessionManager: options.sessionManager,
 diff --git a/packages/coding-agent/test/prewalk-discovery-provider.test.ts b/packages/coding-agent/test/prewalk-discovery-provider.test.ts
-index adbf8959..2e46140a 100644
+index adbf8959067d22174e430d46960e162b6dacd24f..2e46140a92c0daabd9d77d9ba82a246fedf7cd78 100644
 --- a/packages/coding-agent/test/prewalk-discovery-provider.test.ts
 +++ b/packages/coding-agent/test/prewalk-discovery-provider.test.ts
 @@ -12,7 +12,7 @@
@@ -2012,7 +2012,7 @@ index adbf8959..2e46140a 100644
 +	});
  });
 diff --git a/packages/coding-agent/test/prewalk-startup-degradation.test.ts b/packages/coding-agent/test/prewalk-startup-degradation.test.ts
-index d4dcc51b..cf5945ff 100644
+index d4dcc51bcc9ddb44bd3fb2077969282e8f1e827a..cf5945ff35f50b5b72c3a370f03f2949478c53f6 100644
 --- a/packages/coding-agent/test/prewalk-startup-degradation.test.ts
 +++ b/packages/coding-agent/test/prewalk-startup-degradation.test.ts
 @@ -2,11 +2,13 @@ import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "bun:
@@ -2209,7 +2209,7 @@ index d4dcc51b..cf5945ff 100644
  		const model = getBundledModel("anthropic", "claude-sonnet-4-5");
  		if (!model) throw new Error("expected claude-sonnet-4-5 to be bundled");
 diff --git a/packages/coding-agent/test/sdk-model-selection.test.ts b/packages/coding-agent/test/sdk-model-selection.test.ts
-index 48465341..fd23b18c 100644
+index 48465341a06ca70a5f81b397fcb4309f507572ef..fd23b18ce79665693a2e03cf723e80e2d99987bc 100644
 --- a/packages/coding-agent/test/sdk-model-selection.test.ts
 +++ b/packages/coding-agent/test/sdk-model-selection.test.ts
 @@ -10,6 +10,7 @@ import { resolveModelCacheProviderId } from "@oh-my-pi/pi-catalog/provider-model
@@ -2693,7 +2693,7 @@ index 48465341..fd23b18c 100644
  		const settings = Settings.isolated();
  		settings.setModelRole("task", "runtime-provider/runtime-model,runtime-provider/runtime-fallback-model");
 diff --git a/packages/coding-agent/test/slash-commands/effort.test.ts b/packages/coding-agent/test/slash-commands/effort.test.ts
-index 2fda1ecf..34190cfb 100644
+index 2fda1ecf0c74e949ce730b2c49238aab03530262..34190cfb8965ee19b693320e6e76e9b143001774 100644
 --- a/packages/coding-agent/test/slash-commands/effort.test.ts
 +++ b/packages/coding-agent/test/slash-commands/effort.test.ts
 @@ -43,6 +43,7 @@ function harness(options: { reasoning?: boolean; efforts?: readonly Effort[]; ce
@@ -2705,7 +2705,7 @@ index 2fda1ecf..34190cfb 100644
  			model: () => model,
  			promptGeneration: () => 0,
 diff --git a/packages/coding-agent/test/task/subagent-fallback-context-window.test.ts b/packages/coding-agent/test/task/subagent-fallback-context-window.test.ts
-index 1f9a3e85..abb3a0b5 100644
+index 1f9a3e85683708d95e7f89bd7f8928e303bca2e5..abb3a0b5f368a96c215b423d04e6f6cc941a3630 100644
 --- a/packages/coding-agent/test/task/subagent-fallback-context-window.test.ts
 +++ b/packages/coding-agent/test/task/subagent-fallback-context-window.test.ts
 @@ -50,6 +50,7 @@ describe("subagent context window after a model swap", () => {
@@ -2717,7 +2717,7 @@ index 1f9a3e85..abb3a0b5 100644
  				thinkingLevel: () => undefined,
  				sessionManager: { getSessionId: () => "context-window-swap" },
 diff --git a/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts b/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
-index 39f3edcc..e68de8e5 100644
+index 39f3edccf78ecd251e96e0a6a9bf6bc48e42d720..e68de8e53ed34bfd2e318aed09544916b10efcea 100644
 --- a/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
 +++ b/packages/coding-agent/test/turn-recovery-replay-unsafe.test.ts
 @@ -71,6 +71,7 @@ function createHost(

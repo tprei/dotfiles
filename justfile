@@ -172,7 +172,7 @@ omp-runtime-export:
     set -euo pipefail
     cd "{{ justfile_directory() }}"
     rm -f omp-runtime/[0-9][0-9][0-9][0-9]-*.patch
-    git -C "{{ omp_src }}" format-patch --no-signature --filename-max-length=100 omp-baseline..HEAD \
+    git -C "{{ omp_src }}" format-patch --no-signature --full-index --filename-max-length=100 omp-baseline..HEAD \
         -o "{{ justfile_directory() }}/omp-runtime"
     {{ just_executable() }} omp-runtime-check
 
@@ -188,7 +188,7 @@ omp-runtime-check:
     }
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
-    git -C "{{ omp_src }}" format-patch --no-signature --filename-max-length=100 omp-baseline..HEAD -o "$tmp" >/dev/null
+    git -C "{{ omp_src }}" format-patch --no-signature --full-index --filename-max-length=100 omp-baseline..HEAD -o "$tmp" >/dev/null
     strip_sha() { sed 's/^From [0-9a-f]\{40\} Mon Sep 17 00:00:00 2001$/From <commit>/' "$1"; }
     for generated in "$tmp"/*.patch; do
         name=$(basename "$generated")
