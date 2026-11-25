@@ -56,7 +56,7 @@ Speak English. Communicate like a principal engineer: direct, no flattery, no fa
 
 ## Skills
 
-- tmux questions: `tmux-specialist`. New skill: `add-skill` (canonical in `shared/skills/`, tool dirs symlink in). PR review: `review`. Suppressions or gate hardening: `deslop`. Repo-wide sweeps that classify 20+ hits with jev (`jevify`) and land a PR stack: `jev-sweep`. Prefer shared skills over legacy prompt files.
+- tmux questions: `tmux-specialist`. New skill: `add-skill` (canonical in `shared/skills/`, tool dirs symlink in). PR review: `review`. Suppressions or gate hardening: `deslop`. Repo-wide sweeps that classify 20+ hits with jev (`jevify`) and land a PR stack: `jev-sweep`. Anything a user sees (UI, dashboards, generated images and reports): `frontend-design`. Prefer shared skills over legacy prompt files.
 
 ## Output
 
