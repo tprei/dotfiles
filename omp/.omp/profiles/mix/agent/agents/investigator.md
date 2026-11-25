@@ -3,13 +3,15 @@ name: investigator
 description: >-
   Deep root-cause investigation of hard bugs, crashes, flaky tests, and cross-
   cutting issues that scout or explorer couldn't resolve (concurrency, memory,
-  timing, multi-system, unclear repro). Expensive model (Fable high, Astra
-  low) that BLOCKS the caller. Spawn exactly ONE per call, never batched or in
+  timing, multi-system, unclear repro). Expensive model (Opus xhigh, Astra
+  high) that BLOCKS the caller. Spawn exactly ONE per call, never batched or in
   parallel with itself. Not for routine lookups.
 blocking: true
 tools: read, grep, glob, bash, lsp, debug, web_search
 model:
   - "anthropic/claude-opus-5-5:xhigh"
+  - "antigravity-cli/claude-opus-5-5:high"
+  - "antigravity-cli/gemini-4-neon:xhigh"
   - "openai-codex/gpt-6.2-astra:high"
 ---
 

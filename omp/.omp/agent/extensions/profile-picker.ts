@@ -1,7 +1,7 @@
 /**
  * Model-role profile switcher (`/use`, Alt+U).
  *
- * Switches the entire model-role lineup between five provider profiles in one
+ * Switches the entire model-role lineup between four provider profiles in one
  * shot. /use or Alt+U lists the profiles (current one marked); `/use <key>` (or
  * a unique prefix) applies it directly; Tab completes keys.
  *
@@ -20,7 +20,7 @@ interface Profile {
 
 const PROFILES: Record<string, Profile> = {
 	cld: { name: "Claude (Anthropic)", plan: "anthropic/claude-opus-5-5:high", rest: "anthropic/claude-sonnet-5-5:high" },
-	glm: { name: "GLM (Z.AI)",        plan: "zai/glm-5.4:max",          rest: "zai/glm-5.4:max"            },
+	glm: { name: "GLM (Z.AI)",        plan: "zai/glm-5.3:max",          rest: "zai/glm-5.3:max"            },
 	oc:  { name: "OpenCode",          plan: "opencode-go/glm-5.3:high", rest: "opencode-go/deepseek-v4-pro:high" },
 	gpt: { name: "Codex (OpenAI)",    plan: "openai-codex/gpt-6.2-sol:high", rest: "openai-codex/gpt-6-luna:medium" },
 };

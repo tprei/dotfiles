@@ -102,11 +102,12 @@ just stow omp
 Layout:
 - `omp/.omp/agent/config.yml`: root profile (model roles, thinking level, subagent overrides, retry fallback chains).
 - `omp/.omp/agent/{rules,extensions}/`: global rules and TypeScript extensions.
+- `omp/.omp/agent/extensions/model-balancer.ts`: rotates subagent spawns across pools (one model served by several providers). It assumes `task.perCallModel: off`, the default.
 - `omp/.omp/agent/models.yml`: model definitions merged over the bundled catalog; each profile symlinks it. Caps GPT-6.2 Astra (OpenAI Codex, OpenRouter) thinking at `low`, `medium`, and `high` with a `medium` default.
 - `omp/.omp/profiles/{mix,claude,codex,china}/agent/`: per-profile `config.yml`, `agents/`, and optional `rules/`, `APPEND_SYSTEM.md`, `WATCHDOG.md`. `codex` pins every role, agent override, and fallback chain to OpenAI Codex GPT-6.2 only.
 - `omp/.gemini/config/agents/omp-provider/agent.md`: isolated AGY transport agent.
 
-`just omp-verify` fails when `~/.omp/agent/config.yml` resolves outside the repo. `just omp-config-check` fails when a `zai/glm-5.4`, `zai/glm-5.3-flash`, or legacy `zai/glm-5.3` selector uses a level other than `max`, or a `shared/agents/*/*.md` pinned to one of those models declares anything but `thinking: max`. Level-less keys under `retry.fallbackChains` name a failing route and stay level-less. Current picks: ZAI flagship `zai/glm-5.4` with `zai/glm-5.3-flash` on fast roles, `opencode-go/kimi-k3.1-pro`, OpenAI Codex `gpt-6.2-sol` and `gpt-6.2-astra`, and Anthropic `claude-fable-5-2`.
+`just omp-verify` fails when `~/.omp/agent/config.yml` resolves outside the repo. `just omp-config-check` fails when a `zai/glm-5.3` or `zai/glm-5.3-flash` selector uses a level other than `max`, when a tracked file under `omp/` or `shared/` still pins `zai/glm-5.4`, or when a `shared/agents/*/*.md` pinned to a ZAI GLM model declares anything but `thinking: max`. Level-less keys under `retry.fallbackChains` name a failing route and stay level-less. Routing: `zai/glm-5.3:max` drives root, `anthropic/claude-opus-5-5` is the go-to for frontier work, `openai-codex/gpt-6.2-sol:xhigh` plans and reviews, `anthropic/claude-haiku-5-5:max` runs trivial implementation and tasking (`task`, `ui-implementer`, `triage`), and `openai-codex/gpt-6.2-astra` is reserved for tough work (`investigator`, last-resort fallbacks). `retry.fallbackChains` is keyed by model, and a model key outranks any per-spawn chain, so each model's entry is the whole fallback order: Opus falls back AGY Opus, then Gemini 4 Neon, then Sol, then Astra, and no Opus, Sol, or Astra route reaches GLM. `mainAgent.disabledProviders` keeps AGY out of the main driver, so a main session on Opus falls back Sol, then Astra. A subagent spawn on a pooled model alternates providers, and a model auto-retry just abandoned cools its quota bucket (provider plus model family) for 10 minutes. OpenCode Go routes stay inactive until `omp login opencode-go`; drop them when that plan lapses.
 
 Edit configs here, never in `~/.omp`. A real file under `~/.omp` is drift: reconcile it into the repo and re-stow. `agent.db`, `history.db`, `models.db`, `sessions/`, `logs/`, and `cache/` are untracked runtime state.
 
@@ -117,10 +118,12 @@ A model id missing from the catalog, provider extensions, and `models.yml` resol
 `omp/.omp/agent/extensions/antigravity-cli.ts` registers `antigravity-cli`, an `agy` stream-json bridge. AGY isn't ACP; OMP stays the agent process and AGY supplies Gemini turns with its own auth. Run `agy` once to authenticate; there's no `omp login` step. Set `AGY_BIN` when `agy` isn't on `PATH`.
 
 ```sh
-omp --model antigravity-cli/gemini-3.8-flash --thinking high -p "Reply with one word: pong"
+omp models antigravity-cli
 ```
 
-Role config uses the effort suffix (`antigravity-cli/gemini-3.8-flash:high`). Root and `mix` profiles use it for advisor and commit roles and the latency-tolerant `surveyor` and `git-commit-specialist` agents, and as a fallback for GPT-6 Luna, GLM-5.3 Flash, and OpenCode Go. Interactive, planner, task, explorer, and latency-sensitive roles keep their primary providers. `china` is unchanged.
+The bridge defines `gemini-4-hydrogen`, `gemini-4-neon`, `claude-opus-5-5`, and `claude-sonnet-5-5`; role config uses the effort suffix (`antigravity-cli/gemini-4-hydrogen:high`). Root and `mix` use it for the advisor and commit roles, for the latency-tolerant `surveyor` and `git-commit-specialist` agents, and behind Anthropic and OpenAI Codex in `retry.fallbackChains`. `model-balancer.ts` rotates subagent spawns between `anthropic/claude-opus-5-5` and `antigravity-cli/claude-opus-5-5`, and likewise for Sonnet. Interactive and planner roles keep their primary providers. `china` only moved to GLM-5.3.
+
+Upstream omp v19.2.1 ships its own `antigravity-cli` provider (ACP transport with host tools and image input, `/login antigravity-cli`). The bridge's rows shadow upstream's rows with the same id; upstream-only rows (`gemini-4-carbon`, `gemini-4-argon`, `gemini-3.8-flash`, `gpt-oss-120b-medium`) need that login. Without it, `omp --model antigravity-cli/<id>` fails with `Antigravity CLI credential data is not valid JSON` and walks `retry.fallbackChains`. `--model` never reaches the bridge rows; roles resolved at runtime (advisor, subagents) do.
 
 Bridge behavior:
 - The `omp-provider` agent strips AGY's default prompt components and MCP tools. AGY never gets native-tool permissions: the bridge renders OMP's tool catalog in OMP's XML dialect, parses Gemini's XML calls into OMP `toolCall` blocks, and OMP executes and approves.

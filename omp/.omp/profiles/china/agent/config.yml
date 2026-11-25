@@ -9,9 +9,9 @@ theme:
   light: light
 setupVersion: 2
 modelRoles:
-  default: zai/glm-5.4:max
-  slow: zai/glm-5.4:max
-  plan: zai/glm-5.4:max
+  default: zai/glm-5.3:max
+  slow: zai/glm-5.3:max
+  plan: zai/glm-5.3:max
   advisor: opencode-go/kimi-k3.1-pro:high
   task: zai/glm-5.3-flash:max
   vision: zai/glm-5.3-flash:max
@@ -30,19 +30,19 @@ task:
     - scout
     - sonic
   agentModelOverrides:
-    planner: zai/glm-5.4:max
-    technical-architect: zai/glm-5.4:max
-    strategist: zai/glm-5.4:max
-    surveyor: zai/glm-5.4:max
+    planner: zai/glm-5.3:max
+    technical-architect: zai/glm-5.3:max
+    strategist: zai/glm-5.3:max
+    surveyor: zai/glm-5.3:max
     explorer: zai/glm-5.3-flash:max
-    reviewer: zai/glm-5.4:max
+    reviewer: zai/glm-5.3:max
     enemy: opencode-go/kimi-k3.1-pro:high
-    security-reviewer: zai/glm-5.4:max
+    security-reviewer: zai/glm-5.3:max
     triage: opencode-go/muse-spark-1.3-contributor:minimal
     git-commit-specialist: opencode-go/muse-spark-1.3-contributor:minimal
     task: zai/glm-5.3-flash:max
     ui-implementer: zai/glm-5.3-flash:max
-    ui-designer: zai/glm-5.4:max
+    ui-designer: zai/glm-5.3:max
   enableLsp: true
 dev:
   autoqaConsent: granted
@@ -54,7 +54,7 @@ retry:
     default:
       - zai/glm-5.3-flash:max
       - opencode-go/muse-spark-1.3-contributor:high
-    zai/glm-5.4:
+    zai/glm-5.3:
       - opencode-go/kimi-k3.1-pro:high
       - opencode-go/muse-spark-1.3-contributor:high
     zai/glm-5.3-flash:
@@ -62,7 +62,7 @@ retry:
       - opencode-go/muse-spark-1.3-contributor:high
     opencode-go/kimi-k3.1-pro:
       - opencode-go/muse-spark-1.3-contributor:high
-      - zai/glm-5.4:max
+      - zai/glm-5.3:max
     opencode-go/*:
       - zai/glm-5.3-flash:max
 composer:

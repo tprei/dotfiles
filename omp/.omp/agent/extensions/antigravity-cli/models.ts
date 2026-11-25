@@ -1,31 +1,48 @@
 import type { ProviderModelConfig } from "@oh-my-pi/pi-coding-agent";
 
-const EFFORTS = ["minimal", "low", "medium", "high", "xhigh", "max"] as const;
+const EFFORTS = ["low", "medium", "high", "xhigh"] as const;
 type AgyEffort = (typeof EFFORTS)[number];
-type AgyReasoning = AgyEffort | "off";
+type AgyReasoning = AgyEffort | "off" | "minimal" | "max";
 
 export const AGY_PROVIDER_ID = "antigravity-cli";
 export const AGY_API_ID = "antigravity-cli";
 
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-const GEN4_EFFORTS: AgyEffort[] = ["low", "medium", "high", "xhigh"];
 
-type WireModelIds = {
-	low: string;
-	medium?: string;
-	high: string;
-	xhigh: string;
+const WIRE_IDS: Record<string, Partial<Record<AgyEffort, string>>> = {
+	"gemini-4-hydrogen": {
+		low: "gemini-4-hydrogen-low",
+		medium: "gemini-4-hydrogen-medium",
+		high: "gemini-4-hydrogen-high",
+		xhigh: "gemini-4-hydrogen-xhigh",
+	},
+	"gemini-4-neon": {
+		low: "gemini-4-neon-low",
+		medium: "gemini-4-neon-medium",
+		high: "gemini-4-neon-high",
+		xhigh: "gemini-4-neon-xhigh",
+	},
+	"claude-opus-5-5": {
+		low: "claude-opus-5-5-low",
+		medium: "claude-opus-5-5-medium",
+		high: "claude-opus-5-5-high",
+	},
+	"claude-sonnet-5-5": {
+		low: "claude-sonnet-5-5-low",
+		medium: "claude-sonnet-5-5-medium",
+		high: "claude-sonnet-5-5-high",
+	},
 };
 
-function createModel(id: string, name: string, efforts: AgyEffort[], wire: WireModelIds): ProviderModelConfig {
+function createModel(id: string, name: string, wire: Partial<Record<AgyEffort, string>>): ProviderModelConfig {
 	const effortRouting: Partial<Record<AgyReasoning, string>> = {
+		off: wire.low,
 		minimal: wire.low,
 		low: wire.low,
 		medium: wire.medium ?? wire.high,
 		high: wire.high,
-		xhigh: wire.xhigh,
-		max: wire.high,
-		off: wire.low,
+		xhigh: wire.xhigh ?? wire.high,
+		max: wire.xhigh ?? wire.high,
 	};
 
 	return {
@@ -36,7 +53,7 @@ function createModel(id: string, name: string, efforts: AgyEffort[], wire: WireM
 		supportsTools: true,
 		thinking: {
 			mode: "effort",
-			efforts,
+			efforts: EFFORTS.filter(effort => wire[effort] !== undefined),
 			defaultLevel: "high",
 			effortRouting,
 		} as unknown as NonNullable<ProviderModelConfig["thinking"]>,
@@ -48,23 +65,15 @@ function createModel(id: string, name: string, efforts: AgyEffort[], wire: WireM
 }
 
 export const AGY_MODELS: ProviderModelConfig[] = [
-	createModel("gemini-4-hydrogen", "Gemini 4 Hydrogen (AGY CLI)", GEN4_EFFORTS, {
-		low: "gemini-4-hydrogen-low",
-		medium: "gemini-4-hydrogen-medium",
-		high: "gemini-4-hydrogen-high",
-		xhigh: "gemini-4-hydrogen-xhigh",
-	}),
-	createModel("gemini-4-neon", "Gemini 4 Neon (AGY CLI)", GEN4_EFFORTS, {
-		low: "gemini-4-neon-low",
-		medium: "gemini-4-neon-medium",
-		high: "gemini-4-neon-high",
-		xhigh: "gemini-4-neon-xhigh",
-	}),
+	createModel("gemini-4-hydrogen", "Gemini 4 Hydrogen (AGY CLI)", WIRE_IDS["gemini-4-hydrogen"]),
+	createModel("gemini-4-neon", "Gemini 4 Neon (AGY CLI)", WIRE_IDS["gemini-4-neon"]),
+	createModel("claude-opus-5-5", "Claude Opus 5.5 (AGY CLI)", WIRE_IDS["claude-opus-5-5"]),
+	createModel("claude-sonnet-5-5", "Claude Sonnet 5.5 (AGY CLI)", WIRE_IDS["claude-sonnet-5-5"]),
 ];
 
 export function resolveAgyModelId(
 	modelId: string,
-	reasoning: AgyEffort | undefined,
+	reasoning: AgyReasoning | undefined,
 	disableReasoning = false,
 ): string {
 	const model = AGY_MODELS.find(candidate => candidate.id === modelId);
@@ -73,13 +82,9 @@ export function resolveAgyModelId(
 	}
 
 	let effort: AgyReasoning = "high";
-	if (disableReasoning) {
-		effort = "off";
-	} else if (reasoning === "minimal" || reasoning === "low") {
-		effort = "low";
-	} else if (reasoning === "medium") {
-		effort = "medium";
-	}
+	if (disableReasoning) effort = "off";
+	else if (reasoning === "minimal") effort = "low";
+	else if (reasoning !== undefined) effort = reasoning;
 	const wireModelId = model.thinking.effortRouting[effort];
 	if (!wireModelId) {
 		throw new Error(`AGY CLI provider has no wire model for "${modelId}" at ${effort} effort.`);

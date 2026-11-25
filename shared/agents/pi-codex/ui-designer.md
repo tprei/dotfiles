@@ -3,7 +3,7 @@ name: ui-designer
 description: >-
   Designs frontend UI and writes the presentational component code: visual
   design, layout, interaction, styling. Expensive model (Fable high, Opus 5.5
-  high, Astra medium) that BLOCKS the caller. Spawn ONE per design task, never
+  high, AGY Opus high, Neon xhigh, Astra medium) that BLOCKS the caller. Spawn ONE per design task, never
   batched or in parallel with itself. Use for anything the user sees,
   including JSX and CSS; wiring (data, state, routes, tests) goes to
   implementers.
@@ -12,6 +12,8 @@ tools: read, grep, glob, lsp, write, edit, bash, web_search
 model:
   - "anthropic/claude-fable-5-2:high"
   - "anthropic/claude-opus-5-5:high"
+  - "antigravity-cli/claude-opus-5-5:high"
+  - "antigravity-cli/gemini-4-neon:xhigh"
   - "openai-codex/gpt-6.2-astra:medium"
 ---
 

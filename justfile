@@ -105,13 +105,15 @@ omp-config-check:
     # Level-less `zai/glm-5.3:` keys under retry.fallbackChains name a failing
     # route, so only a populated non-max level is drift.
     drift=0
-    grep -rPn 'zai/glm-5\.(4|3(-flash)?):(low|medium|high)' omp/ && drift=1
+    git grep -nP 'zai/glm-5\.3(-flash)?:(?!max\b)\w+' -- omp shared && drift=1
+    # glm-5.3 replaced glm-5.4; a stale pin in a tracked file is drift.
+    git grep -nP 'zai/glm-5\.4' -- omp shared && drift=1
     for agent in shared/agents/*/*.md; do
         grep -qE '^model: zai/glm-5\.(4|3(-flash)?)' "$agent" || continue
         grep -qx 'thinking: max' "$agent" || { grep -Hn '^thinking:' "$agent"; drift=1; }
     done
     if [ "$drift" -ne 0 ]; then
-        echo "GLM thinking level drifted off max" >&2
+        echo "GLM drift: thinking level off max, or a zai/glm-5.4 pin" >&2
         exit 1
     fi
     echo "GLM thinking levels pinned to max"

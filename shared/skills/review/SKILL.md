@@ -16,7 +16,7 @@ gh pr diff <PR>
 
 ## 2. Delegate to `reviewer`
 
-Every review runs through the `reviewer` task agent (`task`, `agent: "reviewer"`), never inline. The omp config pins `reviewer` to `zai/glm-5.4:max` (root, `mix`, and `china` profiles); delegating guarantees that model reviews. Pass one self-contained prompt with the PR metadata and diff (or the `gh` commands), plus sections 3 to 5 below. Relay its output as the review; don't re-review.
+Every review runs through the `reviewer` task agent (`task`, `agent: "reviewer"`), never inline. The omp config pins `reviewer` to `openai-codex/gpt-6.2-sol:xhigh` (root and `mix`) or `zai/glm-5.3:max` (`china`); delegating guarantees a reasoning-tier model reviews. Pass one self-contained prompt with the PR metadata and diff (or the `gh` commands), plus sections 3 to 5 below. Relay its output as the review; don't re-review.
 
 ## 3. Context the reviewer builds
 
