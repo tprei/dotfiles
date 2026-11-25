@@ -251,9 +251,32 @@ ci:
         esac
     done
     uvx ruff@0.17.6 check --isolated --no-cache --select E4,E7,E9,F "${py_files[@]}"
+    uvx mypy@2.4.1 --strict --cache-dir=/dev/null tools/.local/share/off/offload
     uvx --from shellcheck-py@0.11.0.1 shellcheck "${sh_files[@]}"
     {{ just_executable() }} omp-config-check
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
     git archive HEAD | tar -x -C "$tmp"
     gitleaks dir "$tmp" --no-banner --redact
+
+# Install the Sprites CLI, sign in, and pin the Fly org that `off` uses on this machine.
+sprites-setup org="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    command -v rsync >/dev/null || { echo "off needs rsync" >&2; exit 1; }
+    python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' || { echo "off needs python 3.11+" >&2; exit 1; }
+    command -v sprite >/dev/null || curl -fsSL https://sprites.dev/install.sh | sh
+    pinned="$HOME/.config/off/org"
+    org="{{ org }}"
+    if [[ -z "$org" && -s "$pinned" ]]; then org=$(<"$pinned"); fi
+    if [[ -z "$org" ]]; then
+        echo "pass the Fly org to use, for example: just sprites-setup org=personal" >&2
+        exit 1
+    fi
+    sprite org list >/dev/null 2>&1 || sprite login
+    sprite list -o "$org" --json >/dev/null 2>&1 || sprite org auth -o "$org"
+    sprite list -o "$org" --json >/dev/null
+    install -d -m 700 "$HOME/.config/off"
+    umask 077
+    printf '%s\n' "$org" > "$pinned"
+    echo "off uses Sprites org $org"

@@ -192,3 +192,33 @@ systemctl --user daemon-reload
 systemctl --user disable --now codex-usage-report.timer
 systemctl --user enable --now codex-usage-relay.timer
 ```
+
+### Sprite offload
+
+`tools/.local/bin/off` runs the tasks a repo declares in `offload.toml` on [Fly.io Sprites](https://fly.io/sprites) instead of this machine. Each machine gets its own workers per repo (`off-<host>-<repo>-<n>`). A worker is built once from `[setup]`, locked down, and checkpointed. Every run restores that checkpoint, syncs the working tree (uncommitted edits included, gitignored files and `.git` excluded), runs the task, and lets the Sprite sleep. A change to `[setup]`, its `inputs`, or the worker policy rebuilds the worker.
+
+One-time setup per machine: `just stow tools`, then `just sprites-setup org=<fly-org>`. It installs the `sprite` CLI, signs in, and pins the org in `~/.config/off/org`.
+
+```toml
+version = 1
+
+[worker]
+memory_mb = 6144
+max = 2                                  # parallel workers for this repo on this machine
+egress = ["fonts.googleapis.com"]        # everything else is blocked during runs
+
+[setup]
+inputs = ["package-lock.json"]           # a change rebuilds the workers
+run = ["npm ci --ignore-scripts"]
+
+[tasks.test]
+run = "npx vitest run --shard=$OFF_SHARD/$OFF_SHARDS"
+timeout = "20m"
+shards = 2
+```
+
+- Commands: `off plan` (local only), `off run TASK [-- ARGS]`, `off status`, `off down [--all]`, `off watch RUN_ID [--shard N]`, `off usage [--days N]`.
+- Exit codes: the task's own code, `124` on timeout, `125` when off itself fails. Logs and artifacts live under `~/.local/state/off/`.
+- Lockdown: during runs egress is denied except `worker.egress`, sudo is blocked, memory is capped, and the Sprite URL stays private. Env from `[env] pass` and task `env` goes in per run through a file deleted before the task starts. No credentials live on a worker.
+- Tern: each shard opens a tab in a Tern session named `off` that follows the local log; it closes on success and stays open on failure. `OFF_TERN=off` disables it.
+- Docker tasks aren't supported: the Docker daemon needs root, which the lockdown removes.
