@@ -86,20 +86,22 @@ afterAll(async () => {
 
 test("advertises native tool support and real AGY effort levels", () => {
 	expect(AGY_MODELS.map(model => model.id)).toEqual([
-		"gemini-3.8-flash",
-		"gemini-3.7-flash",
-		"gemini-3.6-flash",
-		"gemini-3.1-pro",
+		"gemini-4-hydrogen",
+		"gemini-4-neon",
+		"claude-opus-5-5",
+		"claude-sonnet-5-5",
 	]);
 	for (const model of AGY_MODELS) {
 		expect(model.supportsTools).toBe(true);
 		expect(model.thinking?.mode).toBe("effort");
 		expect(model.thinking?.defaultLevel).toBe("high");
 	}
-	for (const model of AGY_MODELS.filter(candidate => candidate.id.endsWith("flash"))) {
+	for (const model of AGY_MODELS.filter(candidate => candidate.id.startsWith("gemini-"))) {
+		expect(model.thinking?.efforts).toEqual(["low", "medium", "high", "xhigh"]);
+	}
+	for (const model of AGY_MODELS.filter(candidate => candidate.id.startsWith("claude-"))) {
 		expect(model.thinking?.efforts).toEqual(["low", "medium", "high"]);
 	}
-	expect(AGY_MODELS.find(model => model.id === "gemini-3.1-pro")?.thinking?.efforts).toEqual(["low", "high"]);
 });
 
 test("sanitizes system text but preserves identical text in user and tool-result messages", () => {

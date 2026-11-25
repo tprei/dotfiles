@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import importlib
 import json
 import os
 import sqlite3
@@ -14,7 +15,9 @@ sys.dont_write_bytecode = True
 ROOT = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, ROOT)
 
-from extrakto import Extrakto, get_lines
+extrakto = importlib.import_module("extrakto")
+Extrakto = extrakto.Extrakto
+get_lines = extrakto.get_lines
 
 FULL_LINES = 2000
 PREVIEW_LINES = 8

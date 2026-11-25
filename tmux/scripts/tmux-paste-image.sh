@@ -68,7 +68,7 @@ if [[ "$(tmux display-message -p -t "$pane" '#{pane_current_command}')" == ssh ]
         exit 0
     fi
     name=$(basename "$wsl_file")
-    remote_cmd='d="$HOME/.cache/tmux-paste-image" && mkdir -p "$d" && cat > "$d/'"$name"'" && printf %s "$d/'"$name"'"'
+    remote_cmd='mkdir -p ~/.cache/tmux-paste-image && cat > ~/.cache/tmux-paste-image/"'"$name"'" && printf %s ~/.cache/tmux-paste-image/"'"$name"'"'
     if ! target_path=$(ssh -o BatchMode=yes "$host" "$remote_cmd" < "$wsl_file"); then
         tmux display-message "tmux-paste-image: upload to $host failed"
         exit 0

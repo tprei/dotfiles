@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd 2>/dev/null || echo "$(pwd)")"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 # --- Configure these for your project ---------------------------------------
@@ -49,7 +49,7 @@ else
 fi
 
 # Give it ~6s to bind
-for i in 1 2 3 4 5 6; do
+for _ in 1 2 3 4 5 6; do
   if ss -tlnp 2>/dev/null | grep -q ":$PORT "; then
     echo "orchestrator listening on :$PORT (log: $LOG)"
     exit 0

@@ -1,4 +1,5 @@
 import contextlib
+import importlib
 import io
 import json
 import os
@@ -11,7 +12,7 @@ from unittest import mock
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-import extract
+extract = importlib.import_module("extract")
 
 
 def leaf(pane_id):
