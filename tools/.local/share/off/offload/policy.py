@@ -22,7 +22,11 @@ def memory_policy(memory_mb: int) -> dict[str, object]:
 
 def policy_hash(worker: WorkerSpec) -> str:
     payload = json.dumps(
-        {"network": run_network_rules(worker), "memory": memory_policy(worker.memory_mb)},
+        {
+            "network": run_network_rules(worker),
+            "memory": memory_policy(worker.memory_mb),
+            "privileges": LOCKED_PRIVILEGES,
+        },
         sort_keys=True,
     )
     return hashlib.sha256(payload.encode()).hexdigest()[:12]

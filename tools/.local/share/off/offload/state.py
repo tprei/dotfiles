@@ -56,28 +56,35 @@ class Lease:
 
 
 def lease_workers(names: list[str], count: int) -> list[tuple[str, Lease]]:
-    """Lease `count` distinct workers: free ones in order first, then block on the rest.
+    """Lease `count` distinct workers, taking any free ones without waiting.
 
-    Returned leases are already held; the caller releases each one.
+    When not enough are free, release them and block on the first `count` names in order:
+    every run waits in the same order, so two runs can't each hold what the other needs.
     """
     if len(set(names)) != len(names) or count > len(names):
         raise ValueError(f"cannot lease {count} of {len(names)} distinct workers")
     leases: list[tuple[str, Lease]] = []
     for name in names:
         if len(leases) == count:
-            break
+            return leases
         lease = Lease(lock_path(name))
         if lease.try_acquire():
             leases.append((name, lease))
-    held = {name for name, _ in leases}
-    for name in names:
-        if len(leases) == count:
-            break
-        if name not in held:
+    if len(leases) == count:
+        return leases
+    for _, lease in leases:
+        lease.release()
+    ordered: list[tuple[str, Lease]] = []
+    try:
+        for name in names[:count]:
             lease = Lease(lock_path(name))
             lease.acquire()
-            leases.append((name, lease))
-    return leases
+            ordered.append((name, lease))
+    except BaseException:
+        for _, lease in ordered:
+            lease.release()
+        raise
+    return ordered
 
 
 @dataclass

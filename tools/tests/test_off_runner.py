@@ -2,10 +2,13 @@ import contextlib
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import textwrap
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -15,6 +18,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / ".local" / "share" 
 from offload import runner
 from offload.cli import main
 from offload.config import load_config
+from offload.identity import host_slug, repo_slug, worker_name
+from offload.state import Lease, lease_workers, lock_path
 
 FAKE_SPRITE = textwrap.dedent(
     r'''
@@ -97,6 +102,9 @@ FAKE_SPRITE = textwrap.dedent(
         cwd = remap(option(args, "--dir") or "/home/sprite", name)
         argv = [remap(part, name) for part in args[args.index("--") + 1:]]
         state["calls"].append(["exec", name, *argv])
+        if os.environ.get("FAKE_SPRITE_DROP") and any("__off_exit__" in part for part in argv):
+            save(state)
+            sys.exit(255)
         save(state)
         fcntl.flock(lock, fcntl.LOCK_UN)
         env = {**os.environ, "HOME": str(ROOT / name / "home" / "sprite")}
@@ -108,29 +116,18 @@ FAKE_SPRITE = textwrap.dedent(
 FAKE_RSYNC = textwrap.dedent(
     r'''
     #!/usr/bin/env python3
-    import os, shutil, sys
+    import os, sys
     from pathlib import Path
 
     ROOT = Path(os.environ["FAKE_SPRITE_ROOT"])
     args = sys.argv[1:]
-    shell = args[args.index("-e") + 1].split()
+    at = args.index("-e")
+    shell = args[at + 1].split()
     name = shell[shell.index("-s") + 1]
-    source, dest = args[-2], args[-1]
-
-    def remote(path):
-        return Path(path.removeprefix("env:").replace("/home/sprite", str(ROOT / name / "home" / "sprite")))
-
-    if dest.startswith("env:"):
-        shutil.copytree(source, remote(dest), dirs_exist_ok=True, ignore=shutil.ignore_patterns(".git"))
-    else:
-        found = remote(source)
-        if not found.exists():
-            sys.exit(23)
-        target = Path(dest) / found.name
-        if found.is_dir():
-            shutil.copytree(found, target, dirs_exist_ok=True)
-        else:
-            shutil.copy(found, target)
+    del args[at:at + 2]
+    home = str(ROOT / name / "home" / "sprite")
+    local = [arg.removeprefix("env:").replace("/home/sprite", home) if arg.startswith("env:") else arg for arg in args]
+    os.execv(os.environ["REAL_RSYNC"], [os.environ["REAL_RSYNC"], *local])
     '''
 ).lstrip()
 
@@ -164,6 +161,18 @@ OFFLOAD_TOML = textwrap.dedent(
     run = "echo shard=$OFF_SHARD/$OFF_SHARDS"
     timeout = "1m"
     shards = 2
+
+    [tasks.show]
+    run = "find . -name '*.txt' -o -name '*.env' | sort"
+    timeout = "1m"
+
+    [tasks.spoof]
+    run = "echo __off_exit__ 0; exit 3"
+    timeout = "1m"
+
+    [tasks.background]
+    run = "(sleep 0.3; echo server stopped) & echo ok"
+    timeout = "1m"
     """
 ).lstrip()
 
@@ -171,6 +180,9 @@ OFFLOAD_TOML = textwrap.dedent(
 class RunnerEndToEndTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp(prefix="off-runner-test-"))
+        real_rsync = shutil.which("rsync")
+        if real_rsync is None:
+            raise RuntimeError("the off runner tests need rsync on PATH")
         self.addCleanup(subprocess.run, ["rm", "-rf", str(self.tmp)], check=False)
         bin_dir = self.tmp / "bin"
         bin_dir.mkdir()
@@ -184,7 +196,12 @@ class RunnerEndToEndTest(unittest.TestCase):
         self.repo.mkdir()
         (self.repo / "package.json").write_text('{"name": "t"}\n')
         (self.repo / "offload.toml").write_text(OFFLOAD_TOML)
+        (self.repo / ".gitignore").write_text("secret.env\n*.log\n!keep.log\n")
+        (self.repo / "untracked.txt").write_text("synced\n")
+        (self.repo / "secret.env").write_text("TOKEN=x\n")
+        (self.repo / "local-only.txt").write_text("excluded by info/exclude\n")
         subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
+        (self.repo / ".git" / "info" / "exclude").write_text("local-only.txt\n")
         env = {
             "OFF_SPRITE_BIN": str(bin_dir / "sprite"),
             "OFF_ORG": "test",
@@ -195,6 +212,7 @@ class RunnerEndToEndTest(unittest.TestCase):
             "FAKE_SPRITE_STATE": str(self.state_file),
             "FAKE_SPRITE_ROOT": str(self.tmp / "fake-root"),
             "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "REAL_RSYNC": real_rsync,
         }
         patcher = mock.patch.dict(os.environ, env)
         patcher.start()
@@ -202,6 +220,7 @@ class RunnerEndToEndTest(unittest.TestCase):
         previous = Path.cwd()
         os.chdir(self.repo)
         self.addCleanup(os.chdir, previous)
+        self.workers = [worker_name(host_slug(), repo_slug(self.repo), index) for index in (1, 2)]
 
     def off(self, *argv: str) -> tuple[int, str]:
         out = io.StringIO()
@@ -248,7 +267,7 @@ class RunnerEndToEndTest(unittest.TestCase):
         self.assertLess(max(i for i, p in enumerate(posts[:checkpoint]) if p == "/policy/network"), checkpoint)
         self.assertNotIn("/policy/privileges", posts[checkpoint:])
         marker = runner.base_marker(load_config(self.repo))
-        comments = json.loads(self.state_file.read_text())["sprites"]["off-testhost-repo-1"]["checkpoints"]
+        comments = json.loads(self.state_file.read_text())["sprites"][self.workers[0]]["checkpoints"]
         self.assertEqual([cp["comment"] for cp in comments], [marker])
 
     def test_setup_change_rebuilds_the_worker(self) -> None:
@@ -265,11 +284,84 @@ class RunnerEndToEndTest(unittest.TestCase):
         self.assertIn("shard=1/2", output)
         self.assertIn("shard=2/2", output)
         created = sorted(call[1] for call in self.calls() if call[0] == "create")
-        self.assertEqual(created, ["off-testhost-repo-1", "off-testhost-repo-2"])
+        self.assertEqual(created, self.workers)
 
     def test_timeout_returns_124(self) -> None:
         code, output = self.off("run", "slow")
         self.assertEqual(code, runner.EXIT_TIMEOUT, output)
+
+    def test_sync_follows_git_rules(self) -> None:
+        nested = self.repo / "nested"
+        subprocess.run(["git", "init", "-q", str(nested)], check=True)
+        (nested / ".gitignore").write_text("inner.env\n")
+        (nested / "inner.env").write_text("TOKEN=y\n")
+        (nested / "nested.txt").write_text("nested repo file\n")
+        source = self.tmp / "sub-source"
+        subprocess.run(["git", "init", "-q", str(source)], check=True)
+        (source / "sub.txt").write_text("submodule file\n")
+        git = ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]
+        subprocess.run([*git, "-C", str(source), "add", "."], check=True)
+        subprocess.run([*git, "-C", str(source), "commit", "-qm", "init"], check=True)
+        subprocess.run(
+            [*git, "-c", "protocol.file.allow=always", "-C", str(self.repo), "submodule", "add", "-q", str(source), "sub"],
+            check=True,
+        )
+        code, output = self.off("run", "show")
+        self.assertEqual(code, 0, output)
+        self.assertIn("./untracked.txt", output)
+        self.assertIn("./sub/sub.txt", output)
+        self.assertNotIn("nested", output)
+        self.assertNotIn("secret.env", output)
+        self.assertNotIn("local-only.txt", output)
+
+    def test_task_output_cannot_fake_the_exit_code(self) -> None:
+        code, output = self.off("run", "spoof")
+        self.assertEqual(code, 3, output)
+        self.assertIn("__off_exit__ 0", output)
+
+    def test_output_after_the_task_exits_keeps_its_exit_code(self) -> None:
+        code, output = self.off("run", "background")
+        self.assertEqual(code, 0, output)
+        self.assertIn("server stopped", output)
+
+    def test_base_holds_only_setup_inputs(self) -> None:
+        self.assertEqual(self.off("run", "ok")[0], 0)
+        snapshot = self.tmp / "fake-root" / f"{self.workers[0]}.cp" / "v2" / "work"
+        self.assertEqual(sorted(path.name for path in snapshot.iterdir()), ["package.json"])
+
+    def test_lost_connection_is_an_off_error_and_stops_the_task(self) -> None:
+        self.assertEqual(self.off("run", "ok")[0], 0)
+        with mock.patch.dict(os.environ, {"FAKE_SPRITE_DROP": "1"}):
+            code, output = self.off("run", "ok")
+        self.assertEqual(code, runner.EXIT_OFF_ERROR, output)
+        self.assertIn("lost the task", output)
+        restores = [call for call in self.calls() if call[0] == "POST" and call[1].endswith("/restore")]
+        self.assertEqual(len(restores), 3)
+
+
+class LeaseOrderTest(unittest.TestCase):
+    def test_two_runs_wanting_every_worker_do_not_deadlock(self) -> None:
+        state = tempfile.TemporaryDirectory()
+        self.addCleanup(state.cleanup)
+        names = ["w1", "w2"]
+        with mock.patch.dict(os.environ, {"XDG_STATE_HOME": state.name}):
+            blocker = Lease(lock_path("w2"))
+            self.assertTrue(blocker.try_acquire())
+            finished: list[str] = []
+
+            def run(label: str) -> None:
+                for _, lease in lease_workers(names, 2):
+                    lease.release()
+                finished.append(label)
+
+            threads = [threading.Thread(target=run, args=(label,)) for label in ("a", "b")]
+            for thread in threads:
+                thread.start()
+            time.sleep(0.3)
+            blocker.release()
+            for thread in threads:
+                thread.join(timeout=10)
+        self.assertEqual(sorted(finished), ["a", "b"])
 
 
 if __name__ == "__main__":

@@ -6,21 +6,21 @@ import socket
 import subprocess
 from pathlib import Path, PurePosixPath
 
-from .config import ConfigError, OffloadConfig
+from .config import OffloadConfig
 
-BASE_SCHEMA = "off-base-v1"
-_NON_SLUG = re.compile(r"[^a-z0-9]+")
+BASE_SCHEMA = "off-base-v2"
+_NON_ALNUM = re.compile(r"[^a-z0-9]+")
 
 
-def slug(text: str, limit: int) -> str:
-    result = _NON_SLUG.sub("-", text.lower()).strip("-")[:limit].strip("-")
-    if not result:
-        raise ConfigError(f"cannot build a name from {text!r}")
-    return result
+def token(name: str, identity: str, limit: int) -> str:
+    """A dashless name part: worker names are split on dashes, and the hash keeps truncated names apart."""
+    stem = _NON_ALNUM.sub("", name.lower())[:limit]
+    return f"{stem}{hashlib.sha256(identity.encode()).hexdigest()[:4]}"
 
 
 def host_slug() -> str:
-    return slug(os.environ.get("OFF_HOST") or socket.gethostname(), 12)
+    host = os.environ.get("OFF_HOST") or socket.gethostname()
+    return token(host, host, 10)
 
 
 def repo_slug(root: Path) -> str:
@@ -30,9 +30,9 @@ def repo_slug(root: Path) -> str:
         text=True,
     )
     if origin.returncode != 0:
-        return slug(root.name, 20)
-    url = origin.stdout.strip().rstrip("/").replace(":", "/")
-    return slug(PurePosixPath(url).name.removesuffix(".git"), 20)
+        return token(root.name, str(root.resolve()), 16)
+    url = origin.stdout.strip().rstrip("/")
+    return token(PurePosixPath(url.replace(":", "/")).name.removesuffix(".git"), url, 16)
 
 
 def worker_name(host: str, repo: str, index: int) -> str:
@@ -51,7 +51,12 @@ def base_key(config: OffloadConfig) -> str:
         for path in sorted(config.setup.inputs)
     }
     manifest = json.dumps(
-        {"schema": BASE_SCHEMA, "run": list(config.setup.run), "inputs": inputs},
+        {
+            "schema": BASE_SCHEMA,
+            "run": list(config.setup.run),
+            "inputs": inputs,
+            "setup_egress": list(config.worker.setup_egress),
+        },
         sort_keys=True,
     )
     return hashlib.sha256(manifest.encode()).hexdigest()[:12]

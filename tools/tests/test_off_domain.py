@@ -20,7 +20,7 @@ from offload.config import (
     parse_config,
     parse_duration,
 )
-from offload.identity import base_key, host_slug, repo_slug, slug, worker_name, worker_prefix
+from offload.identity import base_key, host_slug, repo_slug, token, worker_name, worker_prefix
 from offload.policy import policy_hash, run_network_rules, setup_network_rules
 from offload.state import (
     Lease,
@@ -226,22 +226,28 @@ class IdentityTest(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
 
-    def test_slug(self) -> None:
-        self.assertEqual(slug("Claudio Estudos!", 20), "claudio-estudos")
-        self.assertEqual(slug("--a--b--", 20), "a-b")
-        self.assertEqual(slug("abcdefghij", 5), "abcde")
-        with self.assertRaisesRegex(ConfigError, "cannot build a name"):
-            slug("!!!", 5)
+    def test_token_is_dashless_and_keeps_truncated_names_apart(self) -> None:
+        first = token("workstation-a", "workstation-a", 10)
+        second = token("workstation-b", "workstation-b", 10)
+        self.assertTrue(first.startswith("workstatio"))
+        self.assertNotIn("-", first)
+        self.assertNotEqual(first, second)
+        self.assertRegex(token("!!!", "!!!", 5), r"^[0-9a-f]{4}$")
+
+    def test_host_prefixes_do_not_overlap(self) -> None:
+        dev = worker_prefix(token("dev", "dev", 10), None)
+        laptop = worker_name(token("dev-laptop", "dev-laptop", 10), "repo1234", 1)
+        self.assertFalse(laptop.startswith(dev))
 
     def test_host_slug_prefers_off_host(self) -> None:
         with mock.patch.dict(os.environ, {"OFF_HOST": "Ubuntu Box"}):
-            self.assertEqual(host_slug(), "ubuntu-box")
+            self.assertRegex(host_slug(), r"^ubuntubox[0-9a-f]{4}$")
 
     def test_repo_slug_falls_back_to_directory_name(self) -> None:
         repo = self.root / "My Repo"
         repo.mkdir()
         subprocess.run(["git", "init", "-q", str(repo)], check=True)
-        self.assertEqual(repo_slug(repo), "my-repo")
+        self.assertRegex(repo_slug(repo), r"^myrepo[0-9a-f]{4}$")
 
     def test_repo_slug_reads_origin(self) -> None:
         repo = self.root / "checkout"
@@ -259,7 +265,15 @@ class IdentityTest(unittest.TestCase):
             ],
             check=True,
         )
-        self.assertEqual(repo_slug(repo), "claudio-estudos")
+        self.assertRegex(repo_slug(repo), r"^claudioestudos[0-9a-f]{4}$")
+        other = self.root / "fork"
+        other.mkdir()
+        subprocess.run(["git", "init", "-q", str(other)], check=True)
+        subprocess.run(
+            ["git", "-C", str(other), "remote", "add", "origin", "git@github.com:someone/claudio-estudos.git"],
+            check=True,
+        )
+        self.assertNotEqual(repo_slug(repo), repo_slug(other))
 
     def test_worker_names(self) -> None:
         self.assertEqual(worker_name("box", "repo", 1), "off-box-repo-1")

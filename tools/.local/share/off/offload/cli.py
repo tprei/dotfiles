@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import fnmatch
 import json
 import os
 import subprocess
@@ -26,6 +25,7 @@ from offload.runner import (
     host_workers,
     repo_workers,
     run_task,
+    sync_files,
 )
 from offload.sprites import SpriteError, Sprites
 from offload.state import read_cache, read_records
@@ -132,7 +132,8 @@ def _plan(name: str | None) -> int:
     tasks = [_task(config, name)] if name is not None else list(config.tasks.values())
     host = host_slug()
     repo = repo_slug(config.root)
-    files = _sync_files(config.root, config.sync_exclude)
+    files = sync_files(config)
+    size = sum((config.root / path).lstat().st_size for path in files)
     policies = {
         "setup_network": setup_network_rules(config.worker),
         "run_network": run_network_rules(config.worker),
@@ -143,7 +144,7 @@ def _plan(name: str | None) -> int:
     print(f"config   {config.root / 'offload.toml'}")
     print(f"base     {base_key(config)}:{policy_hash(config.worker)}")
     print(f"workers  {worker_prefix(host, repo)}[1-{config.worker.max}]  {config.worker.memory_mb} MiB each")
-    print(f"sync     {len(files)} files (tracked and untracked, sync excludes applied)")
+    print(f"sync     {len(files)} files, {size / 1024**2:.1f} MiB (what git would add; sync excludes applied)")
     print(f"env      {env}")
     print("policy")
     print(json.dumps(policies, indent=2))
@@ -225,23 +226,6 @@ def _optional_config() -> OffloadConfig | None:
     if root is None or not (root / "offload.toml").is_file():
         return None
     return load_config(root)
-
-
-def _sync_files(root: Path, exclude: tuple[str, ...]) -> list[str]:
-    completed = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "-z", "-co", "--exclude-standard"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if completed.returncode != 0:
-        raise OffError(f"git ls-files failed: {completed.stderr.strip()}")
-    return [path for path in completed.stdout.split("\0") if path and not _excluded(path, exclude)]
-
-
-def _excluded(path: str, patterns: tuple[str, ...]) -> bool:
-    names = [*path.split("/"), path]
-    return any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns for name in names)
 
 
 def _print_table(header: Sequence[str], rows: Sequence[Sequence[str]]) -> None:
