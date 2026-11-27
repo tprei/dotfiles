@@ -106,5 +106,13 @@ hideThinkingBlock: true
 composer:
   shape: box
 codexResets:
-  autoRedeem5h: "no"
-  autoRedeemWeekly: "no"
+  autoRedeem5h: "yes"
+  autoRedeemWeekly: "yes"
+  minBlockedMinutes: 1440
+  salvageHorizonHours: 48
+claudeResets:
+  autoRedeem5h: "yes"
+  autoRedeemWeekly: "yes"
+  autoRedeemFable: "yes"
+  minBlockedMinutes: 1440
+  salvageHorizonHours: 48

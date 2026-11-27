@@ -202,6 +202,16 @@ sudo tailscale serve --bg --set-path /omp-usage.js ~/dotfiles/dotfiles/scriptabl
 
 `scriptable/omp-usage.js` is the thin client for the free Scriptable app: open `https://openclaw.tail2fec5e.ts.net/omp-usage.js` in Safari on the phone, copy it into a new Scriptable script, then add a Scriptable widget (home screen small, medium, or large; lock screen circular, rectangular, or inline) and pick the script. Home sizes show the PNGs; lock screen sizes draw natively from `widget.json` with live countdowns. It asks iOS for a refresh every 15 minutes, caches the last good data for offline use, and opens the Telegram bot on tap. Layout changes ship from openclaw without touching the phone; only changes to the script itself need a re-paste.
 
+### Saved reset expiry guard
+
+`omp/.omp/agent/config.yml` lets omp spend saved Codex and Claude resets without asking, but only at a weekly limit with at least 24 hours until the weekly reset (`minBlockedMinutes: 1440`, so 5-hour limits wait), or in a credit's last 48 hours once a covered window is at least 25% used (`salvageHorizonHours: 48`). omp only does that while a session is open. `tools/.local/bin/omp-reset-expiry-guard` covers the rest: it lists resets with `omp usage reset --json` and spends any that expire within 12 hours (`--within-hours`), regardless of usage. For Codex it spends the account's soonest-expiring credit. For Claude it can spend only the grant Anthropic currently offers (`nextCreditId`). An account whose listing failed, or an expiring Claude grant Anthropic doesn't offer, is reported on stderr and the run exits 1. `--dry-run` prints what it would spend. `tools/.config/systemd/user/omp-reset-expiry-guard.{service,timer}` runs it hourly (`Persistent=true` catches up after downtime) and needs `loginctl enable-linger $USER`.
+
+```sh
+just stow tools
+systemctl --user daemon-reload
+systemctl --user enable --now omp-reset-expiry-guard.timer
+```
+
 ### Sprite offload
 
 `tools/.local/bin/off` runs the tasks a repo declares in `offload.toml` on [Fly.io Sprites](https://fly.io/sprites) instead of this machine. Each machine gets its own workers per repo (`off-<host><hash>-<repo><hash>-<n>`; the hashes keep look-alike hostnames and same-named repos from different owners apart). A worker is built once from `[setup]`, locked down, and checkpointed. Setup sees only the `inputs` files. The base checkpoint also holds the repo tree as of the worker build, so a run only uploads files that changed since then, and files deleted since are removed on the worker. After a run, off resets the worker in the background, so the next run starts without waiting for a restore. A change to `[setup]`, its `inputs`, or the worker policy rebuilds the worker.

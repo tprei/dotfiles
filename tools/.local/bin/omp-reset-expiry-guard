@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+import subprocess
+import sys
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+
+@dataclass(frozen=True)
+class Spend:
+    target: str
+    credit_id: str
+    expires_at: datetime
+
+
+@dataclass(frozen=True)
+class Stranded:
+    provider: str
+    credential_id: int
+    credit_id: str
+    expires_at: datetime
+
+
+def positive_hours(value: str) -> float:
+    parsed = float(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive number of hours")
+    return parsed
+
+
+def expires_at(credit: dict[str, Any]) -> datetime:
+    return datetime.fromisoformat(credit["expiresAt"])
+
+
+def expiring_credits(account: dict[str, Any], now: datetime, deadline: datetime) -> list[dict[str, Any]]:
+    return [
+        credit
+        for credit in account.get("credits", [])
+        if credit.get("status") == "available" and "expiresAt" in credit and now < expires_at(credit) <= deadline
+    ]
+
+
+def plan(accounts: list[dict[str, Any]], now: datetime, deadline: datetime) -> tuple[list[Spend], list[Stranded]]:
+    spends: list[Spend] = []
+    stranded: list[Stranded] = []
+    for account in accounts:
+        provider = account["provider"]
+        credential_id = account["credentialId"]
+        expiring = expiring_credits(account, now, deadline)
+        if not expiring:
+            continue
+        if provider == "openai-codex":
+            soonest = min(expiring, key=expires_at)
+            spends.append(Spend(f"openai-codex/{credential_id}", soonest["id"], expires_at(soonest)))
+        elif provider == "anthropic":
+            selected = next(
+                (
+                    credit
+                    for credit in expiring
+                    if credit["id"] == account.get("nextCreditId") and credit.get("usable") is True
+                ),
+                None,
+            )
+            if selected is not None:
+                spends.append(Spend(f"anthropic/{credential_id}", selected["id"], expires_at(selected)))
+            stranded.extend(
+                Stranded(provider, credential_id, credit["id"], expires_at(credit))
+                for credit in expiring
+                if credit is not selected
+            )
+    return spends, stranded
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Spend saved Codex and Claude rate-limit resets that expire within the window."
+    )
+    parser.add_argument("--within-hours", type=positive_hours, default=12.0)
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--omp", default="omp")
+    args = parser.parse_args()
+
+    listing = subprocess.run([args.omp, "usage", "reset", "--json"], capture_output=True, text=True)
+    if listing.returncode != 0:
+        sys.stderr.write(listing.stderr)
+        return 1
+    now = datetime.now(timezone.utc)
+    accounts = json.loads(listing.stdout)["accounts"]
+    spends, stranded = plan(accounts, now, now + timedelta(hours=args.within_hours))
+
+    failed = False
+    for account in accounts:
+        if account.get("error"):
+            failed = True
+            print(
+                f"{account['provider']}/{account['credentialId']}: could not list resets: {account['error']}",
+                file=sys.stderr,
+            )
+    for credit in stranded:
+        failed = True
+        print(
+            f"{credit.provider}/{credit.credential_id}: credit {credit.credit_id} expires "
+            f"{credit.expires_at.isoformat()} but is not the provider's selected reset, so it can't be spent",
+            file=sys.stderr,
+        )
+    for spend in spends:
+        verb = "would spend" if args.dry_run else "spending"
+        print(f"{spend.target}: {verb} credit {spend.credit_id}, expires {spend.expires_at.isoformat()}")
+        if args.dry_run:
+            continue
+        result = subprocess.run([args.omp, "usage", "reset", spend.target], capture_output=True, text=True)
+        sys.stdout.write(result.stdout)
+        sys.stderr.write(result.stderr)
+        if result.returncode != 0:
+            failed = True
+    if not spends and not failed:
+        print(f"no saved reset expires within {args.within_hours:g}h")
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

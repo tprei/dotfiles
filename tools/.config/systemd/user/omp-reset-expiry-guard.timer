@@ -1,0 +1,10 @@
+[Unit]
+Description=Hourly check for saved Codex and Claude resets close to expiry
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=2min
+
+[Install]
+WantedBy=timers.target
