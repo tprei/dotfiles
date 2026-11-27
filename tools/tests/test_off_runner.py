@@ -449,9 +449,14 @@ class RunnerEndToEndTest(unittest.TestCase):
         self.assertIn("not enough time left to retry", output)
 
     def test_exec_runs_an_ad_hoc_command_and_keeps_its_exit_code(self) -> None:
-        code, output = self.off("exec", "--", "echo hi && exit 4")
-        self.assertEqual(code, 4, output)
-        self.assertIn("hi", output)
+        code, output = self.off("exec", "--", "python3 -m unittest no_such_test_module")
+        self.assertEqual(code, 1, output)
+
+    def test_exec_refuses_a_light_command_before_touching_the_sprite(self) -> None:
+        code, output = self.off("exec", "--", "uv --version")
+        self.assertEqual(code, 64, output)
+        self.assertIn("refusing to offload 'uv --version'", output)
+        self.assertFalse(self.state_file.exists())
 
     def test_lost_connection_is_an_off_error_and_stops_the_task(self) -> None:
         self.assertEqual(self.off("run", "ok")[0], 0)
