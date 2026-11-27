@@ -243,7 +243,7 @@ shards = 2
 - Commands: `off plan` (local only), `off run TASK [-- ARGS]`, `off exec [--timeout 30m] -- CMD`, `off status`, `off down [--all]`, `off watch RUN_ID [--shard N]`, `off usage [--days N]`.
 - Exit codes: the task's own code, `124` on timeout, `125` when off itself fails (a dropped `sprite exec` connection is retried once first), `130` when interrupted. Interrupting or losing a run restores the worker's checkpoint, which stops the remote task. Logs and artifacts live under `~/.local/state/off/`.
 - Lockdown: during runs egress is denied except `worker.egress`, sudo is blocked, memory is capped, and the Sprite URL stays private. Env from `[env] pass` and task `env` goes in per run through a file deleted before the task starts. No credentials live on a worker.
-- Tern: each shard opens a tab in a Tern session named `off` that follows the local log; it closes on success and stays open on failure. `OFF_TERN=off` disables it.
+- Tern: `off run` opens one Tern session per shard, only from an interactive terminal; agent shells (`OMP_BASH_SESSION` set) and non-terminal stderr get none. Each session is named `off <task> <last 4 run-id characters>`, with ` i/n` added when sharded. It follows the local log and closes when its shard finishes, whatever the result. `OFF_TERN=off` disables it.
 - Docker tasks aren't supported: the Docker daemon needs root, which the lockdown removes.
 
 #### Writing `[setup]`

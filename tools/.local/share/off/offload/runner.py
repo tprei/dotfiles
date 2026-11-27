@@ -536,7 +536,7 @@ def _run_sprite(config: OffloadConfig, task: TaskSpec, extra_args: list[str], la
     workers = [name for name, _ in leases]
     run_pid(run_id).write_text(str(os.getpid()), encoding="utf-8")
     if launcher is not None:
-        open_viewers(run_id, task.shards, config.root, launcher)
+        open_viewers(run_id, task.name, task.shards, config.root, launcher)
     ctx = _Run(sprites, config, task, run_id, repo, _command(task, extra_args), env, _Live())
     try:
         exit_code = _combine(_run_shards(ctx, workers))

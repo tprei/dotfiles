@@ -67,6 +67,7 @@ def _parser() -> argparse.ArgumentParser:
     viewer = commands.add_parser("watch", help="follow a run's log until the shard finishes")
     viewer.add_argument("run_id")
     viewer.add_argument("--shard", type=int, default=1)
+    viewer.add_argument("--viewer", action="store_true", help=argparse.SUPPRESS)
     usage = commands.add_parser("usage", help="Sprite usage and estimated cost of off workers")
     usage.add_argument("--days", type=int, default=7)
     reset = commands.add_parser("_reset")
@@ -95,7 +96,8 @@ def _dispatch(args: argparse.Namespace, extra: list[str]) -> int:
     if command == "status":
         return _status()
     if command == "watch":
-        return watch(args.run_id, args.shard)
+        code = watch(args.run_id, args.shard)
+        return 0 if args.viewer else code
     if command == "usage":
         return _usage(args.days)
     return _down(args.all)

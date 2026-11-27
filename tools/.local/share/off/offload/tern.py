@@ -1,5 +1,4 @@
 import codecs
-import json
 import os
 import shutil
 import subprocess
@@ -32,6 +31,8 @@ def detect_tern() -> TernTarget | None:
         return None
     if mode != "auto":
         _warn(f"OFF_TERN must be auto or off, not {mode!r}; using auto")
+    if not sys.stderr.isatty() or "OMP_BASH_SESSION" in os.environ:
+        return None
     distro = os.environ.get("WSL_DISTRO_NAME") or None
     binary = "tern.exe" if distro else "tern"
     if shutil.which(binary) is None:
@@ -48,27 +49,30 @@ def detect_tern() -> TernTarget | None:
 def viewer_argv(
     target: TernTarget, off_path: Path, cwd: Path, run_id: str, shard: int
 ) -> list[str]:
-    watch_args = ["watch", run_id, "--shard", str(shard)]
+    # --viewer makes watch exit 0 on any shard result, so --end-on-success closes the session.
+    watch_args = ["watch", run_id, "--shard", str(shard), "--viewer"]
     if target.wsl_distro is None:
         return [str(off_path), *watch_args]
     wsl = ["wsl.exe", "-d", target.wsl_distro, "--cd", str(cwd), "--"]
     return [*wsl, str(off_path), *watch_args]
 
 
-def open_viewers(run_id: str, shards: int, cwd: Path, off_path: Path) -> None:
+def open_viewers(run_id: str, task: str, shards: int, cwd: Path, off_path: Path) -> None:
     target = detect_tern()
     if target is None:
         return
     try:
-        has_session = "off" in _session_names(_tern(target, ["ls", "--json"], _CALL_TIMEOUT_S))
         for shard in range(1, shards + 1):
             argv = viewer_argv(target, off_path, cwd, run_id, shard)
-            if shard == 1 and not has_session:
-                _tern(target, ["new", "session", "off", "--", *argv], _CALL_TIMEOUT_S)
-            else:
-                _tern(target, ["new", "tab", "off", "--", *argv], _CALL_TIMEOUT_S)
+            name = _session_name(task, run_id, shard, shards)
+            _tern(target, ["new", "session", name, "--end-on-success", "--", *argv], _CALL_TIMEOUT_S)
     except _TernError as error:
         _warn(f"tern viewer failed: {error}")
+
+
+def _session_name(task: str, run_id: str, shard: int, shards: int) -> str:
+    name = f"off {task} {run_id[-4:]}"
+    return f"{name} {shard}/{shards}" if shards > 1 else name
 
 
 def watch(run_id: str, shard: int, *, poll_s: float = 0.25, out: TextIO = sys.stdout) -> int:
@@ -162,23 +166,6 @@ def _tern(target: TernTarget, args: list[str], timeout_s: float) -> str:
         detail = " ".join(result.stderr.split()) or f"exit {result.returncode}"
         raise _TernError(f"{' '.join(command)}: {detail}")
     return result.stdout
-
-
-def _session_names(listing: str) -> set[str]:
-    try:
-        data: object = json.loads(listing)
-    except json.JSONDecodeError as error:
-        raise _TernError("ls --json printed invalid JSON") from error
-    sessions = data.get("sessions") if isinstance(data, dict) else None
-    if not isinstance(sessions, list):
-        raise _TernError("ls --json has no sessions list")
-    names: set[str] = set()
-    for session in sessions:
-        name = session.get("name") if isinstance(session, dict) else None
-        if not isinstance(name, str):
-            raise _TernError("ls --json has a session without a name")
-        names.add(name)
-    return names
 
 
 def _warn(message: str) -> None:
