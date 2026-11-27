@@ -922,7 +922,7 @@ function homeWidget(family, view, result) {
   if (view === "forecast") forecastView(body, family, result.feed, now);
   else if (view === "recent") recentView(body, family, result.feed, now);
   else nowView(body, family, result.feed, now);
-  widget.addSpacer();
+  body.addSpacer();
   addControls(widget, view, result);
   return widget;
 }
@@ -1386,7 +1386,7 @@ function usageWidget(family, result) {
   const chartHeight = family === "large" ? 140 : 66;
   body.addImage(bucketChart(slide, usage, metric, ART_WIDTH, chartHeight, true)).imageSize = new Size(ART_WIDTH, chartHeight);
   if (family === "large") addUsageList(body, usage, slide);
-  widget.addSpacer();
+  body.addSpacer();
   if (result.offline) addLabel(widget, offlineText(result.feed), Font.semiboldSystemFont(11), AMBER).minimumScaleFactor = 0.75;
   return widget;
 }
