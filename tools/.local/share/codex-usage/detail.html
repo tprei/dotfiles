@@ -1,0 +1,893 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#000000">
+<title>OMP usage</title>
+<style>
+  :root {
+    --page: #000000;
+    --cell: #1C1C1E;
+    --raised: #2C2C2E;
+    --label: #FFFFFF;
+    --secondary: rgba(235, 235, 245, 0.6);
+    --tertiary: rgba(235, 235, 245, 0.3);
+    --separator: rgba(84, 84, 88, 0.55);
+    --heat: #FF9F0A;
+    --empty: #FF453A;
+    --amber: #FFD60A;
+    --tint: #0A84FF;
+    --segment-track: rgba(118, 118, 128, 0.24);
+    --segment-on: #636366;
+    --segment-shadow: 0 3px 8px rgba(0, 0, 0, 0.24);
+    --bar-glass: rgba(0, 0, 0, 0.78);
+    --rainbow: linear-gradient(135deg, #FF453A, #FF9F0A, #FFD60A, #30D158, #0A84FF, #BF5AF2);
+    --text: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
+    --figure: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --gutter: max(16px, env(safe-area-inset-left));
+    --gutter-end: max(16px, env(safe-area-inset-right));
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html { overscroll-behavior-y: none; -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background: var(--page);
+    color: var(--label);
+    font: 17px/1.35 var(--text);
+    -webkit-font-smoothing: antialiased;
+    font-variant-numeric: tabular-nums;
+  }
+  ::selection { background: color-mix(in srgb, var(--tint) 28%, transparent); }
+  :focus-visible { outline: 3px solid var(--tint); outline-offset: 2px; border-radius: 8px; }
+  button { font: inherit; color: inherit; }
+  .shell { max-width: 640px; margin: 0 auto; }
+
+  .pull {
+    height: 0;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    color: var(--secondary);
+  }
+  .pull svg { width: 28px; height: 28px; }
+  .pull.refreshing svg { animation: spin 0.9s steps(8) infinite; }
+  .settle { transition: height 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  header {
+    padding: calc(env(safe-area-inset-top) + 20px) var(--gutter-end) 0 var(--gutter);
+  }
+  .title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  h1 { margin: 0; font-size: 30px; line-height: 1.15; font-weight: 700; letter-spacing: 0.01em; }
+  .refresh {
+    width: 44px;
+    height: 44px;
+    margin-right: -8px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--tint);
+    cursor: pointer;
+  }
+  .refresh:hover { background: var(--segment-track); }
+  .refresh:active { opacity: 0.5; }
+  .refresh svg { width: 22px; height: 22px; }
+  .refresh[aria-busy="true"] svg { animation: spin 0.9s linear infinite; }
+  .status { margin: 2px 0 0; min-height: 20px; font-size: 15px; color: var(--secondary); display: flex; align-items: center; gap: 6px; }
+  .status.warn { color: var(--amber); font-weight: 600; }
+  .status svg { width: 16px; height: 16px; flex: none; }
+
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: 12px var(--gutter-end) 12px var(--gutter);
+    background: var(--bar-glass);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+  }
+  .segments {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    padding: 2px;
+    border-radius: 10px;
+    background: var(--segment-track);
+  }
+  .segments a {
+    min-height: 32px;
+    display: grid;
+    place-items: center;
+    border-radius: 8px;
+    color: var(--label);
+    font-size: 15px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background-color 0.2s, box-shadow 0.2s;
+  }
+  .segments a[aria-current="page"] { background: var(--segment-on); box-shadow: var(--segment-shadow); font-weight: 600; }
+
+  main { padding: 8px var(--gutter-end) calc(env(safe-area-inset-bottom) + 40px) var(--gutter); }
+  section[hidden] { display: none; }
+  h2 {
+    margin: 32px 4px 10px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--secondary);
+  }
+  .cell {
+    position: relative;
+    background: var(--cell);
+    border-radius: 20px;
+    padding: 18px;
+  }
+  .cell + .cell, .cell + .list { margin-top: 12px; }
+  .opportunity {
+    border: 2px solid transparent;
+    background: linear-gradient(var(--cell), var(--cell)) padding-box, var(--rainbow) border-box;
+    padding: 16px;
+  }
+  .list { background: var(--cell); border-radius: 20px; overflow: hidden; }
+  .list > .row + .row::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 60px;
+    right: 0;
+    border-top: 0.5px solid var(--separator);
+  }
+  .row { position: relative; display: grid; grid-template-columns: 26px minmax(0, 1fr); column-gap: 14px; padding: 14px 16px; align-items: start; }
+
+  .logo { width: 26px; height: 26px; display: block; color: var(--label); }
+  .monogram {
+    width: 26px;
+    height: 26px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--raised);
+    color: var(--label);
+    font: 700 15px/1 var(--figure);
+  }
+  .flame { width: 16px; height: 16px; flex: none; color: var(--heat); }
+  .flame.out { color: var(--empty); }
+
+  .who { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex: 1 1 auto; overflow: hidden; }
+  .who .name { font-weight: 600; white-space: nowrap; }
+  .who .label { color: var(--secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .who .flame { align-self: center; }
+  .line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
+  .figure { font-family: var(--figure); font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .figure small { font: 600 15px/1 var(--text); color: var(--secondary); margin-left: 5px; }
+  .unknown { color: var(--secondary); font-size: 15px; white-space: nowrap; }
+  .meta { margin: 7px 0 0; font-size: 15px; color: var(--secondary); text-wrap: pretty; }
+  .meta.danger { color: var(--empty); font-weight: 500; }
+  .meta.warn { color: var(--heat); font-weight: 500; }
+
+  .bar { position: relative; height: 6px; margin-top: 9px; border-radius: 3px; background: color-mix(in srgb, var(--c) 22%, transparent); overflow: hidden; }
+  .bar span { position: absolute; inset: 0 auto 0 0; min-width: 6px; border-radius: 3px; background: var(--c); }
+  .bar .ghost { opacity: 0.42; }
+
+  .provider { display: grid; grid-template-columns: 88px minmax(0, 1fr); column-gap: 18px; align-items: start; }
+  .rings { width: 88px; height: 88px; display: block; }
+  .provider .title { display: flex; align-items: center; gap: 7px; margin-bottom: 12px; font-size: 20px; font-weight: 700; line-height: 1.2; }
+  .provider .title .flame { width: 18px; height: 18px; }
+  .win + .win { margin-top: 16px; }
+  .win .name { font-weight: 600; }
+  .win .figure { font-size: 20px; line-height: 1; }
+
+  .forecast .headline { margin-top: 14px; }
+  .forecast .headline .figure { font-size: 34px; line-height: 1; }
+  .timeline { position: relative; margin-top: 16px; }
+  .timeline .bar { height: 8px; margin-top: 0; border-radius: 4px; }
+  .timeline .bar span { border-radius: 4px; }
+  .timeline .track { position: relative; height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--c) 22%, transparent); }
+  .timeline .seg { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 4px; }
+  .timeline .usable { min-width: 8px; background: var(--c); }
+  .timeline .dry { right: 0; background: var(--empty); }
+  .timeline .knob {
+    position: absolute;
+    top: 50%;
+    width: 14px;
+    height: 14px;
+    margin: -7px 0 0 -7px;
+    border-radius: 50%;
+    background: var(--label);
+    box-shadow: 0 0 0 3px var(--cell);
+  }
+  .timeline .ends { display: flex; justify-content: space-between; gap: 12px; margin-top: 10px; font-size: 13px; color: var(--secondary); }
+
+  .session .topic { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .session .age { color: var(--secondary); font-size: 15px; white-space: nowrap; }
+  .session .detail { display: flex; justify-content: space-between; gap: 12px; margin-top: 2px; font-size: 15px; color: var(--secondary); }
+  .session .detail .facts { display: flex; gap: 10px; min-width: 0; overflow: hidden; }
+  .session .detail .facts span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .session .detail .facts span:first-child { flex: none; max-width: 60%; }
+  .session .detail .facts span + span { color: var(--tertiary); }
+  .session .tokens { white-space: nowrap; }
+
+  .note { margin: 14px 4px 0; font-size: 15px; color: var(--secondary); text-wrap: pretty; }
+  .empty { padding: 28px 18px; text-align: center; }
+  .empty strong { display: block; font-size: 17px; }
+  .empty p { margin: 6px 0 0; font-size: 15px; color: var(--secondary); }
+  .action {
+    margin-top: 16px;
+    min-height: 44px;
+    padding: 0 20px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--tint);
+    color: #FFFFFF;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .action:active { opacity: 0.7; }
+  .loading { display: grid; justify-items: center; gap: 12px; padding: 48px 0; color: var(--secondary); font-size: 15px; }
+  .loading svg { width: 28px; height: 28px; animation: spin 0.9s steps(8) infinite; }
+  @media (prefers-reduced-motion: reduce) {
+    .pull.refreshing svg, .refresh[aria-busy="true"] svg, .loading svg { animation: none; }
+    .settle, .segments a { transition: none; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="logo-openai" viewBox="0 0 24 24"><path fill="currentColor" d="M13.79 23.89Q12.6 23.89 11.53 23.44C10.82 23.14 10.18 22.71 9.63 22.18 9.02 22.39 8.39 22.49 7.75 22.49 6.71 22.5 5.69 22.23 4.8 21.7 3.9 21.19 3.15 20.45 2.61 19.56 2.07 18.65 1.79 17.61 1.8 16.54Q1.8 15.85 1.99 15.04C1.37 14.48 .87 13.79 .52 13.02-.19 11.46-.18 9.67.54 8.12.9 7.34 1.42 6.64 2.07 6.08 2.73 5.49 3.52 5.08 4.37 4.86 4.54 3.98 4.91 3.15 5.47 2.44Q6.32 1.34 7.56.73C8.38.32 9.28.1 10.2.11Q11.39.11 12.46.56 13.53 1.01 14.36 1.82C14.97 1.61 15.6 1.51 16.24 1.51Q17.83 1.51 19.19 2.3C20.08 2.81 20.83 3.55 21.35 4.44Q22.19 5.79 22.19 7.46 22.19 8.15 22 8.96 22.95 9.83 23.47 11 23.99 12.14 23.99 13.4 23.99 14.69 23.45 15.88C23.08 16.67 22.56 17.37 21.9 17.95 21.25 18.52 20.46 18.93 19.62 19.14 19.45 20.02 19.07 20.86 18.5 21.56 17.95 22.28 17.24 22.87 16.43 23.27 15.61 23.68 14.71 23.9 13.79 23.89M7.91 20.92Q9.1 20.92 9.98 20.42L14.46 17.85C14.61 17.75 14.7 17.58 14.69 17.4V15.35L8.94 18.66C8.62 18.86 8.21 18.86 7.89 18.66L3.4 16.07C3.4 16.12 3.39 16.18 3.37 16.23V16.52Q3.37 17.73 3.94 18.75 4.54 19.75 5.59 20.32C6.3 20.72 7.1 20.93 7.92 20.92M8.15 17.04C8.23 17.09 8.32 17.11 8.42 17.11Q8.53 17.11 8.65 17.04L10.44 16.02 4.7 12.69C4.37 12.5 4.17 12.14 4.18 11.76V6.6Q2.99 7.12 2.28 8.22C1.81 8.92 1.56 9.75 1.57 10.6Q1.57 11.76 2.16 12.83 2.75 13.9 3.71 14.45ZM13.79 22.32Q15.05 22.32 16.07 21.75C17.46 20.99 18.31 19.52 18.29 17.94V12.81C18.3 12.63 18.2 12.46 18.05 12.38L16.24 11.33V17.97C16.26 18.35 16.05 18.71 15.72 18.9L11.22 21.49C11.97 22.03 12.87 22.33 13.79 22.32M14.7 13.62V10.38L12.01 8.86 9.3 10.38V13.62L12.01 15.14ZM7.75 6.03C7.73 5.65 7.94 5.29 8.27 5.1L12.77 2.51C12.02 1.97 11.12 1.67 10.2 1.68Q8.94 1.68 7.92 2.25C7.25 2.62 6.69 3.16 6.3 3.82 5.91 4.5 5.72 5.27 5.73 6.05V11.17Q5.73 11.45 5.97 11.62L7.75 12.67ZM19.83 17.4Q21.02 16.87 21.71 15.78 22.43 14.69 22.43 13.4C22.42 12.62 22.22 11.85 21.83 11.17Q21.24 10.1 20.29 9.55L15.84 6.98Q15.69 6.89 15.58 6.91C15.49 6.91 15.41 6.94 15.34 6.98L13.55 7.98 19.31 11.33C19.47 11.42 19.61 11.55 19.69 11.71 19.79 11.87 19.84 12.05 19.83 12.24ZM15.05 5.32C15.37 5.1 15.79 5.1 16.1 5.32L20.62 7.96V7.53Q20.62 6.39 20.05 5.37C19.69 4.67 19.13 4.09 18.45 3.7Q17.43 3.08 16.08 3.08 14.89 3.08 14.01 3.58L9.53 6.15C9.38 6.25 9.29 6.42 9.3 6.6V8.65Z"/></symbol>
+    <symbol id="logo-anthropic" viewBox="0 0 24 24"><path fill="#D97757" d="M4.7 15.96L9.43 13.32 9.5 13.08 9.43 12.96H9.19L8.4 12.91 5.71 12.84 3.36 12.72 1.08 12.6.5 12.48 0 11.76.05 11.4.53 11.09 1.22 11.14 2.74 11.26 5.02 11.4 6.67 11.5 9.12 11.78H9.5L9.55 11.62 9.43 11.52 9.34 11.42 6.96 9.84 4.42 8.16 3.07 7.18 2.35 6.7 1.99 6.22 1.85 5.21 2.5 4.49 3.38 4.56 3.6 4.61 4.49 5.3 6.41 6.77 8.88 8.64 9.24 8.93 9.38 8.83 9.41 8.76 9.24 8.5 7.92 6 6.48 3.5 5.83 2.47 5.66 1.85C5.59 1.61 5.57 1.37 5.57 1.13L6.29.12 6.72 0 7.73.14 8.11.48 8.74 1.92 9.72 4.15 11.28 7.18 11.76 8.09 12 8.9 12.07 9.14H12.24V9.02L12.36 7.3 12.6 5.21 12.84 2.52 12.91 1.75 13.3.84 14.02.36 14.64.62 15.12 1.32 15.05 1.75 14.78 3.6 14.16 6.5 13.8 8.47H14.02L14.26 8.21 15.24 6.91 16.9 4.85 17.62 4.01 18.48 3.12 19.03 2.69H20.06L20.81 3.82 20.47 4.99 19.42 6.34 18.53 7.46 17.26 9.17 16.49 10.54 16.56 10.63H16.73L19.61 10.01 21.14 9.74 22.97 9.43 23.81 9.82 23.9 10.2 23.57 11.02 21.6 11.5 19.3 11.98 15.86 12.77 15.82 12.79 15.86 12.86 17.4 13.01 18.07 13.06H19.7L22.73 13.3 23.52 13.78 23.98 14.42 23.9 14.9 22.68 15.53 21.05 15.14 17.21 14.23 15.91 13.92H15.72V14.02L16.82 15.1 18.82 16.9 21.36 19.22 21.48 19.8 21.17 20.28 20.83 20.23 18.62 18.55 17.76 17.83 15.84 16.2H15.72V16.37L16.15 17.02 18.5 20.54 18.62 21.62 18.46 21.96 17.83 22.2 17.18 22.06 15.79 20.14 14.35 17.98 13.22 16.01 13.1 16.1 12.41 23.35 12.1 23.71 11.38 24 10.78 23.52 10.44 22.8 10.78 21.31 11.16 19.39 11.47 17.86 11.76 15.96 11.93 15.34V15.29H11.76L10.32 17.28 8.16 20.23 6.43 22.06 6.02 22.22 5.3 21.86 5.38 21.19 5.76 20.64 8.16 17.57 9.6 15.67 10.56 14.57 10.54 14.45H10.46L4.13 18.58 3 18.72 2.52 18.24 2.57 17.52 2.81 17.28 4.73 15.96Z"/></symbol>
+    <symbol id="logo-google" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></symbol>
+    <symbol id="logo-opencode" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M16.8 4.8H7.2V19.2H16.8V4.8ZM21.6 24H2.4V0H21.6V24Z"/></symbol>
+    <symbol id="logo-zai" viewBox="0 0 24 24"><path fill="#2D2D2D" stroke="#FFFFFF" stroke-width=".56" d="M20.45 24H3.55C1.59 24 0 22.41 0 20.45V3.55C0 1.59 1.59 0 3.55 0H20.46C22.42 0 24.01 1.59 24.01 3.55V20.46C24 22.41 22.41 24 20.45 24Z"/><path fill="#FFFFFF" d="M12.42 4.98L11.26 6.63C11.09 6.88 10.78 7.04 10.46 7.04H4.16V4.97C4.15 4.98 12.42 4.98 12.42 4.98ZM11.58 19.03L12.75 17.37C12.92 17.12 13.23 16.96 13.55 16.96H19.84V19.03H11.58ZM20.26 4.98L10.35 19.03 3.74 19.03 13.65 4.98Z"/></symbol>
+    <symbol id="icon-flame" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.5c.5 3 2.3 4.6 3.9 6.3 1.6 1.7 3.1 3.6 3.1 6.2a7 7 0 0 1-14 0c0-2.9 1.5-4.9 3.1-6.2.2 1.9.9 3.2 2.1 3.8-.4-3.4.3-7 1.8-10.1z"/></symbol>
+    <symbol id="icon-refresh" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4v4.5H15"/></g></symbol>
+    <symbol id="icon-offline" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M2.5 9a14 14 0 0 1 19 0M6 12.8a9 9 0 0 1 12 0M9.4 16.3a4 4 0 0 1 5.2 0M12 20v.1M4 3l16 18"/></g></symbol>
+    <symbol id="icon-spinner" viewBox="0 0 24 24"><g stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path class="tick" d="M12 2.5v4.2"/><path class="tick" opacity=".88" d="M18.7 5.3l-3 3"/><path class="tick" opacity=".76" d="M21.5 12h-4.2"/><path class="tick" opacity=".64" d="M18.7 18.7l-3-3"/><path class="tick" opacity=".52" d="M12 21.5v-4.2"/><path class="tick" opacity=".4" d="M5.3 18.7l3-3"/><path class="tick" opacity=".3" d="M2.5 12h4.2"/><path class="tick" opacity=".2" d="M5.3 5.3l3 3"/></g></symbol>
+  </defs>
+</svg>
+<div class="shell">
+  <div class="pull" id="pull" aria-hidden="true"><svg viewBox="0 0 24 24"><g stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path class="tick" d="M12 2.5v4.2"/><path class="tick" opacity=".88" d="M18.7 5.3l-3 3"/><path class="tick" opacity=".76" d="M21.5 12h-4.2"/><path class="tick" opacity=".64" d="M18.7 18.7l-3-3"/><path class="tick" opacity=".52" d="M12 21.5v-4.2"/><path class="tick" opacity=".4" d="M5.3 18.7l3-3"/><path class="tick" opacity=".3" d="M2.5 12h4.2"/><path class="tick" opacity=".2" d="M5.3 5.3l3 3"/></g></svg></div>
+  <header>
+    <div class="title-row">
+      <h1>Usage</h1>
+      <button class="refresh" id="refresh" type="button" aria-label="Refresh"><svg aria-hidden="true"><use href="#icon-refresh"/></svg></button>
+    </div>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+  </header>
+  <nav aria-label="Views">
+    <div class="segments">
+      <a href="#now" id="tab-now">Now</a>
+      <a href="#forecast" id="tab-forecast">Forecast</a>
+      <a href="#recent" id="tab-recent">Recent</a>
+    </div>
+  </nav>
+  <main id="main">
+    <section id="view-now" aria-labelledby="tab-now"></section>
+    <section id="view-forecast" aria-labelledby="tab-forecast" hidden></section>
+    <section id="view-recent" aria-labelledby="tab-recent" hidden></section>
+  </main>
+</div>
+<script>
+"use strict";
+
+const MINUTE_MS = 60 * 1000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+const STALE_MS = 20 * MINUTE_MS;
+const POLL_MS = 5 * MINUTE_MS;
+const PULL_TRIGGER = 64;
+const PULL_MAX = 110;
+const FETCH_TIMEOUT_MS = 15 * 1000;
+const CACHE_KEY = "omp-usage-feed";
+const VIEWS = ["now", "forecast", "recent"];
+const PROVIDERS = new Map([
+  ["openai-codex", { name: "Codex", logo: "openai", tint: "#F2F2F7" }],
+  ["openai", { name: "OpenAI", logo: "openai", tint: "#F2F2F7" }],
+  ["anthropic", { name: "Claude", logo: "anthropic", tint: "#D97757" }],
+  ["google-antigravity", { name: "Antigravity", logo: "google", tint: "#3186FF" }],
+  ["antigravity-cli", { name: "Antigravity", logo: "google", tint: "#3186FF" }],
+  ["opencode-go", { name: "OpenCode", logo: "opencode", tint: "#AEAEB2" }],
+  ["zai", { name: "ZAI", logo: "zai", tint: "#8E93B8" }],
+  ["openrouter", { name: "OpenRouter", logo: null, tint: "#8E8E93" }],
+]);
+const SVG_NS = "http://www.w3.org/2000/svg";
+const state = { feed: null, offline: false, failure: null, loading: false };
+
+function h(tag, attrs, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs || {})) {
+    if (key === "class") node.className = value;
+    else if (key === "text") node.textContent = value;
+    else if (key === "style") node.style.cssText = value;
+    else node.setAttribute(key, value);
+  }
+  for (const child of children) if (child !== null && child !== undefined && child !== false) node.append(child);
+  return node;
+}
+
+function symbol(id, className, label) {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("class", className);
+  if (label) {
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", label);
+  } else {
+    svg.setAttribute("aria-hidden", "true");
+  }
+  const use = document.createElementNS(SVG_NS, "use");
+  use.setAttribute("href", `#${id}`);
+  svg.append(use);
+  return svg;
+}
+
+function providerName(provider) {
+  const known = PROVIDERS.get(provider);
+  if (known) return known.name;
+  return provider.split(/[-_]/).map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+}
+
+function ownerName(entry) {
+  const name = providerName(entry.provider);
+  return entry.account ? `${name} ${entry.account}` : name;
+}
+
+function logo(provider) {
+  const known = PROVIDERS.get(provider);
+  if (known && known.logo) return symbol(`logo-${known.logo}`, "logo");
+  return h("span", { class: "monogram", "aria-hidden": "true", text: providerName(provider).charAt(0).toUpperCase() });
+}
+
+function tint(provider) {
+  const known = PROVIDERS.get(provider);
+  return known ? known.tint : "#8E8E93";
+}
+
+function modelName(model) {
+  return model.replace(/-\d{8}$/, "");
+}
+
+function clock(ms) {
+  const date = new Date(ms);
+  const today = new Date();
+  const start = (moment) => new Date(moment.getFullYear(), moment.getMonth(), moment.getDate()).getTime();
+  const days = Math.round((start(date) - start(today)) / DAY_MS);
+  const time = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  if (days === 0) return time;
+  if (days > -7 && days < 7) return `${date.toLocaleDateString("en-US", { weekday: "short" })} ${time}`;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function duration(ms) {
+  const minutes = Math.max(1, Math.round(ms / MINUTE_MS));
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return minutes % 60 ? `${hours}h ${minutes % 60}m` : `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return hours % 24 ? `${days}d ${hours % 24}h` : `${days}d`;
+}
+
+function age(ms) {
+  const minutes = Math.max(1, Math.round(ms / MINUTE_MS));
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  return hours < 48 ? `${hours}h` : `${Math.round(hours / 24)}d`;
+}
+
+function percent(used) {
+  if (used >= 99.95) return "100%";
+  if (used > 0 && used < 1) return "<1%";
+  return `${Math.floor(used)}%`;
+}
+
+function tokens(value) {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M tokens`;
+  if (value >= 1_000) return `${Math.round(value / 1_000)}K tokens`;
+  return `${value} tokens`;
+}
+
+function isOut(entry) {
+  return entry.state === "exhausted" || (entry.used !== null && entry.used >= 99.95);
+}
+
+function runsDry(entry) {
+  return entry.cutoff_ms !== null && (entry.reset_ms === null || entry.cutoff_ms < entry.reset_ms);
+}
+
+function stateColor(entry) {
+  if (isOut(entry)) return "var(--empty)";
+  return entry.signal === "hot" ? "var(--heat)" : tint(entry.provider);
+}
+
+function figureColor(entry) {
+  if (isOut(entry)) return "var(--empty)";
+  return entry.signal === "hot" ? "var(--heat)" : "var(--label)";
+}
+
+function providerGroups(windows) {
+  const owners = new Map();
+  for (const entry of windows) {
+    if (entry.used === null) continue;
+    const key = `${entry.provider}/${entry.account}`;
+    if (!owners.has(key)) owners.set(key, []);
+    owners.get(key).push(entry);
+  }
+  return [...owners.values()].map((all) => {
+    const hot = all.some((entry) => entry.signal === "hot");
+    const chance = hot ? null : all.find((entry) => entry.signal === "opportunity") || null;
+    const focus = chance || all[0];
+    const rest = all.filter((entry) => entry !== focus);
+    return { provider: focus.provider, focus, second: rest[0] || null, all: [focus, ...rest], hot, chance: chance !== null };
+  });
+}
+
+function forecast(entry, now) {
+  const reset = entry.reset_ms;
+  const cutoff = entry.cutoff_ms;
+  if (isOut(entry)) return { kind: "out", cutoff: now, reset };
+  if (cutoff !== null && (reset === null || cutoff < reset)) return { kind: "short", cutoff, reset };
+  if (reset === null) return null;
+  if (entry.projected !== null) return { kind: "lasts", cutoff: null, reset };
+  return { kind: "reset", cutoff: null, reset };
+}
+
+function headline(plan, entry, now) {
+  switch (plan.kind) {
+    case "out":
+      return plan.reset !== null ? [duration(plan.reset - now), "until it's back"] : ["Out", "no reset reported"];
+    case "short":
+      return plan.reset !== null ? [duration(plan.reset - plan.cutoff), `dry from ${clock(plan.cutoff)}`] : [duration(plan.cutoff - now), "until it runs out"];
+    case "lasts":
+      return [`~${Math.round(entry.projected)}%`, `used by ${clock(plan.reset)}`];
+    default:
+      return [duration(plan.reset - now), "until reset"];
+  }
+}
+
+function headlineColor(plan) {
+  if (plan.kind === "out") return "var(--empty)";
+  return plan.kind === "short" ? "var(--heat)" : "var(--label)";
+}
+
+function verdict(entry, now) {
+  if (isOut(entry)) return entry.reset_ms !== null ? `Back at ${clock(entry.reset_ms)}, in ${duration(entry.reset_ms - now)}` : "Out of quota";
+  if (entry.cutoff_ms !== null && (entry.reset_ms === null || entry.cutoff_ms < entry.reset_ms)) {
+    const early = entry.reset_ms !== null ? `, ${duration(entry.reset_ms - entry.cutoff_ms)} before reset` : "";
+    return `Runs out ${clock(entry.cutoff_ms)}${early}`;
+  }
+  if (entry.reset_ms === null) return "";
+  const pace = entry.projected !== null ? `, ~${Math.round(entry.projected)}% by then` : "";
+  return `Resets ${clock(entry.reset_ms)}${pace}`;
+}
+
+function figure(value, unit, color) {
+  return h("span", { class: "figure", style: `color:${color}` }, value, unit ? h("small", { text: unit }) : null);
+}
+
+function flame(entry) {
+  return symbol("icon-flame", isOut(entry) ? "flame out" : "flame", "Heavy use");
+}
+
+function who(entry) {
+  return h("div", { class: "who" },
+    h("span", { class: "name", text: ownerName(entry) }),
+    h("span", { class: "label", text: entry.short }),
+    entry.signal === "hot" ? flame(entry) : null);
+}
+
+function bar(entry) {
+  const used = Math.min(100, Math.max(0, entry.used));
+  const node = h("div", { class: "bar", role: "img", "aria-label": `${percent(entry.used)} used`, style: `--c:${stateColor(entry)}` });
+  if (entry.projected !== null && entry.projected > used) node.append(h("span", { class: "ghost", style: `width:${Math.min(100, entry.projected)}%` }));
+  if (used > 0) node.append(h("span", { style: `width:${used}%` }));
+  return node;
+}
+
+function meta(entry, now) {
+  const line = verdict(entry, now);
+  if (!line) return null;
+  let tone = "meta";
+  if (isOut(entry)) tone = "meta danger";
+  else if (runsDry(entry)) tone = "meta warn";
+  return h("p", { class: tone, text: line });
+}
+
+function shape(tag, attrs) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
+  return node;
+}
+
+function rings(group) {
+  const size = 88;
+  const center = size / 2;
+  const node = shape("svg", {
+    class: "rings",
+    viewBox: `0 0 ${size} ${size}`,
+    role: "img",
+    "aria-label": `${providerName(group.provider)} ${group.focus.short} ${percent(group.focus.used)} used`,
+  });
+  let width = 10;
+  let radius = center - width / 2;
+  let hole = radius - width / 2;
+  for (const entry of [group.focus, group.second]) {
+    if (!entry) break;
+    const around = 2 * Math.PI * radius;
+    const used = Math.min(100, Math.max(0, entry.used)) / 100;
+    const stroke = `stroke:${stateColor(entry)}`;
+    node.append(shape("circle", { cx: center, cy: center, r: radius, fill: "none", "stroke-width": width, "stroke-opacity": 0.22, style: stroke }));
+    if (used > 0) {
+      node.append(shape("circle", {
+        cx: center,
+        cy: center,
+        r: radius,
+        fill: "none",
+        "stroke-width": width,
+        "stroke-linecap": "round",
+        "stroke-dasharray": `${Math.max(used, 0.015) * around} ${around}`,
+        transform: `rotate(-90 ${center} ${center})`,
+        style: stroke,
+      }));
+    }
+    hole = radius - width / 2;
+    const next = width - 2;
+    radius = hole - 3 - next / 2;
+    width = next;
+  }
+  const side = Math.min((hole - 4) * 1.36, size * 0.4);
+  const known = PROVIDERS.get(group.provider);
+  if (known && known.logo) {
+    node.append(shape("use", { href: `#logo-${known.logo}`, x: center - side / 2, y: center - side / 2, width: side, height: side, style: "color:#FFFFFF" }));
+  } else {
+    const letter = shape("text", { x: center, y: center + side * 0.3, "text-anchor": "middle", "font-size": side * 0.8, "font-weight": 700, fill: "#FFFFFF" });
+    letter.textContent = providerName(group.provider).charAt(0).toUpperCase();
+    node.append(letter);
+  }
+  return node;
+}
+
+function windowBlock(entry, now) {
+  return h("div", { class: "win" },
+    h("div", { class: "line" },
+      h("span", { class: "name", text: entry.short }),
+      figure(percent(entry.used), null, figureColor(entry))),
+    bar(entry),
+    meta(entry, now));
+}
+
+function providerCard(group, now) {
+  return h("article", { class: group.chance ? "cell provider opportunity" : "cell provider" },
+    rings(group),
+    h("div", null,
+      h("div", { class: "title" }, h("span", { text: ownerName(group.focus) }), group.hot ? flame(group.focus) : null),
+      ...group.all.map((entry) => windowBlock(entry, now))));
+}
+
+function unknownRow(entry) {
+  return h("div", { class: "row" },
+    logo(entry.provider),
+    h("div", { class: "line" }, who(entry), h("span", { class: "unknown", text: "Limit unknown" })));
+}
+
+function emptyCell(title, detail) {
+  return h("div", { class: "cell empty" }, h("strong", { text: title }), detail ? h("p", { text: detail }) : null);
+}
+
+function nowPanel(feed, now) {
+  const windows = feed.windows;
+  if (!windows.length) return [emptyCell("No quota windows yet", "Limits show up after the next usage check.")];
+  const groups = providerGroups(windows);
+  const unknown = windows.filter((entry) => entry.used === null);
+  return [
+    groups.length ? null : emptyCell("No provider reports a limit", "Token counts still arrive for these providers."),
+    ...groups.map((group) => providerCard(group, now)),
+    unknown.length ? h("div", { class: "list" }, ...unknown.map((entry) => unknownRow(entry))) : null,
+  ];
+}
+
+function ends(left, right) {
+  return h("div", { class: "ends", "aria-hidden": "true" }, h("span", { text: left }), h("span", { text: right }));
+}
+
+function timeline(plan, entry, now) {
+  if (plan.kind !== "short" && plan.kind !== "out") {
+    return h("div", { class: "timeline" }, bar(entry), ends(`${percent(entry.used)} used`, `Resets ${clock(plan.reset)}`));
+  }
+  const end = plan.reset !== null ? plan.reset : plan.cutoff;
+  const span = Math.max(end - now, 1);
+  const cut = plan.kind === "out" ? 0 : (Math.min(Math.max(plan.cutoff - now, 0), span) / span) * 100;
+  const track = h("div", { class: "track" });
+  if (plan.reset !== null) track.append(h("span", { class: "seg dry" }));
+  if (cut > 0) track.append(h("span", { class: "seg usable", style: `width:${cut}%` }));
+  if (plan.kind === "short") track.append(h("span", { class: "knob", style: `left:${cut}%` }));
+  let finish = "No reset reported";
+  if (plan.reset !== null) finish = `${plan.kind === "out" ? "Back" : "Resets"} ${clock(plan.reset)}`;
+  else if (plan.kind === "short") finish = `Out ${clock(plan.cutoff)}`;
+  let summary = `Out now, ${finish.toLowerCase()}`;
+  if (plan.kind === "short") summary = plan.reset !== null ? `Runs out ${clock(plan.cutoff)}, resets ${clock(plan.reset)}` : `Runs out ${clock(plan.cutoff)}`;
+  return h("div", { class: "timeline", role: "img", "aria-label": summary, style: `--c:${tint(entry.provider)}` },
+    track,
+    ends(plan.kind === "out" ? "Out now" : "Now", finish));
+}
+
+function forecastCell(item, now) {
+  const [value, caption] = headline(item.plan, item.entry, now);
+  return h("article", { class: "cell forecast" },
+    h("div", { class: "row", style: "padding:0;align-items:center" },
+      logo(item.entry.provider),
+      h("div", { class: "line" }, who(item.entry), figure(percent(item.entry.used), "used", figureColor(item.entry)))),
+    h("div", { class: "headline" }, figure(value, caption, headlineColor(item.plan))),
+    timeline(item.plan, item.entry, now));
+}
+
+function forecastRow(item) {
+  const entry = item.entry;
+  const value = item.plan.kind === "lasts"
+    ? figure(`~${Math.round(entry.projected)}%`, `by ${clock(item.plan.reset)}`, "var(--label)")
+    : h("span", { class: "unknown", text: `Resets ${clock(item.plan.reset)}` });
+  return h("div", { class: "row" },
+    logo(entry.provider),
+    h("div", null, h("div", { class: "line" }, who(entry), value), bar(entry)));
+}
+
+function forecastPanel(feed, now) {
+  const order = { short: 0, out: 1, lasts: 2, reset: 3 };
+  const items = feed.windows
+    .filter((entry) => entry.used !== null)
+    .map((entry) => ({ entry, plan: forecast(entry, now) }))
+    .filter((item) => item.plan !== null)
+    .sort((a, b) => order[a.plan.kind] - order[b.plan.kind]);
+  const forecasted = new Set(items.map((item) => item.entry.provider));
+  const unlimited = [...new Set(feed.windows
+    .filter((entry) => entry.used === null && !forecasted.has(entry.provider))
+    .map((entry) => providerName(entry.provider)))];
+  const tight = items.filter((item) => item.plan.kind === "short" || item.plan.kind === "out");
+  const steady = items.filter((item) => !tight.includes(item));
+  const nodes = tight.map((item) => forecastCell(item, now));
+  if (!items.length) nodes.push(emptyCell("No resets to forecast yet", "Forecasts need a known limit and reset time."));
+  if (steady.length) {
+    nodes.push(h("h2", { text: "Lasts until reset", style: tight.length ? "" : "margin-top:16px" }));
+    nodes.push(h("div", { class: "list" }, ...steady.map((item) => forecastRow(item))));
+  }
+  if (unlimited.length) {
+    const names = unlimited.length > 1 ? `${unlimited.slice(0, -1).join(", ")} and ${unlimited[unlimited.length - 1]}` : unlimited[0];
+    nodes.push(h("p", { class: "note", text: `${names} ${unlimited.length > 1 ? "don't" : "doesn't"} report a limit, so there's nothing to forecast.` }));
+  }
+  return nodes;
+}
+
+function sessionRow(record, now) {
+  const facts = [modelName(record.model), record.title ? record.project : null].filter(Boolean);
+  return h("div", { class: "row session" },
+    logo(record.provider),
+    h("div", { style: "min-width:0" },
+      h("div", { class: "line" },
+        h("span", { class: "topic", text: record.title || record.project || "Untitled session" }),
+        h("time", { class: "age", datetime: new Date(record.at_ms).toISOString(), title: new Date(record.at_ms).toLocaleString(), text: age(now - record.at_ms) })),
+      h("div", { class: "detail" },
+        h("div", { class: "facts" }, ...facts.map((fact) => h("span", { text: fact }))),
+        record.tokens !== null ? h("span", { class: "tokens", text: tokens(record.tokens) }) : null)));
+}
+
+function recentPanel(feed, now) {
+  if (!feed.recent.length) return [emptyCell("No sessions in the last 7 days", null)];
+  const seen = new Set();
+  const latest = [];
+  const earlier = [];
+  for (const record of feed.recent) {
+    const key = `${record.provider}/${record.model}`;
+    if (seen.has(key)) earlier.push(record);
+    else {
+      seen.add(key);
+      latest.push(record);
+    }
+  }
+  return [
+    h("h2", { text: "Latest per model", style: "margin-top:16px" }),
+    h("div", { class: "list" }, ...latest.map((record) => sessionRow(record, now))),
+    earlier.length ? h("h2", { text: "Earlier" }) : null,
+    earlier.length ? h("div", { class: "list" }, ...earlier.map((record) => sessionRow(record, now))) : null,
+  ];
+}
+
+function renderStatus() {
+  const node = document.getElementById("status");
+  node.replaceChildren();
+  node.className = "status";
+  if (!state.feed) {
+    node.textContent = state.loading ? "Loading" : "";
+    return;
+  }
+  const updated = clock(state.feed.generated_at_ms);
+  if (state.offline) {
+    node.classList.add("warn");
+    node.append(symbol("icon-offline", "", null), `Offline · updated ${updated}`);
+    return;
+  }
+  if (Date.now() - state.feed.generated_at_ms > STALE_MS) node.classList.add("warn");
+  node.textContent = `Updated ${updated}`;
+}
+
+function renderPanels() {
+  const sections = {
+    now: document.getElementById("view-now"),
+    forecast: document.getElementById("view-forecast"),
+    recent: document.getElementById("view-recent"),
+  };
+  if (!state.feed) {
+    for (const section of Object.values(sections)) section.replaceChildren();
+    const target = sections[currentView()];
+    if (state.loading) {
+      target.append(h("div", { class: "loading" }, symbol("icon-spinner", "", null), "Loading usage"));
+    } else if (state.failure) {
+      const retry = h("button", { class: "action", type: "button", text: "Try again" });
+      retry.addEventListener("click", () => refresh());
+      target.append(h("div", { class: "cell empty" },
+        h("strong", { text: "Can't reach openclaw" }),
+        h("p", { text: state.failure }),
+        retry));
+    }
+    return;
+  }
+  const now = Date.now();
+  sections.now.replaceChildren(...nowPanel(state.feed, now).filter(Boolean));
+  sections.forecast.replaceChildren(...forecastPanel(state.feed, now).filter(Boolean));
+  sections.recent.replaceChildren(...recentPanel(state.feed, now).filter(Boolean));
+}
+
+function render() {
+  renderStatus();
+  renderPanels();
+  document.getElementById("refresh").setAttribute("aria-busy", String(state.loading));
+}
+
+function currentView() {
+  const name = location.hash.slice(1);
+  return VIEWS.includes(name) ? name : "now";
+}
+
+function applyView() {
+  const active = currentView();
+  for (const view of VIEWS) {
+    document.getElementById(`view-${view}`).hidden = view !== active;
+    const tab = document.getElementById(`tab-${view}`);
+    if (view === active) tab.setAttribute("aria-current", "page");
+    else tab.removeAttribute("aria-current");
+  }
+  if (!state.feed) renderPanels();
+}
+
+function valid(feed) {
+  return Boolean(feed) && feed.schema === 2 && typeof feed.generated_at_ms === "number"
+    && Array.isArray(feed.windows) && Array.isArray(feed.recent);
+}
+
+function readCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (raw === null) return null;
+    const feed = JSON.parse(raw);
+    return valid(feed) ? feed : null;
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+}
+
+function writeCache(feed) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(feed));
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+class FeedError extends Error {}
+
+async function fetchFeed() {
+  const response = await fetch(`widget.json?t=${Date.now()}`, { cache: "no-store", signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  if (!response.ok) throw new FeedError(`The server answered HTTP ${response.status}.`);
+  const feed = await response.json();
+  if (!valid(feed)) throw new FeedError("The usage feed is missing windows or recent activity.");
+  return feed;
+}
+
+function failureText(error) {
+  if (error instanceof FeedError) return error.message;
+  if (error instanceof SyntaxError) return "The usage feed isn't valid JSON.";
+  return "Check that Tailscale is connected.";
+}
+
+async function refresh() {
+  if (state.loading) return;
+  state.loading = true;
+  render();
+  const started = Date.now();
+  try {
+    const feed = await fetchFeed();
+    state.feed = feed;
+    state.offline = false;
+    state.failure = null;
+    writeCache(feed);
+  } catch (error) {
+    console.error(error);
+    state.offline = state.feed !== null;
+    state.failure = failureText(error);
+  }
+  const settle = 450 - (Date.now() - started);
+  if (settle > 0) await new Promise((resolve) => setTimeout(resolve, settle));
+  state.loading = false;
+  render();
+}
+
+const pull = document.getElementById("pull");
+const spinnerTicks = () => pull.querySelectorAll(".tick");
+let pullStart = null;
+let pullDistance = 0;
+
+function setPull(distance) {
+  pullDistance = distance;
+  pull.style.height = `${distance}px`;
+  const shown = Math.round(Math.min(distance / PULL_TRIGGER, 1) * 8);
+  spinnerTicks().forEach((tick, index) => { tick.style.opacity = index < shown ? "" : "0"; });
+}
+
+async function pullRefresh() {
+  pull.classList.add("settle", "refreshing");
+  setPull(56);
+  spinnerTicks().forEach((tick) => { tick.style.opacity = ""; });
+  await refresh();
+  pull.classList.remove("refreshing");
+  setPull(0);
+}
+
+window.addEventListener("touchstart", (event) => {
+  if (window.scrollY > 0 || state.loading || event.touches.length !== 1) return;
+  pull.classList.remove("settle");
+  pullStart = event.touches[0].clientY;
+}, { passive: true });
+
+window.addEventListener("touchmove", (event) => {
+  if (pullStart === null) return;
+  const delta = event.touches[0].clientY - pullStart;
+  if (delta <= 0 || window.scrollY > 0) {
+    if (pullDistance) setPull(0);
+    return;
+  }
+  event.preventDefault();
+  setPull(Math.min(PULL_MAX, delta * 0.55));
+}, { passive: false });
+
+function endPull(completed) {
+  if (pullStart === null) return;
+  pullStart = null;
+  if (completed && pullDistance >= PULL_TRIGGER) {
+    pullRefresh();
+    return;
+  }
+  pull.classList.add("settle");
+  setPull(0);
+}
+
+window.addEventListener("touchend", () => endPull(true));
+window.addEventListener("touchcancel", () => endPull(false));
+
+document.getElementById("refresh").addEventListener("click", () => refresh());
+window.addEventListener("hashchange", applyView);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && state.feed && Date.now() - state.feed.generated_at_ms > POLL_MS) refresh();
+});
+setInterval(() => {
+  if (document.visibilityState === "visible") refresh();
+}, POLL_MS);
+
+state.feed = readCache();
+applyView();
+render();
+refresh();
+</script>
+</body>
+</html>

@@ -6,5 +6,4 @@ Type=oneshot
 ExecStart=%h/.local/bin/codex-usage-check --telegram
 Environment=PATH=%h/.local/bin:%h/.bun/bin:/usr/local/bin:/usr/bin:/bin
 Environment=OMP_USAGE_RELAY_SOURCES=WSL
-Environment=OMP_USAGE_TZ=Europe/London
 TimeoutStartSec=300

@@ -32,12 +32,11 @@ import urllib.request
 import zlib
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone, tzinfo
+from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
 from typing import IO, TypedDict
 from uuid import uuid4
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 CLAUDE_CONFIG_PATH = Path.home() / ".config" / "claude-usage" / "config"
 CODEX_STATE_PATH = Path.home() / ".config" / "codex-usage" / "state.json"
@@ -48,6 +47,9 @@ TELEGRAM_TIMEOUT_SECONDS = 30
 TOKEN_USAGE_DIR = Path(__file__).resolve().parents[1] / "share" / "codex-usage"
 TOKEN_USAGE_PATH = TOKEN_USAGE_DIR / "token_usage.py"
 USAGE_HISTORY_PATH = TOKEN_USAGE_DIR / "usage_history.py"
+ACTIVITY_USAGE_PATH = TOKEN_USAGE_DIR / "activity_usage.py"
+DETAIL_NAME = "detail.html"
+DETAIL_PATH = TOKEN_USAGE_DIR / DETAIL_NAME
 FONTCONFIG_PATH = TOKEN_USAGE_DIR / "fonts.conf"
 PROVIDER_DISPLAY_NAMES = {
     "openai-codex": "OpenAI Codex",
@@ -60,6 +62,7 @@ PROVIDER_DISPLAY_NAMES = {
 }
 TOKEN_LOOKBACK_DAYS = 30
 HISTORY_LOOKBACK_DAYS = 7
+ACTIVITY_LOOKBACK_DAYS = 7
 TOKEN_DAY_MS = 86_400_000
 TOKEN_SSH_TIMEOUT_SECONDS = 60
 TOKEN_SSH_HOST_ENV = "OMP_TOKEN_SSH_HOST"
@@ -77,11 +80,11 @@ RELAY_STALE_MS = 15 * 60_000
 RELAY_SSH_TIMEOUT_SECONDS = 60
 RELAY_MAX_BYTES = 256 * 1024 * 1024
 RELAY_REMOTE_CHECK = "import gzip, json, sys; json.load(gzip.open(sys.argv[1]))"
-RELAY_ENTRY_FIELDS = {"tokens": ("records", "timestamp_ms"), "history": ("samples", "recorded_at_ms")}
+RELAY_ENTRY_FIELDS = {"tokens": ("records", "timestamp_ms"), "history": ("samples", "recorded_at_ms"), "activity": ("records", "at_ms")}
 WIDGET_DIR_ENV = "OMP_USAGE_WIDGET_DIR"
 WIDGET_DIR = Path.home() / ".local" / "state" / "codex-usage" / "widget"
-WIDGET_TZ_ENV = "OMP_USAGE_TZ"
-WIDGET_SCHEMA = 1
+WIDGET_SCHEMA = 2
+RETIRED_WIDGET_IMAGES = ("small.png", "medium.png", "large.png")
 LIMITS_STATE_KEY = "message_id"
 LOCK_PATH = CODEX_STATE_PATH.parent / "update.lock"
 PINNED_STATE_KEY = "pinned_message_id"
@@ -127,6 +130,14 @@ else:
     USAGE_HISTORY_IMPORT_ERROR = None
 
 try:
+    import activity_usage
+except ImportError as error:
+    activity_usage = None
+    ACTIVITY_IMPORT_ERROR = error
+else:
+    ACTIVITY_IMPORT_ERROR = None
+
+try:
     import dashboard
 except ImportError as error:
     dashboard = None
@@ -145,6 +156,12 @@ def require_usage_history():
     if usage_history is None:
         raise UsageError("usage history collector not available", 1) from USAGE_HISTORY_IMPORT_ERROR
     return usage_history
+
+
+def require_activity_usage():
+    if activity_usage is None:
+        raise UsageError("activity collector not available", 1) from ACTIVITY_IMPORT_ERROR
+    return activity_usage
 
 
 def require_dashboard():
@@ -1284,6 +1301,17 @@ def local_history_collection(start_ms: int, end_ms: int) -> tuple[str, dict | No
     return label, collection, []
 
 
+def local_activity_collection(start_ms: int, end_ms: int) -> tuple[str, dict | None, list[str]]:
+    label = local_source_label()
+    try:
+        collection = activity_usage.collect_activity(Path.home() / ".omp", start_ms, end_ms)
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, RecursionError):
+        return label, None, [f"{label} unavailable: collector failure"]
+    if not isinstance(collection, dict):
+        return label, None, [f"{label} unavailable: invalid collection"]
+    return label, collection, []
+
+
 def remote_label(host: str) -> str:
     return host.rsplit("@", 1)[-1].split(".", 1)[0]
 
@@ -1383,6 +1411,10 @@ def history_window(now_ms: int) -> tuple[int, int]:
     return now_ms - HISTORY_LOOKBACK_DAYS * TOKEN_DAY_MS, now_ms
 
 
+def activity_window(now_ms: int) -> tuple[int, int]:
+    return now_ms - ACTIVITY_LOOKBACK_DAYS * TOKEN_DAY_MS, now_ms
+
+
 def relay_directory() -> Path:
     return Path(os.environ.get(RELAY_DIR_ENV) or RELAY_DIR)
 
@@ -1425,7 +1457,7 @@ def valid_relay_section(section: object) -> bool:
     )
 
 
-def read_relay_bundle(path: Path, kind: str) -> dict | None:
+def read_relay_bundle(path: Path, kind: str, required: bool = True) -> dict | None:
     try:
         with gzip.open(path, "rb") as handle:
             raw = handle.read(RELAY_MAX_BYTES + 1)
@@ -1441,7 +1473,12 @@ def read_relay_bundle(path: Path, kind: str) -> dict | None:
         return None
     if bundle.get("schema") != RELAY_SCHEMA or not is_plain_int(bundle.get("generated_at_ms")):
         return None
-    if not isinstance(bundle.get("source"), str) or not valid_relay_section(bundle.get(kind)):
+    if not isinstance(bundle.get("source"), str):
+        return None
+    section = bundle.get(kind)
+    if section is None:
+        return None if required else bundle
+    if not valid_relay_section(section):
         return None
     return bundle
 
@@ -1467,6 +1504,7 @@ def relay_collections(
     start_ms: int,
     end_ms: int,
     now_ms: int,
+    required: bool = True,
 ) -> tuple[list[tuple[str, dict]], list[str]]:
     expected = expected_relay_sources()
     directory = relay_directory()
@@ -1477,16 +1515,18 @@ def relay_collections(
     for path in paths:
         name = path.name.removesuffix(RELAY_SUFFIX)
         present.add(name)
-        bundle = read_relay_bundle(path, kind)
+        bundle = read_relay_bundle(path, kind, required)
         if bundle is None:
             issues.append(f"{name} relay unreadable")
+            continue
+        section = bundle.get(kind)
+        if section is None:
             continue
         age_ms = now_ms - bundle["generated_at_ms"]
         if age_ms > RELAY_STALE_MS:
             issues.append(f"{bundle['source']} relay {relay_age_text(age_ms)} old")
         elif age_ms < -RELAY_STALE_MS:
             issues.append(f"{bundle['source']} relay clock {relay_age_text(age_ms)} ahead")
-        section = bundle[kind]
         issues.extend(section["issues"])
         for entry in section["collections"]:
             collections.append((entry["source"], rewindow_collection(entry["collection"], kind, start_ms, end_ms)))
@@ -1518,6 +1558,16 @@ def collect_history_snapshot(now_ms: int) -> usage_history.HistorySnapshot:
     return snapshot
 
 
+def collect_activity_snapshot(now_ms: int) -> tuple[list[dict], list[str]]:
+    require_activity_usage()
+    start_ms, end_ms = activity_window(now_ms)
+    collections, issues = gather_collections(ACTIVITY_USAGE_PATH, local_activity_collection, start_ms, end_ms)
+    relayed, relay_issues = relay_collections("activity", start_ms, end_ms, now_ms, required=False)
+    merge_issues: list[str] = []
+    records = activity_usage.merge_activity([*collections, *relayed], start_ms, end_ms, merge_issues)
+    return records, [*issues, *relay_issues, *merge_issues]
+
+
 def bundle_section(start_ms: int, end_ms: int, collections: list[tuple[str, dict]], issues: list[str]) -> dict:
     return {
         "start_ms": start_ms,
@@ -1530,13 +1580,18 @@ def bundle_section(start_ms: int, end_ms: int, collections: list[tuple[str, dict
 def build_relay_bundle(now_ms: int) -> dict:
     require_token_usage()
     require_usage_history()
+    require_activity_usage()
     token_start, token_end = token_window(now_ms)
     history_start, history_end = history_window(now_ms)
+    activity_start, activity_end = activity_window(now_ms)
     token_collections, token_issues = gather_collections(
         TOKEN_USAGE_PATH, local_token_collection, token_start, token_end
     )
     history_collections, history_issues = gather_collections(
         USAGE_HISTORY_PATH, local_history_collection, history_start, history_end
+    )
+    activity_collections, activity_issues = gather_collections(
+        ACTIVITY_USAGE_PATH, local_activity_collection, activity_start, activity_end
     )
     return {
         "schema": RELAY_SCHEMA,
@@ -1544,6 +1599,7 @@ def build_relay_bundle(now_ms: int) -> dict:
         "generated_at_ms": now_ms,
         "tokens": bundle_section(token_start, token_end, token_collections, token_issues),
         "history": bundle_section(history_start, history_end, history_collections, history_issues),
+        "activity": bundle_section(activity_start, activity_end, activity_collections, activity_issues),
     }
 
 
@@ -1572,6 +1628,7 @@ def build_dashboard(
     tokens: token_usage.TokenSnapshot | None,
     history: usage_history.HistorySnapshot | None,
     now_ms: int,
+    activity: list[dict] | None = None,
 ) -> dashboard.Dashboard:
     require_dashboard()
     quotas: list[dashboard.ProviderQuota] = []
@@ -1639,6 +1696,7 @@ def build_dashboard(
         tokens=tokens,
         history_sources=list(history["sources_ok"]) if history else [],
         history_partial=history is None or bool(history.get("issues")),
+        recent=tuple(activity or []),
     )
 
 
@@ -1714,25 +1772,6 @@ def render_reset(events: list[dashboard.ResetEvent], now_ms: int) -> bytes:
     return render_png(svg)
 
 
-def render_widget(view: dashboard.Dashboard, family: str, tz: tzinfo) -> bytes:
-    require_dashboard()
-    try:
-        svg = dashboard.render_widget_svg(view, family, tz)
-    except OSError as error:
-        raise UsageError(f"failed to load dashboard assets: {error}", 1) from error
-    return render_png(svg)
-
-
-def widget_timezone() -> tzinfo:
-    value = os.environ.get(WIDGET_TZ_ENV, "").strip()
-    if not value:
-        return timezone.utc
-    try:
-        return ZoneInfo(value)
-    except (ZoneInfoNotFoundError, ValueError) as error:
-        raise UsageError(f"invalid {WIDGET_TZ_ENV}: {value!r}", 1) from error
-
-
 def write_widget_file(directory: Path, name: str, data: bytes) -> None:
     descriptor, temporary = tempfile.mkstemp(dir=directory, prefix=f".{name}-", suffix=".tmp")
     try:
@@ -1751,22 +1790,24 @@ def write_widget_file(directory: Path, name: str, data: bytes) -> None:
 def export_widget(view: dashboard.Dashboard) -> int:
     directory = Path(os.environ.get(WIDGET_DIR_ENV) or WIDGET_DIR)
     try:
-        tz = widget_timezone()
-        images = {family: render_widget(view, family, tz) for family in dashboard.WIDGET_SIZES}
-    except UsageError as error:
-        return fail(error)
+        detail = DETAIL_PATH.read_bytes()
+    except OSError as error:
+        print(f"codex-usage-check: failed to read {DETAIL_NAME}: {error}", file=sys.stderr)
+        return 2
     manifest = {
         "schema": WIDGET_SCHEMA,
         "generated_at_ms": view.now_ms,
-        "images": {family: f"{family}.png" for family in images},
         "lock": dashboard.widget_summary(view),
+        "windows": dashboard.windows_summary(view),
+        "recent": dashboard.recent_summary(view),
     }
     try:
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(directory, 0o700)
-        for family, image in images.items():
-            write_widget_file(directory, f"{family}.png", image)
+        write_widget_file(directory, DETAIL_NAME, detail)
         write_widget_file(directory, "widget.json", json.dumps(manifest, separators=(",", ":")).encode("utf-8"))
+        for name in RETIRED_WIDGET_IMAGES:
+            (directory / name).unlink(missing_ok=True)
     except OSError as error:
         print(f"codex-usage-check: failed to write widget files: {error}", file=sys.stderr)
         return 2
@@ -1805,6 +1846,20 @@ def history_snapshot_section(start_ms: int) -> tuple[usage_history.HistorySnapsh
     return snapshot, 2 if snapshot.get("issues") else 0
 
 
+def activity_snapshot_section(start_ms: int) -> tuple[list[dict] | None, int]:
+    try:
+        records, issues = collect_activity_snapshot(start_ms)
+    except UsageError as error:
+        print(f"codex-usage-check: {error}", file=sys.stderr)
+        return None, error.exit_code
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, RecursionError) as error:
+        print(f"codex-usage-check: activity collection failed: {error}", file=sys.stderr)
+        return None, 2
+    for issue in issues:
+        print(f"codex-usage-check: activity: {issue}", file=sys.stderr)
+    return records, 2 if issues else 0
+
+
 def section_exit_code(codes: list[int]) -> int:
     if 1 in codes:
         return 1
@@ -1834,21 +1889,23 @@ def publish_predictions(config: dict, view: dashboard.Dashboard, *, force_pin: b
 
 def publish_dashboard(config: dict, *, force_pin: bool = False) -> int:
     started_ms = time.time_ns() // 1_000_000
-    with ThreadPoolExecutor(max_workers=3) as pool:
+    with ThreadPoolExecutor(max_workers=4) as pool:
         payload_task = pool.submit(omp_payload_section)
         tokens_task = pool.submit(token_snapshot_section, started_ms)
         history_task = pool.submit(history_snapshot_section, started_ms)
+        activity_task = pool.submit(activity_snapshot_section, started_ms)
         payload, payload_code = payload_task.result()
         tokens, tokens_code = tokens_task.result()
         history, history_code = history_task.result()
-    codes = [payload_code, tokens_code, history_code]
+        activity, activity_code = activity_task.result()
+    codes = [payload_code, tokens_code, history_code, activity_code]
     quotas_usable = payload is not None
     tokens_usable = tokens is not None and bool(tokens.get("sources_ok"))
     if not quotas_usable and not tokens_usable:
         return section_exit_code(codes)
     checked_ms = time.time_ns() // 1_000_000
     try:
-        view = build_dashboard(payload, tokens, history, checked_ms)
+        view = build_dashboard(payload, tokens, history, checked_ms, activity)
     except UsageError as error:
         return fail(error)
     widget_code = export_widget(view)

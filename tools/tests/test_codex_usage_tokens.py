@@ -1483,6 +1483,146 @@ class RelayCollectionsTests(RelayDirMixin):
         )
 
 
+class ActivityRelayTests(RelayDirMixin):
+    def bundle_with_activity(self, activity):
+        return {**relay_bundle(), "activity": activity}
+
+    def activity_record(self, at_ms):
+        return {
+            "at_ms": at_ms,
+            "provider": "zai",
+            "model": "glm-5.3",
+            "project": None,
+            "title": "Relay check",
+            "tokens": 12,
+            "session_id": f"session-{at_ms}",
+        }
+
+    def test_bundle_without_activity_section_yields_nothing_and_no_issues(self):
+        self.write_bundle("WSL", relay_bundle())
+        self.assertEqual(
+            reporter.relay_collections("activity", 0, 1, FIXED_NOW_MS, required=False),
+            ([], []),
+        )
+
+    def test_activity_section_records_are_rewindowed_and_labeled(self):
+        record = self.activity_record(5)
+        outside = self.activity_record(1)
+        activity = relay_section(
+            collections=[
+                {
+                    "source": "mini",
+                    "collection": {"start_ms": 0, "end_ms": 9, "records": [outside, record], "issues": ["skipped 1 malformed record"]},
+                }
+            ]
+        )
+        self.write_bundle("WSL", self.bundle_with_activity(activity))
+        collections, issues = reporter.relay_collections("activity", 2, 8, FIXED_NOW_MS, required=False)
+        self.assertEqual(issues, [])
+        self.assertEqual(len(collections), 1)
+        label, collection = collections[0]
+        self.assertEqual(label, "mini")
+        self.assertEqual(collection["records"], [record])
+        merge_issues: list[str] = []
+        reporter.require_activity_usage().merge_activity(collections, 2, 8, merge_issues)
+        self.assertEqual(merge_issues, ["mini: skipped 1 malformed record"])
+
+    def test_malformed_activity_section_marks_the_bundle_unreadable(self):
+        self.write_bundle("WSL", self.bundle_with_activity({"records": "junk"}))
+        collections, issues = reporter.relay_collections("activity", 0, 1, FIXED_NOW_MS, required=False)
+        self.assertEqual(collections, [])
+        self.assertEqual(issues, ["WSL relay unreadable"])
+
+    def test_stale_activity_section_still_reports_age(self):
+        stale = relay_bundle(generated_at_ms=FIXED_NOW_MS - reporter.RELAY_STALE_MS - 1)
+        self.write_bundle("WSL", {**stale, "activity": relay_section()})
+        collections, issues = reporter.relay_collections("activity", 0, 1, FIXED_NOW_MS, required=False)
+        self.assertEqual(collections, [])
+        self.assertEqual(issues, ["WSL relay 15m old"])
+
+    def test_required_kinds_still_reject_bundles_without_the_section(self):
+        self.write_bundle("WSL", relay_bundle())
+        collections, issues = reporter.relay_collections("activity", 0, 1, FIXED_NOW_MS)
+        self.assertEqual(collections, [])
+        self.assertEqual(issues, ["WSL relay unreadable"])
+
+
+class CollectActivitySnapshotTests(RelayDirMixin):
+    def record(self, session_id="s1"):
+        return {
+            "at_ms": FIXED_NOW_MS - 1_000,
+            "provider": "zai",
+            "model": "glm-5.3",
+            "project": None,
+            "title": "Local run",
+            "tokens": 42,
+            "session_id": session_id,
+        }
+
+    def stub_collector(self, records=None, merge_issues=()):
+        stub = mock.Mock()
+        stub.collect_activity.return_value = {
+            "start_ms": 0,
+            "end_ms": 1,
+            "records": list(records or []),
+            "issues": [],
+        }
+
+        def merge(collections, start_ms, end_ms, issues):
+            issues.extend(merge_issues)
+            return list(records or [])
+
+        stub.merge_activity.side_effect = merge
+        return stub
+
+    def test_local_and_relayed_collections_merge_with_labeled_issues(self):
+        record = self.record()
+        stub = self.stub_collector([record], ["mini: skipped 1 invalid activity record"])
+        activity = relay_section(
+            collections=[
+                {
+                    "source": "mini",
+                    "collection": {"start_ms": 0, "end_ms": 1, "records": [], "issues": ["skipped 1 malformed record"]},
+                }
+            ]
+        )
+        self.write_bundle("WSL", {**relay_bundle(), "activity": activity})
+
+        def local(start_ms, end_ms):
+            return "openclaw", {"start_ms": start_ms, "end_ms": end_ms, "records": [dict(record)], "issues": []}, []
+
+        with mock.patch.object(reporter, "activity_usage", stub), \
+                mock.patch.object(reporter, "require_activity_usage", return_value=stub), \
+                mock.patch.object(reporter, "local_activity_collection", side_effect=local), \
+                mock.patch.object(reporter, "check_ssh_host", return_value=None):
+            records, issues = reporter.collect_activity_snapshot(FIXED_NOW_MS)
+
+        self.assertEqual(records, [record])
+        self.assertEqual(issues, ["mini: skipped 1 invalid activity record"])
+        merged = stub.merge_activity.call_args.args[0]
+        self.assertEqual(sorted(label for label, _ in merged), ["mini", "openclaw"])
+
+    def test_collector_failure_degrades_to_an_issue(self):
+        stub = self.stub_collector()
+        stub.collect_activity.side_effect = OSError("session dir unreadable")
+        with mock.patch.object(reporter, "activity_usage", stub), \
+                mock.patch.object(reporter, "require_activity_usage", return_value=stub):
+            records, issues = reporter.collect_activity_snapshot(FIXED_NOW_MS)
+        self.assertEqual(records, [])
+        self.assertEqual(issues, [f"{reporter.local_source_label()} unavailable: collector failure"])
+        self.assertEqual(stub.merge_activity.call_args.args[0], [])
+
+    def test_activity_issues_are_printed_to_stderr(self):
+        record = {"session_id": "s1", "provider": "zai", "model": "glm-5.3", "project": None, "title": None, "at_ms": FIXED_NOW_MS, "tokens": 1}
+        stderr = io.StringIO()
+        with mock.patch.object(reporter, "collect_activity_snapshot", return_value=([record], ["WSL: session.jsonl: 1 malformed line"])), \
+                contextlib.redirect_stderr(stderr):
+            records, code = reporter.activity_snapshot_section(FIXED_NOW_MS)
+        self.assertEqual(records, [record])
+        self.assertEqual(code, 2)
+        self.assertEqual(stderr.getvalue(), "codex-usage-check: activity: WSL: session.jsonl: 1 malformed line\n")
+
+
 class RelayRoundTripTests(RelayDirMixin):
     def test_wsl_bundle_merges_into_openclaw_snapshots(self):
         now_ms = int(datetime(2026, 9, 14, 15, 20, tzinfo=timezone.utc).timestamp() * 1000)
@@ -1498,17 +1638,22 @@ class RelayRoundTripTests(RelayDirMixin):
                     ("WSL", {"start_ms": start_ms, "end_ms": end_ms, "records": [wsl_token], "issues": []}),
                     ("mini-1", {"start_ms": start_ms, "end_ms": end_ms, "records": [mini_token], "issues": []}),
                 ], []
+            if source_path == reporter.ACTIVITY_USAGE_PATH:
+                return [("WSL", {"start_ms": start_ms, "end_ms": end_ms, "records": [], "issues": []})], []
             return [("WSL", {"start_ms": start_ms, "end_ms": end_ms, "samples": [wsl_sample], "issues": []})], []
 
         with mock.patch.dict(os.environ, {reporter.SOURCE_LABEL_ENV: "WSL"}), mock.patch.object(
             reporter, "gather_collections", side_effect=wsl_gather
-        ):
+        ), mock.patch.object(reporter, "require_activity_usage", return_value=object()):
             bundle = reporter.build_relay_bundle(now_ms)
         self.write_bundle("WSL", bundle)
+        self.assertIn("activity", bundle)
 
         def openclaw_gather(source_path, local, start_ms, end_ms):
             if source_path == reporter.TOKEN_USAGE_PATH:
                 return [("openclaw", {"start_ms": start_ms, "end_ms": end_ms, "records": [openclaw_token], "issues": []})], []
+            if source_path == reporter.ACTIVITY_USAGE_PATH:
+                return [("openclaw", {"start_ms": start_ms, "end_ms": end_ms, "records": [], "issues": []})], []
             return [("openclaw", {"start_ms": start_ms, "end_ms": end_ms, "samples": [openclaw_sample], "issues": []})], []
 
         with mock.patch.dict(os.environ, {reporter.SOURCE_LABEL_ENV: "openclaw"}), mock.patch.object(
@@ -1824,6 +1969,19 @@ class BuildDashboardTests(unittest.TestCase):
         self.assertAlmostEqual(short.pace.projected_percent, 60.0)
         self.assertEqual(long.pace.verdict, "ON PACE")
 
+    def test_activity_records_flow_into_the_view(self):
+        payload = usage_payload(limits=[window_limit(resets_at_ms=self.NOW_MS + DAY_MS, used_fraction=0.24)])
+        records = [
+            {"provider": "zai", "model": "glm-5.3", "project": "omp", "title": "Ship", "at_ms": self.NOW_MS - 1_000, "tokens": 9, "session_id": "s9"}
+        ]
+        view = reporter.build_dashboard(payload, empty_token_snapshot(), plain_history_snapshot(), self.NOW_MS, records)
+        self.assertEqual(view.recent, tuple(records))
+
+    def test_activity_defaults_to_no_recent_records(self):
+        payload = usage_payload(limits=[window_limit(resets_at_ms=self.NOW_MS + DAY_MS, used_fraction=0.24)])
+        view = reporter.build_dashboard(payload, empty_token_snapshot(), plain_history_snapshot(), self.NOW_MS)
+        self.assertEqual(view.recent, ())
+
 
 class RenderDashboardTests(unittest.TestCase):
     def view(self):
@@ -1918,56 +2076,45 @@ class WidgetExportTests(TempRootMixin):
     def setUp(self):
         super().setUp()
         self.widget_dir = self.root / "widget"
-        env_patcher = mock.patch.dict(os.environ, {reporter.WIDGET_DIR_ENV: str(self.widget_dir), reporter.WIDGET_TZ_ENV: "Europe/London"})
+        env_patcher = mock.patch.dict(os.environ, {reporter.WIDGET_DIR_ENV: str(self.widget_dir)})
         env_patcher.start()
         self.addCleanup(env_patcher.stop)
         self.view = RenderDashboardTests.view(self)
 
-    def test_writes_three_images_then_manifest_with_private_modes(self):
-        renders = iter([b"small-png", b"medium-png", b"large-png"])
-        with mock.patch.object(reporter, "render_png", side_effect=lambda svg: next(renders)):
-            self.assertEqual(reporter.export_widget(self.view), 0)
-        self.assertEqual((self.widget_dir / "small.png").read_bytes(), b"small-png")
-        self.assertEqual((self.widget_dir / "medium.png").read_bytes(), b"medium-png")
-        self.assertEqual((self.widget_dir / "large.png").read_bytes(), b"large-png")
+    def test_writes_detail_and_manifest_with_private_modes(self):
+        self.assertEqual(reporter.export_widget(self.view), 0)
+        self.assertEqual(
+            (self.widget_dir / "detail.html").read_bytes(),
+            reporter.DETAIL_PATH.read_bytes(),
+        )
         manifest = json.loads((self.widget_dir / "widget.json").read_text(encoding="utf-8"))
-        self.assertEqual(manifest["schema"], 1)
+        self.assertEqual(manifest["schema"], 2)
+        self.assertEqual(set(manifest), {"schema", "generated_at_ms", "lock", "windows", "recent"})
         self.assertEqual(manifest["generated_at_ms"], FIXED_NOW_MS)
-        self.assertEqual(manifest["images"], {"small": "small.png", "medium": "medium.png", "large": "large.png"})
         self.assertEqual(manifest["lock"], json.loads(json.dumps(dashboard.widget_summary(self.view))))
+        self.assertEqual(manifest["windows"], json.loads(json.dumps(dashboard.windows_summary(self.view))))
+        self.assertEqual(manifest["recent"], json.loads(json.dumps(dashboard.recent_summary(self.view))))
         self.assertEqual(stat.S_IMODE(self.widget_dir.stat().st_mode), 0o700)
         self.assertEqual(
             {path.name: stat.S_IMODE(path.stat().st_mode) for path in self.widget_dir.iterdir()},
-            {"small.png": 0o600, "medium.png": 0o600, "large.png": 0o600, "widget.json": 0o600},
+            {"detail.html": 0o600, "widget.json": 0o600},
         )
 
-    def test_render_failure_keeps_the_previous_widget_files(self):
+    def test_missing_detail_page_exits_two_and_keeps_the_previous_widget_files(self):
         self.widget_dir.mkdir()
         (self.widget_dir / "widget.json").write_bytes(b'{"schema":1,"old":true}')
-        (self.widget_dir / "small.png").write_bytes(b"old-small")
-        failure = reporter.UsageError("ffmpeg failed to render", 2)
-        with mock.patch.object(reporter, "render_png", side_effect=[b"new-small", failure]), \
-                contextlib.redirect_stderr(io.StringIO()):
+        with mock.patch.object(reporter, "DETAIL_PATH", self.root / "missing" / "detail.html"), \
+                contextlib.redirect_stderr(io.StringIO()) as stderr:
             self.assertEqual(reporter.export_widget(self.view), 2)
+        self.assertIn("failed to read detail.html", stderr.getvalue())
         self.assertEqual((self.widget_dir / "widget.json").read_bytes(), b'{"schema":1,"old":true}')
-        self.assertEqual((self.widget_dir / "small.png").read_bytes(), b"old-small")
 
-    def test_invalid_timezone_exits_one_and_writes_nothing(self):
-        with mock.patch.dict(os.environ, {reporter.WIDGET_TZ_ENV: "Mars/Olympus"}), \
-                mock.patch.object(reporter, "render_png") as render, \
-                contextlib.redirect_stderr(io.StringIO()):
-            self.assertEqual(reporter.export_widget(self.view), 1)
-        render.assert_not_called()
-        self.assertFalse(self.widget_dir.exists())
-
-    def test_timezone_defaults_to_utc_and_accepts_iana_names(self):
-        with mock.patch.dict(os.environ, {reporter.WIDGET_TZ_ENV: ""}):
-            self.assertIs(reporter.widget_timezone(), timezone.utc)
-        self.assertEqual(str(reporter.widget_timezone()), "Europe/London")
-
-    def test_unknown_widget_family_is_rejected(self):
-        with self.assertRaises(ValueError):
-            dashboard.render_widget_svg(self.view, "extraLarge", timezone.utc)
+    def test_retired_png_images_are_removed_on_export(self):
+        self.widget_dir.mkdir()
+        for name in ("small.png", "medium.png", "large.png"):
+            (self.widget_dir / name).write_bytes(b"retired")
+        self.assertEqual(reporter.export_widget(self.view), 0)
+        self.assertEqual(sorted(path.name for path in self.widget_dir.iterdir()), ["detail.html", "widget.json"])
 
     def test_summary_orders_exhausted_then_running_out_then_hot(self):
         def window(label, used, verdict, exhaust_in_ms=None, status="ok"):
@@ -1990,6 +2137,163 @@ class WidgetExportTests(TempRootMixin):
         self.assertEqual(states, ["exhausted", "run_out", "hot"])
 
 
+class ManifestSummaryTests(unittest.TestCase):
+    def window(self, label, used, verdict, *, reset_ms=None, status="ok", exhaust_in_ms=None, window_ms=None, projected=None):
+        pace = None
+        if verdict is not None:
+            pace = dashboard.Pace(verdict, projected, "+1.0%/h", "advice", exhaust_in_ms)
+        return dashboard.QuotaWindow(label, used, reset_ms, status, pace, window_ms)
+
+    def view(self, quotas, tokens=None, recent=()):
+        return dashboard.Dashboard(FIXED_NOW_MS, FIXED_NOW_MS, quotas, None, tokens, ["WSL"], False, recent)
+
+    def test_windows_rank_exhausted_run_out_hot_then_pressure_then_unknown(self):
+        quota = dashboard.ProviderQuota(
+            "openai-codex",
+            "",
+            "Plus",
+            [
+                self.window("spare", 10.0, "SPARE", reset_ms=FIXED_NOW_MS + 3 * DAY_MS, window_ms=7 * DAY_MS),
+                self.window("no data", None, None),
+                self.window("hot", 80.0, "HOT", reset_ms=FIXED_NOW_MS + DAY_MS),
+                self.window("exhausted", 100.0, None, status="exhausted", reset_ms=FIXED_NOW_MS + DAY_MS),
+                self.window("on pace", 55.0, "ON PACE", reset_ms=FIXED_NOW_MS + 2 * DAY_MS, projected=70.0),
+                self.window("running out", 60.0, "RUN OUT", reset_ms=FIXED_NOW_MS + DAY_MS, exhaust_in_ms=HOUR_MS),
+            ],
+        )
+        labels = [entry["label"] for entry in dashboard.windows_summary(self.view([quota]))]
+        self.assertEqual(
+            labels,
+            ["exhausted", "running out", "hot", "on pace", "spare", "no data"],
+        )
+
+    def test_signals_flag_blocked_burning_and_closing_windows(self):
+        def signal(**kwargs):
+            quota = dashboard.ProviderQuota("openai-codex", "", "", [self.window("w", kwargs.pop("used"), kwargs.pop("verdict", None), **kwargs)])
+            return dashboard.windows_summary(self.view([quota]))[0]["signal"]
+
+        self.assertEqual(signal(used=100.0, status="exhausted", reset_ms=FIXED_NOW_MS), "hot")
+        self.assertEqual(signal(used=40.0, verdict="GATED", reset_ms=FIXED_NOW_MS), "hot")
+        self.assertEqual(signal(used=80.0, verdict="RUN OUT", exhaust_in_ms=HOUR_MS, reset_ms=FIXED_NOW_MS), "hot")
+        self.assertEqual(signal(used=20.0, status="warning", reset_ms=FIXED_NOW_MS), "hot")
+        self.assertEqual(signal(used=80.0, verdict="HOT", reset_ms=FIXED_NOW_MS), "hot")
+        self.assertEqual(
+            signal(used=10.0, verdict="SPARE", reset_ms=FIXED_NOW_MS + 12 * HOUR_MS, window_ms=7 * DAY_MS),
+            "opportunity",
+        )
+        self.assertEqual(
+            signal(used=10.0, verdict="SPARE", reset_ms=FIXED_NOW_MS + 3 * DAY_MS, window_ms=7 * DAY_MS),
+            "opportunity",
+        )
+        self.assertEqual(signal(used=30.0, verdict="ON PACE", reset_ms=FIXED_NOW_MS), "normal")
+        self.assertEqual(signal(used=None, verdict=None, reset_ms=None), "normal")
+
+    def test_window_entries_carry_rounded_fields_and_runout_cutoff(self):
+        quota = dashboard.ProviderQuota(
+            "openai-codex",
+            "",
+            "Plus",
+            [
+                self.window("7 days", 24.444, "ON PACE", reset_ms=FIXED_NOW_MS + DAY_MS, projected=60.555),
+                self.window("5 hours", 91.234, "RUN OUT", reset_ms=FIXED_NOW_MS + 5 * HOUR_MS, exhaust_in_ms=2 * HOUR_MS),
+            ],
+        )
+        entries = dashboard.windows_summary(self.view([quota]))
+        self.assertEqual(entries[0]["provider"], "openai-codex")
+        self.assertEqual(entries[0]["label"], "5 hours")
+        self.assertEqual(entries[0]["used"], 91.2)
+        self.assertEqual(entries[0]["reset_ms"], FIXED_NOW_MS + 5 * HOUR_MS)
+        self.assertEqual(entries[0]["cutoff_ms"], FIXED_NOW_MS + 2 * HOUR_MS)
+        self.assertEqual(entries[0]["signal"], "hot")
+        self.assertEqual(entries[1]["label"], "7 days")
+        self.assertEqual(entries[1]["used"], 24.4)
+        self.assertEqual(entries[1]["reset_ms"], FIXED_NOW_MS + DAY_MS)
+        self.assertIsNone(entries[1]["cutoff_ms"])
+        self.assertEqual(entries[1]["projected"], 60.6)
+        self.assertEqual(entries[1]["signal"], "normal")
+
+    def test_window_entries_carry_short_tag_window_length_and_state(self):
+        quota = dashboard.ProviderQuota(
+            "openai-codex",
+            "",
+            "Plus",
+            [
+                self.window("7 days", 24.0, "ON PACE", reset_ms=FIXED_NOW_MS + DAY_MS, window_ms=7 * DAY_MS),
+                self.window("5 hours", 91.0, "RUN OUT", reset_ms=FIXED_NOW_MS + 5 * HOUR_MS, exhaust_in_ms=2 * HOUR_MS, window_ms=5 * HOUR_MS),
+            ],
+        )
+        entries = dashboard.windows_summary(self.view([quota]))
+        self.assertEqual(
+            [(entry["short"], entry["window_ms"], entry["state"]) for entry in entries],
+            [("5h", 5 * HOUR_MS, "run_out"), ("7d", 7 * DAY_MS, "on_pace")],
+        )
+
+    def test_duplicate_providers_get_account_tags(self):
+        first = dashboard.ProviderQuota("openai-codex", "", "Plus", [self.window("7 days", 24.0, None, reset_ms=FIXED_NOW_MS)])
+        second = dashboard.ProviderQuota("openai-codex", "", "Team", [self.window("Weekly limit", 9.0, None, reset_ms=FIXED_NOW_MS + DAY_MS)])
+        lone = dashboard.ProviderQuota("anthropic", "", "Max", [self.window("5 hours", 3.0, None, reset_ms=FIXED_NOW_MS + 2 * DAY_MS)])
+        entries = dashboard.windows_summary(self.view([first, second, lone]))
+        self.assertEqual([entry["label"] for entry in entries], ["#1 · 7 days", "#2 · Weekly limit", "5 hours"])
+        self.assertEqual([entry["account"] for entry in entries], ["#1", "#2", ""])
+
+    def test_duplicate_handles_are_numbered_in_quota_order(self):
+        work = dashboard.ProviderQuota("openai-codex", "alice@work.com", "Plus", [self.window("7 days", 9.0, None, reset_ms=FIXED_NOW_MS)])
+        home = dashboard.ProviderQuota("openai-codex", "alice@home.com", "Team", [self.window("7 days", 24.0, None, reset_ms=FIXED_NOW_MS + DAY_MS)])
+        entries = dashboard.windows_summary(self.view([work, home]))
+        self.assertEqual([entry["account"] for entry in entries], ["#2", "#1"])
+
+    def test_exhausted_window_without_a_percent_counts_as_fully_used(self):
+        window = dashboard.QuotaWindow("5 hours", None, FIXED_NOW_MS + HOUR_MS, "exhausted", None)
+        entry = dashboard.windows_summary(self.view([dashboard.ProviderQuota("openai-codex", "", "Plus", [window])]))[0]
+        self.assertEqual((entry["used"], entry["state"]), (100.0, "exhausted"))
+
+    def test_token_only_providers_close_the_ranking_with_unknown_limits(self):
+        quota = dashboard.ProviderQuota("openai-codex", "", "Plus", [self.window("7 days", 24.0, None, reset_ms=FIXED_NOW_MS)])
+        antigravity_quota = dashboard.ProviderQuota("antigravity-cli", "", "", [self.window("Monthly", 5.0, None, reset_ms=FIXED_NOW_MS)])
+        tokens = {
+            "providers": [
+                {"provider": "openai-codex", "tokens": 0},
+                {"provider": "mistral", "tokens": 200},
+                {"provider": "google-antigravity", "tokens": 100},
+                {"provider": "zai", "tokens": 500},
+                {"provider": "openrouter", "tokens": 0},
+            ]
+        }
+        entries = dashboard.windows_summary(self.view([quota, antigravity_quota], tokens))
+        self.assertEqual([entry["provider"] for entry in entries[-2:]], ["zai", "mistral"])
+        self.assertEqual(
+            entries[-1],
+            {"provider": "mistral", "account": "", "label": "Tokens", "short": "tokens", "used": None, "reset_ms": None, "cutoff_ms": None, "window_ms": None, "signal": "normal", "state": "unknown", "projected": None},
+        )
+
+    def test_token_windows_need_a_token_snapshot(self):
+        quota = dashboard.ProviderQuota("openai-codex", "", "", [self.window("7 days", 24.0, None, reset_ms=FIXED_NOW_MS)])
+        self.assertEqual(dashboard.windows_summary(self.view([quota], None))[-1]["label"], "7 days")
+
+    def test_recent_is_descending_capped_and_privacy_stripped(self):
+        records = [
+            {
+                "provider": "zai",
+                "model": "glm-5.3",
+                "project": "omp",
+                "title": f"session {index}",
+                "at_ms": FIXED_NOW_MS - index * 1_000,
+                "tokens": 100 + index,
+                "session_id": f"session-{index}",
+            }
+            for index in range(70)
+        ]
+        entries = dashboard.recent_summary(self.view([], None, tuple(reversed(records))))
+        self.assertEqual(len(entries), dashboard._RECENT_LIMIT)
+        self.assertEqual([entry["at_ms"] for entry in entries], sorted((entry["at_ms"] for entry in entries), reverse=True))
+        self.assertEqual(entries[0]["title"], "session 0")
+        for entry in entries:
+            self.assertEqual(
+                sorted(entry),
+                ["at_ms", "model", "project", "provider", "title", "tokens"],
+            )
+
+
 class PublishDashboardTests(unittest.TestCase):
     def setUp(self):
         super().setUp()
@@ -1999,9 +2303,11 @@ class PublishDashboardTests(unittest.TestCase):
         )
         self.tokens = empty_token_snapshot()
         self.history = plain_history_snapshot()
+        self.activity: list[dict] = []
         usage_patcher = mock.patch.object(reporter, "run_omp_usage", return_value=self.payload)
         token_patcher = mock.patch.object(reporter, "collect_token_snapshot", return_value=self.tokens)
         history_patcher = mock.patch.object(reporter, "collect_history_snapshot", return_value=self.history)
+        activity_patcher = mock.patch.object(reporter, "collect_activity_snapshot", return_value=(self.activity, []))
         render_patcher = mock.patch.object(reporter, "render_dashboard", return_value=b"rendered-image")
         forecast_patcher = mock.patch.object(reporter, "render_forecast", return_value=b"rendered-forecast")
         update_patcher = mock.patch.object(reporter, "update_pinned", return_value=True)
@@ -2010,12 +2316,13 @@ class PublishDashboardTests(unittest.TestCase):
         self.run_usage = usage_patcher.start()
         self.collect_tokens = token_patcher.start()
         self.collect_history = history_patcher.start()
+        self.collect_activity = activity_patcher.start()
         self.render = render_patcher.start()
         self.render_forecast = forecast_patcher.start()
         self.update = update_patcher.start()
         self.announce = announce_patcher.start()
         self.export_widget = widget_patcher.start()
-        for patcher in (usage_patcher, token_patcher, history_patcher, render_patcher, forecast_patcher, update_patcher, announce_patcher, widget_patcher):
+        for patcher in (usage_patcher, token_patcher, history_patcher, activity_patcher, render_patcher, forecast_patcher, update_patcher, announce_patcher, widget_patcher):
             self.addCleanup(patcher.stop)
 
     def rendered_view(self):
@@ -2083,6 +2390,21 @@ class PublishDashboardTests(unittest.TestCase):
         self.assertEqual(view.history_sources, [])
         self.assertTrue(view.history_partial)
         self.assertEqual(self.update.call_count, 2)
+
+    def test_activity_records_reach_the_rendered_view(self):
+        record = {"provider": "zai", "model": "glm-5.3", "project": None, "title": "Fix relay", "at_ms": FIXED_NOW_MS, "tokens": 512, "session_id": "s1"}
+        self.collect_activity.return_value = ([record], [])
+        self.assertEqual(reporter.publish_dashboard(self.config), 0)
+        self.assertEqual(self.rendered_view().recent, (record,))
+
+    def test_activity_failure_keeps_recent_empty_and_exits_one(self):
+        self.collect_activity.side_effect = reporter.UsageError("activity collector not available", 1)
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(reporter.publish_dashboard(self.config), 1)
+        view = self.rendered_view()
+        self.assertEqual(view.recent, ())
+        self.assertEqual(len(self.updates_for(reporter.LIMITS_STATE_KEY)), 1)
+        self.assertEqual(len(self.updates_for(reporter.FORECAST_STATE_KEY)), 1)
 
     def test_predictions_render_failure_keeps_usage_update_and_reset_alert(self):
         self.render_forecast.side_effect = reporter.UsageError("failed to load dashboard assets: logo missing", 1)
