@@ -43,6 +43,7 @@ const NEUTRAL_HEX = "#8E8E93";
 const RAINBOW = ["#FF453A", "#FF9F0A", "#FFD60A", "#30D158", "#0A84FF", "#BF5AF2"];
 const TRACK_ALPHA = 0.22;
 const GHOST_ALPHA = 0.42;
+const INNER_ALPHA = 0.6;
 const RING = { small: 58, medium: 56, large: 60 };
 const TILE = { medium: 68, large: 70 };
 const RECENT_ROWS = { medium: 3, large: 7 };
@@ -543,9 +544,10 @@ function ringImage(group, size) {
   for (const entry of [group.focus, group.second]) {
     if (!entry) break;
     const hex = stateHex(entry);
-    arc(context, center, radius, 0, 360, new Color(hex, TRACK_ALPHA), width, false);
+    const strength = entry === group.focus ? 1 : INNER_ALPHA;
+    arc(context, center, radius, 0, 360, new Color(hex, TRACK_ALPHA * strength), width, false);
     const used = share(entry.used);
-    if (used > 0) arc(context, center, radius, -90, -90 + 360 * Math.max(used, 0.015), new Color(hex), width, true);
+    if (used > 0) arc(context, center, radius, -90, -90 + 360 * Math.max(used, 0.015), new Color(hex, strength), width, true);
     hole = radius - width / 2;
     const next = Math.max(width - 1.5, 3);
     radius = hole - gap - next / 2;
