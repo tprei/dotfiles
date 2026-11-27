@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+shopt -s nullglob
 
 herdr_dir="$HOME/.config/herdr"
 session="$herdr_dir/session.json"
@@ -24,9 +25,9 @@ fi
 mkdir -p "$checkpoints"
 
 target="$checkpoints/$(date +%Y%m%d-%H%M%S).json"
-latest=$(ls -1t "$checkpoints" | sed -n 1p)
-if [[ -n "$latest" ]]; then
-    latest_path="$checkpoints/$latest"
+saved=("$checkpoints"/*)
+if ((${#saved[@]})); then
+    latest_path=${saved[${#saved[@]} - 1]}
     if cmp -s "$session" "$latest_path"; then
         touch "$latest_path"
         exit 0
@@ -41,6 +42,7 @@ trap 'rm -f "$tmp"' EXIT
 cp "$session" "$tmp"
 mv "$tmp" "$target"
 
-ls -1t "$checkpoints" | tail -n +$((keep + 1)) | while read -r old; do
-    rm -f "$checkpoints/$old"
+saved=("$checkpoints"/*)
+for ((i = 0; i < ${#saved[@]} - keep; i++)); do
+    rm -f "${saved[i]}"
 done

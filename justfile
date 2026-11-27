@@ -221,3 +221,39 @@ private name:
     set -euo pipefail
     [[ "$1" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "usage: just private <name> (letters, digits, underscore, hyphen)" >&2; exit 64; }
     exec "{{ justfile_directory() }}/private/$1/bin/launch"
+
+# Lean CI gate: Python and Bun tests, ruff, shellcheck, omp config check, and a secret scan of HEAD.
+ci:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{ justfile_directory() }}"
+    for dir in tools/tests tern/extrakto/tests tern/copymode/tests raycast/tests; do
+        python3 -m unittest discover -s "$dir" -t "$dir"
+    done
+    bun test tools/tests
+    mapfile -d '' -t tracked < <(git ls-files -z)
+    py_files=()
+    sh_files=()
+    for f in "${tracked[@]}"; do
+        case "${f##*/}" in
+            *.py) py_files+=("$f") ;;
+            *.sh) sh_files+=("$f") ;;
+            *.*) ;;
+            *)
+                [[ -f $f ]] || continue
+                first=$(head -n 1 -- "$f" | tr -d '\0')
+                if [[ $first =~ ^#!.*[[:space:]/]python[0-9.]*([[:space:]]|$) ]]; then
+                    py_files+=("$f")
+                elif [[ $first =~ ^#!.*[[:space:]/](ba)?sh([[:space:]]|$) ]]; then
+                    sh_files+=("$f")
+                fi
+                ;;
+        esac
+    done
+    uvx ruff@0.17.6 check --isolated --no-cache --select E4,E7,E9,F "${py_files[@]}"
+    uvx --from shellcheck-py@0.11.0.1 shellcheck "${sh_files[@]}"
+    {{ just_executable() }} omp-config-check
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' EXIT
+    git archive HEAD | tar -x -C "$tmp"
+    gitleaks dir "$tmp" --no-banner --redact

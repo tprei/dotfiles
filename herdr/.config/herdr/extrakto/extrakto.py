@@ -41,7 +41,7 @@ class Extrakto:
         conf.read([default_conf, user_conf], encoding="utf-8")
         sections = conf.sections()
 
-        if not "path" in sections or not "url" in sections:
+        if "path" not in sections or "url" not in sections:
             raise ExtraktoException("extrakto.conf incomplete, path and url must exist")
 
         self.min_length = min_length
@@ -82,7 +82,7 @@ class Extrakto:
                 )
 
     def __getitem__(self, key):
-        if not key in self.fdict:
+        if key not in self.fdict:
             raise ExtraktoException(f"Unknown filter {key}")
         return self.fdict[key]
 
@@ -117,10 +117,12 @@ class FilterDef:
 
     def filter(self, text):
         res = list()
-        if self.extrakto.prefix_name:
-            add = lambda name, value: res.append(f"{name}: {value}")
-        else:
-            add = lambda name, value: res.append(value)
+
+        def add(name, value):
+            if self.extrakto.prefix_name:
+                res.append(f"{name}: {value}")
+            else:
+                res.append(value)
 
         for m in re.finditer(self.regex, "\n" + text, flags=re.I):
             item = "".join(filter(None, m.groups()))
@@ -240,6 +242,6 @@ if __name__ == "__main__":
     except ExtraktoException as e:
         print(e, file=sys.stderr)
         sys.exit(1)
-    except Exception as e:
+    except Exception:
         print(traceback.format_exc(), file=sys.stderr)
         sys.exit(1)

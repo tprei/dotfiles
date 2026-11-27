@@ -1,3 +1,4 @@
+import importlib
 import io
 import json
 import os
@@ -9,7 +10,7 @@ import unittest
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
-import search
+search = importlib.import_module("search")
 
 
 def create_test_db(

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -u
+shopt -s nullglob
 
 herdr_dir="$HOME/.config/herdr"
 now=$(date +%s)
@@ -12,9 +13,10 @@ mtime() {
     fi
 }
 
-latest=$(ls -1t "$herdr_dir/checkpoints" 2>/dev/null | head -n 1)
-if [[ -n "$latest" ]]; then
-    since=$((now - $(mtime "$herdr_dir/checkpoints/$latest")))
+saved=("$herdr_dir/checkpoints"/*)
+if ((${#saved[@]})); then
+    latest=${saved[${#saved[@]} - 1]}
+    since=$((now - $(mtime "$latest")))
     case "$since" in
         0) echo "◌ saving"; exit 0 ;;
         1) echo "◑ saving"; exit 0 ;;

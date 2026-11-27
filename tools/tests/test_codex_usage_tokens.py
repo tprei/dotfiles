@@ -25,9 +25,9 @@ REPORTER_PATH = TOOLS / ".local" / "bin" / "codex-usage-check"
 if str(SHARE_DIR) not in sys.path:
     sys.path.insert(0, str(SHARE_DIR))
 
-import dashboard
-import token_usage
-import usage_history
+dashboard = importlib.import_module("dashboard")
+token_usage = importlib.import_module("token_usage")
+usage_history = importlib.import_module("usage_history")
 
 
 def load_reporter():
