@@ -10,6 +10,7 @@ import textwrap
 import threading
 import time
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -20,7 +21,7 @@ from offload.cli import main
 from offload.config import load_config
 from offload.identity import host_slug, repo_slug, worker_name
 from offload.sprites import Sprites
-from offload.state import Lease, lease_workers, lock_path
+from offload.state import Lease, lease_workers, lock_path, read_cache, write_cache
 
 FAKE_SPRITE = textwrap.dedent(
     r'''
@@ -55,6 +56,13 @@ FAKE_SPRITE = textwrap.dedent(
         print(json.dumps({"type": "info", "data": message, "time": "t"}))
         print(json.dumps({"type": "complete", "data": message, "time": "t"}))
 
+    def take_checkpoint(sprite, name, home, comment):
+        cp_id = f"v{sprite['next_id']}"
+        sprite["next_id"] += 1
+        shutil.copytree(home, ROOT / f"{name}.cp" / cp_id)
+        sprite["checkpoints"].append({"id": cp_id, "comment": comment})
+        return cp_id
+
     lock = open(str(STATE) + ".lock", "w")
     fcntl.flock(lock, fcntl.LOCK_EX)
     args = sys.argv[1:]
@@ -70,7 +78,7 @@ FAKE_SPRITE = textwrap.dedent(
         print(json.dumps({"sprites": sprites, "org": {}}))
     elif command == "create":
         name = args[-1]
-        state["sprites"][name] = {"checkpoints": []}
+        state["sprites"][name] = {"checkpoints": [], "next_id": 2}
         (ROOT / name / "home" / "sprite").mkdir(parents=True, exist_ok=True)
         state["calls"].append(["create", name])
     elif command == "destroy":
@@ -96,15 +104,21 @@ FAKE_SPRITE = textwrap.dedent(
         if path == "/checkpoints":
             print(json.dumps([{"id": "Current"}] + sprite["checkpoints"]))
         elif path == "/checkpoint":
-            cp_id = f"v{len(sprite['checkpoints']) + 2}"
-            shutil.copytree(home, ROOT / f"{name}.cp" / cp_id)
-            sprite["checkpoints"].append({"id": cp_id, "comment": json.loads(option(curl, "-d"))["comment"]})
+            cp_id = take_checkpoint(sprite, name, home, json.loads(option(curl, "-d"))["comment"])
             complete(f"Checkpoint {cp_id} created")
         elif path.endswith("/restore"):
             cp_id = path.split("/")[2]
+            if not (ROOT / f"{name}.cp" / cp_id).is_dir():
+                print(f"checkpoint {cp_id} not found", file=sys.stderr)
+                sys.exit(22)
+            take_checkpoint(sprite, name, home, f"pre-restore {sprite['next_id']}")
             shutil.rmtree(home)
             shutil.copytree(ROOT / f"{name}.cp" / cp_id, home)
             complete(f"Restored {cp_id}")
+        elif method == "DELETE":
+            cp_id = path.split("/")[2]
+            sprite["checkpoints"] = [cp for cp in sprite["checkpoints"] if cp["id"] != cp_id]
+            shutil.rmtree(ROOT / f"{name}.cp" / cp_id)
         else:
             print("{}")
     elif command == "exec":
@@ -308,6 +322,37 @@ class RunnerEndToEndTest(unittest.TestCase):
         comments = json.loads(self.state_file.read_text())["sprites"][self.workers[0]]["checkpoints"]
         self.assertEqual([cp["comment"] for cp in comments], [marker])
 
+    def test_restore_points_are_pruned_and_the_base_survives(self) -> None:
+        self.assertEqual(self.off("run", "ok")[0], 0)
+        self.assertEqual(self.off("run", "ok")[0], 0)
+        cache = read_cache(self.workers[0])
+        self.assertIsNotNone(cache)
+        marker = runner.base_marker(load_config(self.repo))
+        checkpoints = json.loads(self.state_file.read_text())["sprites"][self.workers[0]]["checkpoints"]
+        self.assertEqual(checkpoints, [{"id": cache.base_checkpoint, "comment": marker}])
+
+    def test_warm_run_makes_no_checkpoint_listing(self) -> None:
+        self.assertEqual(self.off("run", "ok")[0], 0)
+        before = len(self.calls())
+        with mock.patch.object(runner, "_spawn_reset") as spawn:
+            self.assertEqual(self.off("run", "ok")[0], 0)
+        spawn.assert_called_once()
+        self.assertNotIn(["GET", "/checkpoints", self.workers[0]], self.calls()[before:])
+
+    def test_stale_cache_lists_checkpoints_again(self) -> None:
+        self.assertEqual(self.off("run", "ok")[0], 0)
+        cache = read_cache(self.workers[0])
+        self.assertIsNotNone(cache)
+        write_cache(self.workers[0], replace(cache, base_key="stale"))
+        before = len(self.calls())
+        with mock.patch.object(runner, "_spawn_reset"):
+            self.assertEqual(self.off("run", "ok")[0], 0)
+        self.assertIn(["GET", "/checkpoints", self.workers[0]], self.calls()[before:])
+
+    def test_sync_compresses_the_stream(self) -> None:
+        argv = runner.sync_argv(load_config(self.repo), "sh")
+        self.assertEqual(argv[:3], ["rsync", "-a", "-z"])
+
     def test_setup_change_rebuilds_the_worker(self) -> None:
         self.assertEqual(self.off("run", "ok")[0], 0)
         (self.repo / "package.json").write_text('{"name": "t", "version": "2"}\n')
@@ -384,6 +429,19 @@ class RunnerEndToEndTest(unittest.TestCase):
         code, output = self.off("run", "show")
         self.assertEqual(code, 0, output)
         self.assertNotIn("./untracked.txt", output)
+
+    def test_missing_cached_base_fails_once_then_lists_checkpoints_again(self) -> None:
+        self.assertEqual(self.off("run", "ok")[0], 0)
+        cache = read_cache(self.workers[0])
+        assert cache is not None
+        write_cache(self.workers[0], replace(cache, base_checkpoint="v99", clean=False))
+        with mock.patch.object(runner, "_spawn_reset"):
+            code, output = self.off("run", "ok")
+        self.assertEqual(code, runner.EXIT_OFF_ERROR, output)
+        self.assertIsNone(read_cache(self.workers[0]))
+        code, output = self.off("run", "ok")
+        self.assertEqual(code, 0, output)
+        self.assertIn("hello from 1", output)
 
     def test_run_waits_for_a_resetting_worker_instead_of_building_another(self) -> None:
         self.assertEqual(self.off("run", "ok")[0], 0)
