@@ -11,10 +11,10 @@ Use when the repo's git top level has `offload.toml`, or before heavy tests, bui
 
 ## Workflow
 
-1. Run `off plan` once, from inside the repo. It makes no network calls. It lists each task with its `where`, `shards`, `timeout`, and `run` command.
+1. Run `off plan` once, from inside the repo. It makes no network calls. It lists each task with its `where`, `shards`, `timeout`, and `run` command. A parallel task shows its step labels in the run column instead.
 2. For any listed task, run `off run <task>` instead of its command. Tasks with `where = "local"` also go through `off run`. They run on this machine in the repo root and return the command's exit code.
-3. Pass extra arguments after `--`: `off run <task> -- <args>`. They are shell-quoted and appended to the task command.
-4. Shards are automatic. Sprite tasks with `shards` above 1 run in parallel on that many workers, and output lines get an `[i/n]` prefix. The exit code is that of the first failing shard, in shard order. Do not start shards yourself.
+3. Pass extra arguments after `--`: `off run <task> -- <args>`. They are shell-quoted and appended to the task command. A parallel task takes none; `off` rejects them.
+4. Shards are automatic. Sprite tasks with `shards` above 1 run in parallel on that many workers, and output lines get an `[i/n]` prefix. The exit code is that of the first failing shard, in shard order. Do not start shards yourself. A parallel task runs its steps at once; each output line gets a `[label]` prefix, and each step ends with a `[label] exited N` line. Its exit code is that of the first failing step, in declared order.
 5. Before a Sprite run, `off` syncs the files `git ls-files -co --exclude-standard` lists to the worker, so uncommitted edits and new files are tested. Anything git ignores, and `.git` itself, is not synced. During a run, network access is limited to the `egress` domains in `offload.toml`.
 6. A worker is built from `[setup]` the first time it is used, and again after a change to `[setup]` or to its `inputs` files. Setup sees only the `inputs` files. Expect that run to be slow.
 7. Sprite tasks pull their `artifacts` paths back after the run to `~/.local/state/off/artifacts/<repo>/<run_id>/<shard>/` (under `$XDG_STATE_HOME/off` when that is set). A missing path is a warning, not a failure.
@@ -23,8 +23,8 @@ Use when the repo's git top level has `offload.toml`, or before heavy tests, bui
 
 ## Exit codes
 
-- `64` from `off exec` only: the command is too light to offload (not a test, build, lint or typecheck runner, or a version or help query). Nothing ran. Run it locally. Every other code, including `2`, comes from the command itself.
-- Any other non-zero code is the task's own exit code, so the task failed. Read the log at the path `off run` prints, then fix the cause or report it. Do not rerun it unchanged.
+- `64` with `off: refusing to offload`: `off exec` refused the command before starting a worker. Run it locally.
+- Any other non-zero code not listed below is the task's own exit code. Read the log at the path `off run` prints, then fix the cause or report it. Do not rerun it unchanged. For a parallel task, the `[label] exited N` lines name the failing step.
 - `124`: the task timed out. Read the log to see where it stopped. Do not rerun it unchanged. Changing `timeout` means editing `offload.toml`, which needs the user.
 - `125`: an off or infrastructure error. Read the `off: error: <msg>` line on stderr. Retry once only if the message says the worker was busy or unreachable. A `lost the task` message means off already retried, so report it instead of retrying. Otherwise stop and report the message.
 - `130`: the run was interrupted, and off stopped the remote task. Don't retry unless the user asks.

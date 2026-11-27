@@ -219,12 +219,45 @@ OFFLOAD_TOML = textwrap.dedent(
     [tasks.background]
     run = "(sleep 0.3; echo server stopped) & echo ok"
     timeout = "1m"
+
+    [tasks.fan]
+    timeout = "1m"
+
+    [tasks.fan.parallel]
+    quick = "echo quick-done"
+    slow = "sleep 0.3; echo slow-done; exit 3"
+
+    [tasks.stall]
+    timeout = "2s"
+
+    [tasks.stall.parallel]
+    quick = "echo quick-done"
+    hang = "sleep 97"
+
+    [tasks.stall-local]
+    where = "local"
+    timeout = "1s"
+
+    [tasks.stall-local.parallel]
+    quick = "true"
+    hang = "sleep 98"
     """
 ).lstrip()
 
 
 def _reset_inline(_launcher: Path, name: str, checkpoint_id: str, root: Path) -> None:
     runner.reset_worker(Sprites(), name, checkpoint_id, root)
+
+
+def stray_processes(pattern: str) -> list[str]:
+    deadline = time.monotonic() + 5
+    while True:
+        found = subprocess.run(
+            ["pgrep", "-fx", pattern], capture_output=True, text=True, check=False
+        ).stdout.split()
+        if not found or time.monotonic() > deadline:
+            return found
+        time.sleep(0.1)
 
 
 class RunnerEndToEndTest(unittest.TestCase):
@@ -242,6 +275,7 @@ class RunnerEndToEndTest(unittest.TestCase):
             script.chmod(0o755)
         self.state_file = self.tmp / "fake-state.json"
         (self.tmp / "fake-root").mkdir()
+        (self.tmp / "tmp").mkdir()
         self.repo = self.tmp / "repo"
         self.repo.mkdir()
         (self.repo / "package.json").write_text('{"name": "t"}\n')
@@ -263,6 +297,7 @@ class RunnerEndToEndTest(unittest.TestCase):
             "FAKE_SPRITE_ROOT": str(self.tmp / "fake-root"),
             "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
             "REAL_RSYNC": real_rsync,
+            "TMPDIR": str(self.tmp / "tmp"),
         }
         patcher = mock.patch.dict(os.environ, env)
         patcher.start()
@@ -373,6 +408,36 @@ class RunnerEndToEndTest(unittest.TestCase):
     def test_timeout_returns_124(self) -> None:
         code, output = self.off("run", "slow")
         self.assertEqual(code, runner.EXIT_TIMEOUT, output)
+
+    def test_parallel_task_runs_every_step(self) -> None:
+        code, output = self.off("run", "fan")
+        self.assertEqual(code, 3, output)
+        self.assertIn("[quick] quick-done", output)
+        self.assertIn("[slow] slow-done", output)
+        self.assertIn("[quick] exited 0", output)
+        self.assertIn("[slow] exited 3", output)
+
+    def test_parallel_task_rejects_extra_args_before_leasing(self) -> None:
+        code, output = self.off("run", "fan", "--", "extra")
+        self.assertEqual(code, runner.EXIT_OFF_ERROR, output)
+        self.assertIn("parallel tasks take no extra arguments", output)
+        self.assertFalse(self.state_file.exists(), output)
+
+    def test_parallel_timeout_stops_every_sprite_step(self) -> None:
+        code, output = self.off("run", "stall")
+        self.assertEqual(code, runner.EXIT_TIMEOUT, output)
+        self.assertIn("[quick] quick-done", output)
+        self.assertEqual(stray_processes("sleep 97"), [])
+
+    def test_parallel_timeout_stops_every_local_step(self) -> None:
+        code, output = self.off("run", "stall-local")
+        self.assertEqual(code, runner.EXIT_TIMEOUT, output)
+        self.assertEqual(stray_processes("sleep 98"), [])
+
+    def test_plan_names_parallel_steps(self) -> None:
+        code, output = self.off("plan", "fan")
+        self.assertEqual(code, 0, output)
+        self.assertIn("parallel: quick, slow", output)
 
     def test_sync_follows_git_rules(self) -> None:
         nested = self.repo / "nested"
