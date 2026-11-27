@@ -5,7 +5,6 @@ const BASE = "https://openclaw.tail2fec5e.ts.net/usage/";
 const BOT_URL = "tg://resolve?domain=PreiPreiClaudeButlerBot";
 const FEED_SCHEMA = 2;
 const REFRESH_MS = 5 * 60 * 1000;
-const CYCLE_MS = 5 * 60 * 1000;
 const STALE_MS = 20 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -170,7 +169,6 @@ function forecastTurn() {
 function advanceForecast() {
   ensureCacheDir();
   files.writeString(turnPath, String(forecastTurn() + 1));
-  saveView("forecast");
 }
 
 function detailUrl(view) {
@@ -534,6 +532,38 @@ function addLogo(stack, provider, size) {
   return image;
 }
 
+function ringPair(group) {
+  const pair = [group.focus, group.second].filter(Boolean);
+  return pair.sort((a, b) => (b.window_ms || 0) - (a.window_ms || 0));
+}
+
+function segmentCount(entry) {
+  if (!entry.window_ms) return 1;
+  const unit = entry.window_ms >= DAY_MS ? DAY_MS : HOUR_MS;
+  const count = Math.round(entry.window_ms / unit);
+  return count >= 2 && count <= 12 ? count : 1;
+}
+
+function segmentedArc(context, center, radius, width, entry, strength) {
+  const hex = stateHex(entry);
+  const count = segmentCount(entry);
+  const used = share(entry.used);
+  if (count === 1) {
+    arc(context, center, radius, 0, 360, new Color(hex, TRACK_ALPHA * strength), width, false);
+    if (used > 0) arc(context, center, radius, -90, -90 + 360 * Math.max(used, 0.015), new Color(hex, strength), width, true);
+    return;
+  }
+  const span = 360 / count;
+  const gap = Math.min(span * 0.25, (width * 0.9 * 180) / (Math.PI * radius));
+  for (let index = 0; index < count; index += 1) {
+    const start = -90 + index * span + gap / 2;
+    const end = start + span - gap;
+    arc(context, center, radius, start, end, new Color(hex, TRACK_ALPHA * strength), width, false);
+    const filled = Math.min(Math.max(used * count - index, 0), 1);
+    if (filled > 0) arc(context, center, radius, start, start + (end - start) * Math.max(filled, 0.12), new Color(hex, strength), width, false);
+  }
+}
+
 function ringImage(group, size) {
   const context = canvas(size, size);
   const center = size / 2;
@@ -541,18 +571,13 @@ function ringImage(group, size) {
   let width = Math.round(size * 0.115 * 2) / 2;
   let radius = center - width / 2;
   let hole = radius - width / 2;
-  for (const entry of [group.focus, group.second]) {
-    if (!entry) break;
-    const hex = stateHex(entry);
-    const strength = entry === group.focus ? 1 : INNER_ALPHA;
-    arc(context, center, radius, 0, 360, new Color(hex, TRACK_ALPHA * strength), width, false);
-    const used = share(entry.used);
-    if (used > 0) arc(context, center, radius, -90, -90 + 360 * Math.max(used, 0.015), new Color(hex, strength), width, true);
+  ringPair(group).forEach((entry, index) => {
+    segmentedArc(context, center, radius, width, entry, index === 0 ? 1 : INNER_ALPHA);
     hole = radius - width / 2;
     const next = Math.max(width - 1.5, 3);
     radius = hole - gap - next / 2;
     width = next;
-  }
+  });
   const logo = Math.min(Math.floor((hole - 3) * 1.36), Math.round(size * 0.4));
   drawLogo(context, group.provider, center - logo / 2, center - logo / 2, logo);
   return context.getImage();
@@ -636,9 +661,12 @@ function addTile(row, group, family, now) {
   const art = addCentered(tile).addImage(ringImage(group, ring));
   art.imageSize = new Size(ring, ring);
   tile.addSpacer(4);
-  addRingKey(tile, group.focus, "outer", group.hot);
-  if (group.second) addRingKey(tile, group.second, "inner", false);
+  ringPair(group).forEach((entry, index) => addRingKey(tile, entry, index === 0 ? "outer" : "inner", entry === group.focus));
   const caption = addCentered(tile);
+  if (group.hot) {
+    addFlame(caption, group.focus, 9);
+    caption.addSpacer(2);
+  }
   if (!addVerdict(caption, group.focus, now, day, 10)) addLabel(caption, ownerName(group.focus), Font.mediumSystemFont(10), SECONDARY);
 }
 
@@ -651,19 +679,18 @@ function ringKeyImage(which, hex) {
   return context.getImage();
 }
 
-function addRingKey(tile, entry, which, hot) {
+function addRingKey(tile, entry, which, strong) {
   const line = addCentered(tile);
   line.centerAlignContent();
-  line.addImage(ringKeyImage(which, stateHex(entry))).imageSize = new Size(9, 9);
-  line.addSpacer(3);
-  const strong = which === "outer";
-  addLabel(line, percent(entry.used), strong ? Font.boldRoundedSystemFont(13) : Font.semiboldRoundedSystemFont(11), strong ? figureColor(entry) : SECONDARY).minimumScaleFactor = 0.7;
+  line.addImage(ringKeyImage(which, stateHex(entry))).imageSize = new Size(8, 8);
   line.addSpacer(2);
-  addLabel(line, entry.short, Font.mediumSystemFont(strong ? 10 : 9), SECONDARY).minimumScaleFactor = 0.6;
-  if (hot) {
-    line.addSpacer(2);
-    addFlame(line, entry, 9);
-  }
+  const figure = addLabel(line, percent(entry.used), strong ? Font.boldRoundedSystemFont(12) : Font.semiboldRoundedSystemFont(11), strong ? figureColor(entry) : SECONDARY);
+  figure.lineLimit = 1;
+  figure.minimumScaleFactor = 0.6;
+  line.addSpacer(2);
+  const label = addLabel(line, entry.short, Font.mediumSystemFont(9), SECONDARY);
+  label.lineLimit = 1;
+  label.minimumScaleFactor = 0.5;
 }
 
 function addVerdict(stack, entry, now, time, size) {
@@ -785,7 +812,7 @@ function forecastView(body, family, feed, now) {
     owners.add(key);
     return true;
   });
-  const lead = leads[(Math.floor(now / CYCLE_MS) + forecastTurn()) % leads.length];
+  const lead = leads[forecastTurn() % leads.length];
   addForecastHero(body, lead, now, leads.indexOf(lead), leads.length);
   if (family !== "large") return;
   const rest = items.filter((item) => item !== lead).slice(0, LIST_ROWS);
@@ -1135,7 +1162,8 @@ function lockWidget(family, result) {
 
 async function build(family, action) {
   if (VIEW_IDS.includes(action)) saveView(action);
-  if (action === NEXT_ACTION) advanceForecast();
+  if (action === NEXT_ACTION) saveView("forecast");
+  if ((action === null && HOME.includes(family)) || action === NEXT_ACTION) advanceForecast();
   const result = await snapshot(family, action);
   if (!result) return errorWidget(family, UNREACHABLE);
   if (!HOME.includes(family)) return lockWidget(family, result);
