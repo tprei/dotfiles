@@ -117,7 +117,7 @@ def parse_config(root: Path, data: Mapping[str, object]) -> OffloadConfig:
     _check_keys(warm_table, "warm", frozenset({"run"}))
     warm = tuple(
         _command(line, "warm.run")
-        for line in _str_list(warm_table, "warm", "run", min_items=1 if warm_table else 0)
+        for line in _str_list(warm_table, "warm", "run", min_items=1 if "run" in warm_table else 0)
     )
 
     sync_table = _table(data, "", "sync")
@@ -194,27 +194,25 @@ def _parallel(table: Mapping[str, object], path: str) -> tuple[tuple[str, str], 
 def compose_parallel(steps: tuple[tuple[str, str], ...]) -> str:
     """Bash 3.2-compatible script running `steps` at once, prefixing their output, exiting with the first failure in order.
 
-    Each step's output goes through a process substitution so a background child that keeps the step's stdout open
-    can't hold up the wait; the summary then waits up to 5s for each step's output to drain. awk does the prefixing
-    because a shell read loop costs a syscall per byte.
+    Each step runs in an asynchronous subshell whose pipefail makes the subshell's status the command's even though
+    awk sits last in the pipeline; awk does the prefixing because a shell read loop costs a syscall per byte. The
+    waits happen in declared order, and a child that keeps a step's output pipes open holds that step, just like an
+    ordinary task.
     """
-    lines = ["dir=$(mktemp -d) || exit 1", "trap 'rm -rf \"$dir\"' EXIT"]
+    lines: list[str] = []
     for index, (label, command) in enumerate(steps):
         prefix = shlex.quote(f"[{label}] ")
         lines.append(
-            f"( bash -c {shlex.quote(command)} 2>&1; echo $? > \"$dir/{index}\" ) "
-            f"> >(awk -v p={prefix} '{{ print p $0; fflush() }}'; : 2>/dev/null > \"$dir/out{index}\") &"
+            f"( set -o pipefail; bash -c {shlex.quote(command)} 2>&1 "
+            f"| awk -v p={prefix} '{{ print p $0; fflush() }}' ) &"
         )
         lines.append(f"pid{index}=$!")
-    lines.append("wait " + " ".join(f'"$pid{index}"' for index in range(len(steps))))
-    drained = " && ".join(f'[ -e "$dir/out{index}" ]' for index in range(len(steps)))
-    lines.append(f"n=0; while [ $n -lt 50 ] && ! {{ {drained}; }}; do sleep 0.1; n=$((n + 1)); done")
+    lines.append("result=0")
     for index, (label, _) in enumerate(steps):
-        lines.append(f"code{index}=$(cat \"$dir/{index}\" 2>/dev/null || echo 1)")
-        lines.append(f"printf '[%s] exited %s\\n' {shlex.quote(label)} \"$code{index}\"")
-    for index in range(len(steps)):
-        lines.append(f"if [ \"$code{index}\" != 0 ]; then exit \"$code{index}\"; fi")
-    lines.append("exit 0")
+        lines.append(f'code=0; wait "$pid{index}" || code=$?')
+        lines.append(f"printf '[%s] exited %s\\n' {shlex.quote(label)} \"$code\"")
+        lines.append('if [ "$result" = 0 ]; then result=$code; fi')
+    lines.append('exit "$result"')
     return "\n".join(lines)
 
 

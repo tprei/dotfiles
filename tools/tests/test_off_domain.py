@@ -5,7 +5,6 @@ import sys
 import tempfile
 import threading
 import tomllib
-import time
 import unittest
 from dataclasses import replace
 from pathlib import Path
@@ -223,6 +222,8 @@ class ConfigTest(unittest.TestCase):
     def test_warm_commands_parse_and_change_the_base_only_when_present(self) -> None:
         plain = self._load(MINIMAL)
         self.assertEqual(plain.warm, ())
+        empty = self._load(MINIMAL.replace("[tasks.check]", "[warm]\n\n[tasks.check]"))
+        self.assertEqual(empty.warm, ())
         warm_text = MINIMAL.replace("[tasks.check]", '[warm]\nrun = ["yarn tsc --noEmit"]\n\n[tasks.check]')
         warmed = self._load(warm_text)
         self.assertEqual(warmed.warm, ("yarn tsc --noEmit",))
@@ -282,24 +283,6 @@ class ComposeParallelTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("[loud] hi", lines)
         self.assertEqual(lines[-2:], ["[quiet] exited 0", "[loud] exited 0"])
-
-    def test_background_child_holding_stdout_does_not_hold_the_result(self) -> None:
-        with tempfile.TemporaryFile() as out:
-            started = time.monotonic()
-            completed = subprocess.run(
-                ["bash", "-c", compose_parallel((("server", "sleep 20 & echo started; exit 3"), ("ok", "true")))],
-                stdout=out,
-                stderr=subprocess.STDOUT,
-                check=False,
-                timeout=30,
-            )
-            elapsed = time.monotonic() - started
-            out.seek(0)
-            lines = out.read().decode().splitlines()
-        self.assertEqual(completed.returncode, 3)
-        self.assertLess(elapsed, 9)
-        self.assertIn("[server] started", lines)
-        self.assertEqual(lines[-2:], ["[server] exited 3", "[ok] exited 0"])
 
 
 class PolicyTest(unittest.TestCase):

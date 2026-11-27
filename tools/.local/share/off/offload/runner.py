@@ -374,7 +374,10 @@ def _warm(sprites: Sprites, config: OffloadConfig, name: str, live: _Live, emit:
         emit(f"[warm] {line}")
 
     for line in config.warm:
-        code = _exec_status(sprites, name, _bounded_shell(line, WARM_TIMEOUT_S), live, cwd=WORKDIR, emit=warm_emit)
+        code = _exec_status(
+            sprites, name, _bounded_shell(line, WARM_TIMEOUT_S), live,
+            cwd=WORKDIR, emit=warm_emit, timeout_s=WARM_TIMEOUT_S,
+        )
         if code != 0:
             warm_emit(f"{line} exited {code}; its cache is kept\n")
 
@@ -423,7 +426,12 @@ def _clean_at(name: str, checkpoint_id: str) -> bool:
 
 def _matching_cache(config: OffloadConfig, name: str) -> WorkerCache | None:
     cache = _cache_if_readable(name)
-    if cache is None or cache.base_key != base_key(config) or cache.policy_hash != policy_hash(config.worker):
+    if (
+        cache is None
+        or not cache.base_checkpoint
+        or cache.base_key != base_key(config)
+        or cache.policy_hash != policy_hash(config.worker)
+    ):
         return None
     return cache
 
@@ -433,24 +441,21 @@ def _is_ready(config: OffloadConfig, name: str) -> bool:
 
 
 def reset_worker(sprites: Sprites, name: str, checkpoint_id: str, root: Path) -> None:
-    marker = _reset_marker(name)
-    restored = False
-    try:
-        with Lease(lock_path(name)):
-            cache = _cache_if_readable(name)
-            if cache is None or cache.clean or cache.base_checkpoint != checkpoint_id:
-                return
+    with Lease(lock_path(name)):
+        cache = _cache_if_readable(name)
+        if cache is None or cache.clean or cache.base_checkpoint != checkpoint_id:
+            return
+        marker = _reset_marker(name)
+        try:
             marker.write_text(str(os.getpid()), encoding="utf-8")
             sprites.restore(name, checkpoint_id)
             cache = replace(cache, clean=True)
             write_cache(name, cache)
-            restored = True
             if cache.drift >= REFRESH_AFTER_FILES:
                 _refresh(sprites, name, cache, root)
-    finally:
-        _clear_reset_marker(marker)
-    if restored:
-        _prune_restore_points(sprites, name)
+        finally:
+            marker.unlink(missing_ok=True)
+    _prune_restore_points(sprites, name)
 
 
 def _refresh(sprites: Sprites, name: str, cache: WorkerCache, root: Path) -> None:
@@ -534,16 +539,6 @@ def _prune_restore_points(sprites: Sprites, name: str) -> None:
 
 def _reset_marker(name: str) -> Path:
     return lock_path(name).with_suffix(".resetting")
-
-
-def _clear_reset_marker(marker: Path) -> None:
-    """Another reset may have taken the lock and written its own marker after ours released it."""
-    try:
-        owner = marker.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return
-    if owner == str(os.getpid()):
-        marker.unlink()
 
 
 def _resetting(name: str) -> bool:
@@ -975,12 +970,13 @@ def _exec_status(
     cwd: str,
     emit: Callable[[str], None] | None = None,
     uploads: Sequence[tuple[Path, str]] = (),
+    timeout_s: int = SETUP_TIMEOUT_S,
 ) -> int:
     proc = sprites.start_exec(name, argv, cwd=cwd, uploads=uploads)
     output = emit or _discard
     if proc.stdout is None:
         raise OffError("sprite exec has no output stream")
-    timer = threading.Timer(SETUP_TIMEOUT_S + KILL_GRACE_S, proc.kill)
+    timer = threading.Timer(timeout_s + KILL_GRACE_S, proc.kill)
     timer.start()
     try:
         with proc.stdout, live.track(proc):

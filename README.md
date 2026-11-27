@@ -227,7 +227,7 @@ version = 1
 
 [worker]
 memory_mb = 6144
-max = 2                                  # parallel workers for this repo on this machine
+max = 1                                  # one worker for this repo on this machine
 egress = ["fonts.googleapis.com"]        # everything else is blocked during runs
 
 [setup]
@@ -235,20 +235,23 @@ inputs = ["package.json", "package-lock.json"]  # the only files setup sees; a c
 run = ["npm ci --ignore-scripts"]
 
 [warm]
-run = ["npx tsc --noEmit", "npx eslint --cache --cache-strategy content"]  # primes caches in the base
+run = ["npx tsc --noEmit", "npx eslint --cache --cache-strategy content --cache-location node_modules/.cache/eslint/"]
 
-[tasks.test]
-run = "npx vitest run --shard=$OFF_SHARD/$OFF_SHARDS"
+[tasks.check]
 timeout = "20m"
-shards = 2
+
+[tasks.check.parallel]
+typecheck = "npx tsc --noEmit"
+lint = "npx eslint --cache --cache-strategy content --cache-location node_modules/.cache/eslint/"
+test = "npx vitest run"
 ```
 
 - Commands: `off plan` (local only), `off run TASK [-- ARGS]`, `off exec [--timeout 30m] -- CMD` (refuses commands that aren't test, build, lint or typecheck runners, with exit 64 before anything runs), `off status`, `off down [--all]`, `off watch RUN_ID [--shard N]`, `off usage [--days N]`.
 - Exit codes: the task's own code, `124` on timeout, `125` when off itself fails (a dropped `sprite exec` connection is retried once first), `130` when interrupted. Interrupting or losing a run restores the worker's checkpoint, which stops the remote task. Logs and artifacts live under `~/.local/state/off/`.
-- A base checkpoint deleted outside off makes the restore fail, and the run that needed it exits `125`. `off down` destroys the repo's workers; the next run rebuilds them.
+- If a base checkpoint disappears, the restore fails with `125` and off drops its cached ID. The next run looks up the remaining checkpoints and rebuilds if it can't find the base.
 - Warm caches: `[warm] run` commands run after the tree reaches a new worker, locked down and before the base checkpoint, so tool caches (`tsconfig.tsbuildinfo`, `.eslintcache`) ship in the base. On dividimos that took `tsc` from 33s to 7s and `eslint` from 54s to 3s. A warm command that exits non-zero is reported and its cache kept, since a tree with type errors still primes one. Changing `[warm]` rebuilds the workers.
 - Refresh: each run counts the files that differ from the base. Once that reaches 50, the background reset retakes the base from the current tree (prune, sync, warm, checkpoint) and deletes the old one, so uploads and caches stay small as the repo drifts. A failed refresh keeps the old base.
-- Cost: Sprites bill CPU-seconds and memory actually used while awake, plus storage, so `memory_mb` caps the peak rather than setting a price. Fly's Free plan covers $5 of usage a month and up to 3 Sprites; keep `max` low and use one worker per repo to stay inside it.
+- Cost: Sprites bill CPU-seconds, memory used while awake, and storage. `memory_mb` sets a worker policy, not a spend limit. [Fly's Free plan](https://fly.io/pricing/) covers $5 of monthly usage across your Fly services and allows up to three Sprites. Fly moves you to Pay As You Go at $5. `max` limits workers for one repo on one machine, not across the org, and `off usage` is a delayed compute estimate without storage.
 - Parallel tasks: `[tasks.X.parallel]` lists two or more `label = "command"` steps, which run at once on the worker. Each output line gets a `[label]` prefix, and each step ends with `[label] exited N`. A task sets exactly one of `run` or `parallel`, and parallel tasks take no extra arguments. The exit code is the first failing step's, in declared order. A timeout stops every step.
 - Lockdown: during runs egress is denied except `worker.egress`, sudo is blocked, memory is capped, and the Sprite URL stays private. Env from `[env] pass` and task `env` goes in per run through a file deleted before the task starts. No credentials live on a worker.
 - Tern: `off run` opens one Tern session per shard, only from an interactive terminal; agent shells (`OMP_BASH_SESSION` set) and non-terminal stderr get none. Each session is named `off <task> <last 4 run-id characters>`, with ` i/n` added when sharded. It follows the local log and closes when its shard finishes, whatever the result. `OFF_TERN=off` disables it.
