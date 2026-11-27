@@ -1,5 +1,6 @@
 import io
 import os
+import subprocess
 import sys
 import tempfile
 import threading
@@ -10,7 +11,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / ".local" / "share" / "off"))
 
-from offload.state import done_marker, run_log
+from offload.state import done_marker, run_log, run_pid
 from offload.tern import TernTarget, detect_tern, viewer_argv, watch
 
 
@@ -129,6 +130,17 @@ class WatchTest(unittest.TestCase):
         code = watch("run-x", 1, poll_s=0.01, out=out)
         self.assertEqual(code, 125)
         self.assertIn("off: error: done marker", out.getvalue())
+
+    def test_gives_up_when_the_run_process_died_without_a_marker(self) -> None:
+        dead = subprocess.Popen(["true"])
+        dead.wait()
+        run_pid("run-x").write_text(str(dead.pid))
+        self.log.write_text("partial\n")
+        out = io.StringIO()
+        code = watch("run-x", 1, poll_s=0.01, out=out)
+        self.assertEqual(code, 125)
+        self.assertIn("partial\n", out.getvalue())
+        self.assertIn("ended without a result", out.getvalue())
 
 
 if __name__ == "__main__":
