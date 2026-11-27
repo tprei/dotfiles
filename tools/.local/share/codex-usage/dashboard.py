@@ -11,7 +11,7 @@ from functools import cache
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from token_usage import DAY_MS, DayTotal, ProviderTotal, TokenSnapshot
+from token_usage import DAY_MS, HOUR_BIN_COUNT, HOUR_MS, DayTotal, ProviderTotal, TokenSnapshot
 
 
 @dataclass(frozen=True, slots=True)
@@ -1543,3 +1543,41 @@ def recent_summary(view: Dashboard) -> list[dict[str, object]]:
         }
         for record in sorted(view.recent, key=lambda record: record["at_ms"], reverse=True)[:_RECENT_LIMIT]
     ]
+
+
+def usage_summary(view: Dashboard) -> dict[str, object] | None:
+    """Tokens and estimated cost per provider for each UTC hour of the snapshot's last 24 hours."""
+    if view.tokens is None:
+        return None
+    hours = view.tokens["hours"]
+    rows_by_hour = [{row["provider"]: row for row in hour["providers"]} for hour in hours]
+    active: list[tuple[int, str, list[ProviderTotal]]] = []
+    for total in view.tokens["providers"]:
+        name = total["provider"]
+        rows = [by_name[name] for by_name in rows_by_hour]
+        provider_tokens = sum(row["tokens"] for row in rows)
+        if provider_tokens > 0:
+            active.append((provider_tokens, name, rows))
+    active.sort(key=lambda entry: (-entry[0], entry[1]))
+    return {
+        "end_ms": hours[-1]["end_ms"],
+        "hour_ms": HOUR_MS,
+        "hours": HOUR_BIN_COUNT,
+        "total": {
+            "tokens": sum(hour["tokens"] for hour in hours),
+            "estimated_usd": round(math.fsum(hour["estimated_usd"] for hour in hours), 4),
+            "tokens_by_hour": [hour["tokens"] for hour in hours],
+            "usd_by_hour": [round(hour["estimated_usd"], 4) for hour in hours],
+        },
+        "providers": [
+            {
+                "provider": name,
+                "tokens": provider_tokens,
+                "estimated_usd": round(math.fsum(row["estimated_usd"] for row in rows), 4),
+                "unpriced_tokens": sum(row["unpriced_tokens"] for row in rows),
+                "tokens_by_hour": [row["tokens"] for row in rows],
+                "usd_by_hour": [round(row["estimated_usd"], 4) for row in rows],
+            }
+            for provider_tokens, name, rows in active
+        ],
+    }

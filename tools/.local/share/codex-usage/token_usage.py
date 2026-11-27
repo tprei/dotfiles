@@ -46,16 +46,28 @@ class DayTotal(TypedDict):
     unpriced_records: int
 
 
+class HourTotal(TypedDict):
+    start_ms: int
+    end_ms: int
+    providers: list[ProviderTotal]
+    tokens: int
+    estimated_usd: float
+    unpriced_records: int
+
+
 class TokenSnapshot(TypedDict):
     start_ms: int
     end_ms: int
     providers: list[ProviderTotal]
     days: list[DayTotal]
+    hours: list[HourTotal]
     sources_ok: list[str]
     issues: list[str]
 
 
 DAY_MS = 86_400_000
+HOUR_MS = 3_600_000
+HOUR_BIN_COUNT = 24
 
 
 _BASELINE_PROVIDERS = ("openai-codex", "anthropic", "google-antigravity", "opencode-go", "zai")
@@ -529,6 +541,39 @@ def _provider_total(name: str, slot: dict | None) -> ProviderTotal:
     }
 
 
+def _bin_providers(
+    merged: list[tuple[str, int, int, float | None, str]],
+    order: list[str],
+    bin_start: int,
+    bin_end: int,
+) -> list[ProviderTotal]:
+    slots: dict[str, dict] = {}
+    for provider, timestamp_ms, tokens, estimated, model in merged:
+        if timestamp_ms < bin_start or timestamp_ms >= bin_end:
+            continue
+        display = _DISPLAY_PROVIDERS.get(provider, provider)
+        slot = slots.setdefault(
+            display,
+            {"tokens": 0, "costs": [], "unpriced": 0, "unpriced_tokens": 0, "unpriced_ests": []},
+        )
+        slot["tokens"] += tokens
+        if estimated is None:
+            slot["unpriced"] += 1
+            slot["unpriced_tokens"] += tokens
+            slot["unpriced_ests"].append(tokens / 1_000_000 * _UNPRICED_USD_PER_MTOK.get(model, 0.0))
+        else:
+            slot["costs"].append(estimated)
+    return [_provider_total(name, slots.get(name)) for name in order]
+
+
+def _bin_sums(providers: list[ProviderTotal]) -> tuple[int, float, int]:
+    return (
+        sum(item["tokens"] for item in providers),
+        math.fsum(item["estimated_usd"] for item in providers),
+        sum(item["unpriced_records"] for item in providers),
+    )
+
+
 def merge_usage(
     collections: list[tuple[str, Collection]], start_ms: int, end_ms: int
 ) -> TokenSnapshot:
@@ -606,33 +651,35 @@ def merge_usage(
     for index in range(day_count):
         bin_start = start_ms + index * DAY_MS
         bin_end = min(bin_start + DAY_MS, end_ms)
-        day_slots: dict[str, dict] = {}
-        for provider, timestamp_ms, tokens, estimated, model in merged:
-            if timestamp_ms < bin_start or timestamp_ms >= bin_end:
-                continue
-            display = _DISPLAY_PROVIDERS.get(provider, provider)
-            slot = day_slots.setdefault(
-                display,
-                {"tokens": 0, "costs": [], "unpriced": 0, "unpriced_tokens": 0, "unpriced_ests": []},
-            )
-            slot["tokens"] += tokens
-            if estimated is None:
-                slot["unpriced"] += 1
-                slot["unpriced_tokens"] += tokens
-                slot["unpriced_ests"].append(tokens / 1_000_000 * _UNPRICED_USD_PER_MTOK.get(model, 0.0))
-            else:
-                slot["costs"].append(estimated)
-        day_providers = [
-            _provider_total(name, day_slots.get(name)) for name in order
-        ]
+        day_providers = _bin_providers(merged, order, bin_start, bin_end)
+        tokens, estimated_usd, unpriced_records = _bin_sums(day_providers)
         days.append(
             {
                 "start_ms": bin_start,
                 "end_ms": bin_end,
                 "providers": day_providers,
-                "tokens": sum(item["tokens"] for item in day_providers),
-                "estimated_usd": math.fsum(item["estimated_usd"] for item in day_providers),
-                "unpriced_records": sum(item["unpriced_records"] for item in day_providers),
+                "tokens": tokens,
+                "estimated_usd": estimated_usd,
+                "unpriced_records": unpriced_records,
+            }
+        )
+    hour_end = (end_ms // HOUR_MS + 1) * HOUR_MS
+    hour_start = hour_end - HOUR_BIN_COUNT * HOUR_MS
+    hour_records = [item for item in merged if hour_start <= item[1] < hour_end]
+    hours: list[HourTotal] = []
+    for index in range(HOUR_BIN_COUNT):
+        bin_start = hour_start + index * HOUR_MS
+        bin_end = bin_start + HOUR_MS
+        hour_providers = _bin_providers(hour_records, order, bin_start, bin_end)
+        tokens, estimated_usd, unpriced_records = _bin_sums(hour_providers)
+        hours.append(
+            {
+                "start_ms": bin_start,
+                "end_ms": bin_end,
+                "providers": hour_providers,
+                "tokens": tokens,
+                "estimated_usd": estimated_usd,
+                "unpriced_records": unpriced_records,
             }
         )
     if token_conflicts:
@@ -648,6 +695,7 @@ def merge_usage(
         "end_ms": end_ms,
         "providers": providers,
         "days": days,
+        "hours": hours,
         "sources_ok": sources_ok,
         "issues": issues,
     }

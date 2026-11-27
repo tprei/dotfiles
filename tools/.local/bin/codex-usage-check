@@ -1800,6 +1800,7 @@ def export_widget(view: dashboard.Dashboard) -> int:
         "lock": dashboard.widget_summary(view),
         "windows": dashboard.windows_summary(view),
         "recent": dashboard.recent_summary(view),
+        "usage": dashboard.usage_summary(view),
     }
     try:
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)

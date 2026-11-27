@@ -148,8 +148,8 @@ def merge_record(entry_id="r1", timestamp_ms=None, provider="openai-codex",
     }
 
 
-def merge_collection(records, issues=None):
-    return {"start_ms": START_MS, "end_ms": END_MS, "records": records, "issues": issues or []}
+def merge_collection(records, issues=None, start_ms=START_MS, end_ms=END_MS):
+    return {"start_ms": start_ms, "end_ms": end_ms, "records": records, "issues": issues or []}
 
 
 def merge_collections(collections):
@@ -759,7 +759,7 @@ class MergeUsageTests(unittest.TestCase):
         snapshot = merge_collections(
             [("WSL", merge_collection([])), ("mini-1", merge_collection([]))]
         )
-        self.assertEqual(set(snapshot), {"start_ms", "end_ms", "providers", "days", "sources_ok", "issues"})
+        self.assertEqual(set(snapshot), {"start_ms", "end_ms", "providers", "days", "hours", "sources_ok", "issues"})
         self.assertEqual(snapshot["start_ms"], START_MS)
         self.assertEqual(snapshot["end_ms"], END_MS)
         self.assertEqual([total["provider"] for total in snapshot["providers"]], BASELINE_PROVIDERS)
@@ -1024,6 +1024,41 @@ class MergeUsageTests(unittest.TestCase):
         day_ga = day_provider_total(day_total(snapshot, 1), "google-antigravity")
         self.assertEqual(day_ga["unpriced_tokens"], 2_000_000)
         self.assertAlmostEqual(day_ga["unpriced_estimated_usd"], 0.2484, places=9)
+
+    def test_hours_cover_the_24_utc_hours_ending_at_the_partial_hour(self):
+        end_ms = START_MS + 6 * DAY_MS + 5 * HOUR_MS + 25 * 60_000
+        hour_start = START_MS + 5 * DAY_MS + 6 * HOUR_MS
+        before = merge_record("before", timestamp_ms=hour_start - 1_000, tokens=111, estimated_usd=0.1)
+        first = merge_record("first", timestamp_ms=hour_start, tokens=200, estimated_usd=0.2)
+        last = merge_record("last", timestamp_ms=end_ms - 10 * 60_000, tokens=300, estimated_usd=0.3)
+        collection = merge_collection([before, first, last], start_ms=START_MS, end_ms=end_ms)
+        snapshot = token_usage.merge_usage([("WSL", collection)], START_MS, end_ms)
+        hours = snapshot["hours"]
+        self.assertEqual(len(hours), 24)
+        self.assertEqual(hours[0]["start_ms"], hour_start)
+        self.assertEqual(hours[-1]["end_ms"], hour_start + 24 * HOUR_MS)
+        self.assertEqual([hour["tokens"] for hour in hours], [200] + [0] * 22 + [300])
+        self.assertAlmostEqual(hours[0]["estimated_usd"], 0.2, places=9)
+        self.assertAlmostEqual(hours[23]["estimated_usd"], 0.3, places=9)
+        self.assertEqual(provider_total(snapshot, "openai-codex")["tokens"], 611)
+
+    def test_hourly_rows_alias_providers_and_split_priced_from_unpriced(self):
+        bin_start = END_MS - 2 * HOUR_MS
+        records = [
+            merge_record("ga", timestamp_ms=bin_start, provider="antigravity-cli", model="gemini-3-pro", tokens=300, estimated_usd=None),
+            merge_record("codex-priced", timestamp_ms=bin_start + 1_000, tokens=140, estimated_usd=0.25),
+            merge_record("codex-unpriced", timestamp_ms=bin_start + 2_000, tokens=40, estimated_usd=None),
+        ]
+        snapshot = merge_collections([("WSL", merge_collection(records))])
+        hour = snapshot["hours"][21]
+        self.assertEqual(hour["start_ms"], bin_start)
+        antigravity = day_provider_total(hour, "google-antigravity")
+        self.assertEqual((antigravity["tokens"], antigravity["unpriced_tokens"]), (300, 300))
+        self.assertEqual(antigravity["estimated_usd"], 0.0)
+        self.assertIsNone(day_provider_total(hour, "antigravity-cli"))
+        codex = day_provider_total(hour, "openai-codex")
+        self.assertEqual((codex["tokens"], codex["unpriced_tokens"]), (180, 40))
+        self.assertAlmostEqual(codex["estimated_usd"], 0.25, places=9)
 
 def history_sample(
     recorded_at_ms=None,
@@ -2089,11 +2124,12 @@ class WidgetExportTests(TempRootMixin):
         )
         manifest = json.loads((self.widget_dir / "widget.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["schema"], 2)
-        self.assertEqual(set(manifest), {"schema", "generated_at_ms", "lock", "windows", "recent"})
+        self.assertEqual(set(manifest), {"schema", "generated_at_ms", "lock", "windows", "recent", "usage"})
         self.assertEqual(manifest["generated_at_ms"], FIXED_NOW_MS)
         self.assertEqual(manifest["lock"], json.loads(json.dumps(dashboard.widget_summary(self.view))))
         self.assertEqual(manifest["windows"], json.loads(json.dumps(dashboard.windows_summary(self.view))))
         self.assertEqual(manifest["recent"], json.loads(json.dumps(dashboard.recent_summary(self.view))))
+        self.assertIsNone(manifest["usage"])
         self.assertEqual(stat.S_IMODE(self.widget_dir.stat().st_mode), 0o700)
         self.assertEqual(
             {path.name: stat.S_IMODE(path.stat().st_mode) for path in self.widget_dir.iterdir()},
@@ -2135,6 +2171,17 @@ class WidgetExportTests(TempRootMixin):
         summary = dashboard.widget_summary(view)
         states = [summary["focus"]["state"], *(entry["state"] for entry in summary["next"])]
         self.assertEqual(states, ["exhausted", "run_out", "hot"])
+
+    def test_manifest_carries_the_hourly_usage_block(self):
+        records = [merge_record("r1", timestamp_ms=END_MS - 30 * 60_000, tokens=300, estimated_usd=0.5)]
+        tokens = merge_collections([("WSL", merge_collection(records))])
+        view = dashboard.Dashboard(FIXED_NOW_MS, FIXED_NOW_MS, [], None, tokens, ["WSL"], False)
+        self.assertEqual(reporter.export_widget(view), 0)
+        usage = json.loads((self.widget_dir / "widget.json").read_text(encoding="utf-8"))["usage"]
+        self.assertEqual(usage["end_ms"], END_MS + HOUR_MS)
+        self.assertEqual(usage["total"]["tokens_by_hour"], [0] * 22 + [300, 0])
+        self.assertEqual(usage["total"]["usd_by_hour"], [0.0] * 22 + [0.5, 0.0])
+        self.assertEqual([provider["provider"] for provider in usage["providers"]], ["openai-codex"])
 
 
 class ManifestSummaryTests(unittest.TestCase):
@@ -2292,6 +2339,35 @@ class ManifestSummaryTests(unittest.TestCase):
                 sorted(entry),
                 ["at_ms", "model", "project", "provider", "title", "tokens"],
             )
+
+    def test_usage_is_null_without_a_token_snapshot(self):
+        self.assertIsNone(dashboard.usage_summary(self.view([], None)))
+
+    def test_usage_lists_active_providers_by_tokens_with_hourly_series(self):
+        now_hour = FIXED_NOW_MS // HOUR_MS * HOUR_MS
+        window_start = FIXED_NOW_MS - 30 * DAY_MS
+        records = [
+            merge_record("zai-priced", timestamp_ms=now_hour - 55 * 60_000, provider="zai", tokens=300, estimated_usd=0.1234567),
+            merge_record("zai-unpriced", timestamp_ms=now_hour - 50 * 60_000, provider="zai", tokens=50, estimated_usd=None),
+            merge_record("codex-priced", timestamp_ms=now_hour - 5 * HOUR_MS + 5 * 60_000, tokens=300, estimated_usd=0.5),
+            merge_record("codex-unpriced", timestamp_ms=now_hour - 5 * HOUR_MS + 10 * 60_000, tokens=50, estimated_usd=None),
+            merge_record("mistral-old", timestamp_ms=now_hour - 25 * HOUR_MS, provider="mistral", tokens=900, estimated_usd=1.0),
+        ]
+        collection = merge_collection(records, start_ms=window_start, end_ms=FIXED_NOW_MS)
+        tokens = token_usage.merge_usage([("WSL", collection)], window_start, FIXED_NOW_MS)
+        usage = dashboard.usage_summary(self.view([], tokens))
+        codex, zai = usage["providers"]
+        self.assertEqual(usage["end_ms"], now_hour + HOUR_MS)
+        self.assertEqual([provider["provider"] for provider in usage["providers"]], ["openai-codex", "zai"])
+        self.assertEqual(usage["total"]["tokens"], 700)
+        self.assertEqual(usage["total"]["estimated_usd"], 0.6235)
+        self.assertEqual(usage["total"]["tokens_by_hour"], [0] * 18 + [350] + [0] * 3 + [350, 0])
+        self.assertEqual(usage["total"]["usd_by_hour"], [0.0] * 18 + [0.5] + [0.0] * 3 + [0.1235, 0.0])
+        self.assertEqual((codex["tokens"], codex["estimated_usd"], codex["unpriced_tokens"]), (350, 0.5, 50))
+        self.assertEqual(codex["tokens_by_hour"], [0] * 18 + [350] + [0] * 5)
+        self.assertEqual((zai["tokens"], zai["estimated_usd"], zai["unpriced_tokens"]), (350, 0.1235, 50))
+        self.assertEqual(zai["tokens_by_hour"], [0] * 22 + [350, 0])
+        self.assertEqual(zai["usd_by_hour"], [0.0] * 22 + [0.1235, 0.0])
 
 
 class PublishDashboardTests(unittest.TestCase):
