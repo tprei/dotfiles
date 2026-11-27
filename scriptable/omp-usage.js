@@ -10,7 +10,6 @@ const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 const OUT_STEP_MS = 5 * MINUTE_MS;
-const VIEW_CACHE_MS = 5 * MINUTE_MS;
 const HOME = ["small", "medium", "large"];
 const VIEW_IDS = ["now", "forecast", "recent"];
 const VIEW_TITLES = { now: "Now", forecast: "Forecast", recent: "Recent" };
@@ -141,7 +140,7 @@ function readCache(family) {
 async function snapshot(family, action) {
   const cached = readCache(family);
   const switching = VIEW_IDS.includes(action) || action === NEXT_ACTION || action === USAGE_NEXT_ACTION;
-  if (switching && cached && Date.now() - cached.savedMs < VIEW_CACHE_MS) return { feed: cached.feed, offline: false };
+  if (switching && cached) return { feed: cached.feed, offline: false };
   try {
     const feed = decode(await fetchFeed(), family);
     ensureCacheDir();
@@ -785,15 +784,9 @@ function addForecastHero(body, item, now, position, count) {
   addWindowTitle(head, item.entry, 14);
   head.addSpacer();
   if (count < 2) return addForecastBody(body, item, now);
-  const next = head.addStack();
-  next.backgroundColor = RAISED;
-  next.cornerRadius = 10;
-  next.setPadding(3, 8, 3, 6);
-  next.centerAlignContent();
-  addLabel(next, `${position + 1}/${count}`, Font.semiboldRoundedSystemFont(11), SECONDARY);
-  next.addSpacer(3);
-  addSymbol(next, "chevron.right", 9, LABEL);
-  next.setAction("Next provider", { id: NEXT_ACTION });
+  addLabel(head, `${position + 1}/${count}`, Font.semiboldRoundedSystemFont(11), SECONDARY);
+  head.addSpacer(3);
+  addSymbol(head, "chevron.right", 9, SECONDARY);
   addForecastBody(body, item, now);
 }
 
@@ -896,6 +889,8 @@ function addControls(widget, view, result) {
     segment.setAction(VIEW_TITLES[id], { id });
   }
   row.addSpacer();
+  addGoTo(row, detailUrl(view));
+  row.addSpacer(6);
   const refresh = row.addStack();
   refresh.centerAlignContent();
   refresh.cornerRadius = 12;
@@ -922,13 +917,18 @@ function homeWidget(family, view, result) {
   widget.url = detailUrl(view);
   const body = widget.addStack();
   body.layoutVertically();
-  body.url = detailUrl(view);
+  if (view === "forecast") body.setAction("Next provider", { id: NEXT_ACTION });
+  else body.setAction(`Show ${VIEW_TITLES[nextView(view)]}`, { id: nextView(view) });
   if (view === "forecast") forecastView(body, family, result.feed, now);
   else if (view === "recent") recentView(body, family, result.feed, now);
   else nowView(body, family, result.feed, now);
   widget.addSpacer();
   addControls(widget, view, result);
   return widget;
+}
+
+function nextView(view) {
+  return VIEW_IDS[(VIEW_IDS.indexOf(view) + 1) % VIEW_IDS.length];
 }
 
 function addOthers(column, groups) {
@@ -1189,94 +1189,134 @@ function usdText(usd) {
   return `$${usd.toFixed(2)}`;
 }
 
+const BUCKET_HOURS = 3;
+
 function usageSlides(usage) {
-  const total = { provider: null, tokens: usage.total.tokens, estimated_usd: usage.total.estimated_usd, tokens_by_hour: usage.total.tokens_by_hour, parts: usage.providers };
+  const total = { provider: null, tokens: usage.total.tokens, estimated_usd: usage.total.estimated_usd, parts: usage.providers };
   return [total, ...usage.providers.map((provider) => ({ ...provider, parts: [provider] }))];
+}
+
+function bucketed(series) {
+  const buckets = [];
+  for (let index = 0; index < series.length; index += BUCKET_HOURS) {
+    buckets.push(series.slice(index, index + BUCKET_HOURS).reduce((sum, value) => sum + value, 0));
+  }
+  return buckets;
+}
+
+function partSeries(part, metric) {
+  return bucketed(metric === "usd" ? part.usd_by_hour : part.tokens_by_hour);
+}
+
+function bucketUsd(usd) {
+  if (usd <= 0) return "";
+  if (usd >= 10) return `$${Math.round(usd)}`;
+  if (usd >= 0.1) return `$${usd.toFixed(1)}`;
+  return "<$0.1";
+}
+
+function bucketText(value, metric) {
+  if (metric === "usd") return bucketUsd(value);
+  return value > 0 ? tokenText(value) : "";
+}
+
+function hourLabel(ms) {
+  const formatter = new DateFormatter();
+  formatter.dateFormat = "HH:mm";
+  return formatter.string(new Date(ms));
 }
 
 function fillBar(context, rect, color) {
   const path = new Path();
-  const radius = Math.min(rect.width / 2, rect.height / 2);
+  const radius = Math.min(rect.width / 2, rect.height / 2, 4);
   path.addRoundedRect(rect, radius, radius);
   context.addPath(path);
   context.setFillColor(color);
   context.fillPath();
 }
 
-function hourChart(slide, usage, width, height) {
+function drawCentered(context, text, rect, font, color) {
+  context.setFont(font);
+  context.setTextColor(color);
+  context.setTextAlignedCenter();
+  context.drawTextInRect(text, rect);
+}
+
+function bucketChart(slide, usage, metric, width, height, labelled) {
   const context = canvas(width, height);
-  const count = usage.hours;
+  const parts = slide.parts.map((part) => ({ provider: part.provider, values: partSeries(part, metric) }));
+  const count = parts.length ? parts[0].values.length : usage.hours / BUCKET_HOURS;
+  const totals = Array.from({ length: count }, (_, index) => parts.reduce((sum, part) => sum + part.values[index], 0));
+  const peak = Math.max(...totals) || 1;
+  const band = labelled ? 13 : 0;
+  const top = band;
+  const floor = height - band;
+  const room = floor - top - band;
   const slot = width / count;
-  const bar = Math.max(slot * 0.62, 2);
-  const peak = Math.max(1, ...slide.tokens_by_hour);
+  const bar = Math.max(slot * 0.56, 3);
   for (let index = 0; index < count; index += 1) {
     const x = index * slot + (slot - bar) / 2;
-    fillBar(context, new Rect(x, height - bar, bar, bar), new Color(NEUTRAL_HEX, 0.18));
-    let top = height;
-    for (const part of slide.parts) {
-      const tokens = part.tokens_by_hour[index];
-      if (!tokens) continue;
-      const size = Math.max((tokens / peak) * height, 1.5);
-      top -= size;
-      const current = index === count - 1;
-      fillBar(context, new Rect(x, top, bar, size), new Color(tintHex(part.provider), current ? 1 : 0.82));
+    const current = index === count - 1;
+    if (!totals[index]) {
+      fillBar(context, new Rect(x, floor - 3, bar, 3), new Color(NEUTRAL_HEX, 0.25));
     }
+    let cursor = floor;
+    for (const part of parts) {
+      const value = part.values[index];
+      if (!value) continue;
+      const size = Math.max((value / peak) * room, 2);
+      cursor -= size;
+      fillBar(context, new Rect(x, cursor, bar, size), new Color(tintHex(part.provider), current ? 1 : 0.8));
+    }
+    if (!labelled) continue;
+    const text = bucketText(totals[index], metric);
+    if (text) drawCentered(context, text, new Rect(index * slot, cursor - band, slot, band), Font.semiboldRoundedSystemFont(9), current ? LABEL : SECONDARY);
+    const start = usage.end_ms - usage.hours * usage.hour_ms + index * BUCKET_HOURS * usage.hour_ms;
+    drawCentered(context, current ? "now" : hourLabel(start), new Rect(index * slot, floor + 2, slot, band), Font.mediumSystemFont(9), current ? LABEL : SECONDARY);
   }
   return context.getImage();
 }
 
-function peakHour(slide, usage) {
-  const peak = Math.max(...slide.tokens_by_hour);
-  if (!peak) return null;
-  const index = slide.tokens_by_hour.indexOf(peak);
-  return { at: usage.end_ms - (usage.hours - index) * usage.hour_ms, tokens: peak };
+function addGoTo(row, url) {
+  const button = row.addStack();
+  button.backgroundColor = RAISED;
+  button.cornerRadius = 10;
+  button.setPadding(4, 5, 4, 5);
+  addSymbol(button, "arrow.up.right", 10, SECONDARY);
+  button.url = url;
 }
 
-function addUsageHeader(body, slide, position, count) {
-  const head = addRow(body);
+function addUsageHeader(widget, slide, metric, position, count) {
+  const head = addRow(widget);
   if (slide.provider) addLogo(head, slide.provider, 16);
   else addSymbol(head, "chart.bar.fill", 13, SECONDARY);
   head.addSpacer(6);
   addLabel(head, slide.provider ? providerName(slide.provider) : "All providers", Font.semiboldSystemFont(14), LABEL);
   head.addSpacer(5);
-  addLabel(head, "24h", Font.regularSystemFont(13), SECONDARY);
+  addLabel(head, metric === "usd" ? "API $ per 3h" : "tokens per 3h", Font.regularSystemFont(12), SECONDARY);
   head.addSpacer();
-  if (count < 2) return;
-  const next = head.addStack();
-  next.backgroundColor = RAISED;
-  next.cornerRadius = 10;
-  next.setPadding(3, 8, 3, 6);
-  next.centerAlignContent();
-  addLabel(next, `${position + 1}/${count}`, Font.semiboldRoundedSystemFont(11), SECONDARY);
-  next.addSpacer(3);
-  addSymbol(next, "chevron.right", 9, LABEL);
-  next.setAction("Next provider", { id: USAGE_NEXT_ACTION });
+  if (count > 1) {
+    addLabel(head, `${position + 1}/${count}`, Font.semiboldRoundedSystemFont(11), SECONDARY);
+    head.addSpacer(6);
+  }
+  addGoTo(head, detailUrl("recent"));
 }
 
-function addUsageFigures(body, slide, size) {
+function addUsageFigures(body, slide, metric, size) {
   const figures = body.addStack();
   figures.layoutHorizontally();
   figures.bottomAlignContent();
-  addLabel(figures, tokenText(slide.tokens), Font.boldRoundedSystemFont(size), LABEL);
+  addLabel(figures, tokenText(slide.tokens), Font.boldRoundedSystemFont(size), metric === "usd" ? SECONDARY : LABEL);
   figures.addSpacer(4);
   const unit = figures.addStack();
   unit.setPadding(0, 0, 3, 0);
   addLabel(unit, "tokens", Font.mediumSystemFont(12), SECONDARY);
   figures.addSpacer();
-  addLabel(figures, usdText(slide.estimated_usd), Font.boldRoundedSystemFont(size - 4), GREEN);
+  addLabel(figures, usdText(slide.estimated_usd), Font.boldRoundedSystemFont(size - 4), metric === "usd" ? GREEN : new Color("#30D158", 0.6));
   figures.addSpacer(3);
   const est = figures.addStack();
   est.setPadding(0, 0, 3, 0);
   addLabel(est, "API est.", Font.mediumSystemFont(11), SECONDARY);
-}
-
-function addHourAxis(body, usage) {
-  const axis = addRow(body);
-  addLabel(axis, clock(usage.end_ms - usage.hours * usage.hour_ms), Font.mediumSystemFont(10), SECONDARY);
-  axis.addSpacer();
-  addLabel(axis, clock(usage.end_ms - (usage.hours / 2) * usage.hour_ms), Font.mediumSystemFont(10), SECONDARY);
-  axis.addSpacer();
-  addLabel(axis, "now", Font.mediumSystemFont(10), SECONDARY);
 }
 
 function addUsageList(body, usage, slide) {
@@ -1297,10 +1337,16 @@ function addUsageList(body, usage, slide) {
   });
 }
 
+function usageBody(widget) {
+  const body = widget.addStack();
+  body.layoutVertically();
+  body.setAction("Next provider", { id: USAGE_NEXT_ACTION });
+  return body;
+}
+
 function usageWidget(family, result) {
   const widget = new ListWidget();
   widget.backgroundColor = CANVAS;
-  widget.url = detailUrl("recent");
   const usage = result.feed.usage;
   if (!usage || !usage.providers.length) {
     widget.setPadding(14, 16, 13, 16);
@@ -1309,42 +1355,37 @@ function usageWidget(family, result) {
     return widget;
   }
   const slides = usageSlides(usage);
-  const position = usageTurn() % slides.length;
+  const turn = usageTurn();
+  const position = Math.floor(turn / 2) % slides.length;
+  const metric = turn % 2 ? "usd" : "tokens";
   const slide = slides[position];
   if (family === "small") {
     widget.setPadding(14, 14, 13, 14);
-    const head = addRow(widget);
+    const body = usageBody(widget);
+    const head = addRow(body);
     if (slide.provider) addLogo(head, slide.provider, 14);
     else addSymbol(head, "chart.bar.fill", 12, SECONDARY);
     head.addSpacer(5);
     addLabel(head, slide.provider ? providerName(slide.provider) : "All", Font.semiboldSystemFont(13), LABEL);
     head.addSpacer();
-    addLabel(head, "24h", Font.regularSystemFont(12), SECONDARY);
-    widget.addSpacer();
-    addLabel(widget, tokenText(slide.tokens), Font.boldRoundedSystemFont(26), LABEL);
-    addLabel(widget, `${usdText(slide.estimated_usd)} API est.`, Font.semiboldRoundedSystemFont(13), GREEN);
-    widget.addSpacer(8);
-    widget.addImage(hourChart(slide, usage, 142, 30)).imageSize = new Size(142, 30);
+    addLabel(head, `${position + 1}/${slides.length}`, Font.semiboldRoundedSystemFont(11), SECONDARY);
+    body.addSpacer();
+    addLabel(body, tokenText(slide.tokens), Font.boldRoundedSystemFont(26), LABEL);
+    addLabel(body, `${usdText(slide.estimated_usd)} API est.`, Font.semiboldRoundedSystemFont(13), GREEN);
+    body.addSpacer(8);
+    body.addImage(bucketChart(slide, usage, metric, 142, 30, false)).imageSize = new Size(142, 30);
     if (result.offline) addLabel(widget, offlineText(result.feed), Font.semiboldSystemFont(10), AMBER).minimumScaleFactor = 0.7;
     return widget;
   }
-  widget.setPadding(14, 16, 13, 16);
-  addUsageHeader(widget, slide, position, slides.length);
-  widget.addSpacer(6);
-  addUsageFigures(widget, slide, family === "large" ? 28 : 24);
-  widget.addSpacer(8);
-  const chartHeight = family === "large" ? 110 : 40;
-  widget.addImage(hourChart(slide, usage, ART_WIDTH, chartHeight)).imageSize = new Size(ART_WIDTH, chartHeight);
-  widget.addSpacer(4);
-  addHourAxis(widget, usage);
-  if (family === "large") {
-    const peak = peakHour(slide, usage);
-    if (peak) {
-      widget.addSpacer(8);
-      addLabel(widget, `Busiest hour ${clock(peak.at)} · ${tokenText(peak.tokens)} tokens`, Font.mediumSystemFont(12), SECONDARY);
-    }
-    addUsageList(widget, usage, slide);
-  }
+  widget.setPadding(13, 16, 12, 16);
+  addUsageHeader(widget, slide, metric, position, slides.length);
+  widget.addSpacer(5);
+  const body = usageBody(widget);
+  addUsageFigures(body, slide, metric, family === "large" ? 28 : 24);
+  body.addSpacer(4);
+  const chartHeight = family === "large" ? 140 : 66;
+  body.addImage(bucketChart(slide, usage, metric, ART_WIDTH, chartHeight, true)).imageSize = new Size(ART_WIDTH, chartHeight);
+  if (family === "large") addUsageList(body, usage, slide);
   widget.addSpacer();
   if (result.offline) addLabel(widget, offlineText(result.feed), Font.semiboldSystemFont(11), AMBER).minimumScaleFactor = 0.75;
   return widget;
@@ -1355,7 +1396,11 @@ function usageMode(family) {
 }
 
 async function buildUsage(family, action) {
-  if (action === null || action === USAGE_NEXT_ACTION) advanceUsage();
+  if (action === null) advanceUsage();
+  if (action === USAGE_NEXT_ACTION) {
+    advanceUsage();
+    advanceUsage();
+  }
   const result = await snapshot(family, action);
   if (!result) return errorWidget(family, UNREACHABLE);
   return usageWidget(family, result);

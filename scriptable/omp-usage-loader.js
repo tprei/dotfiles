@@ -15,13 +15,18 @@ async function download() {
   return program;
 }
 
+function cached() {
+  if (!files.fileExists(codePath)) return null;
+  return new AsyncFunction(files.readString(codePath));
+}
+
 async function program() {
+  if (args.widgetAction && files.fileExists(codePath)) return cached();
   try {
     return await download();
   } catch (error) {
     console.error(error);
-    if (!files.fileExists(codePath)) return null;
-    return new AsyncFunction(files.readString(codePath));
+    return cached();
   }
 }
 
