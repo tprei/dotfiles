@@ -5,6 +5,7 @@ import sys
 import tempfile
 import threading
 import tomllib
+import time
 import unittest
 from dataclasses import replace
 from pathlib import Path
@@ -17,6 +18,7 @@ from offload.config import (
     OffloadConfig,
     SetupSpec,
     WorkerSpec,
+    compose_parallel,
     load_config,
     parse_config,
     parse_duration,
@@ -164,6 +166,49 @@ class ConfigTest(unittest.TestCase):
         with self.assertRaisesRegex(ConfigError, "setup.run: command is empty"):
             self._load(MINIMAL.replace('run = ["yarn install --frozen-lockfile"]', 'run = [" "]'))
 
+    def test_parallel_replaces_run(self) -> None:
+        config = self._load(
+            MINIMAL.replace('run = "yarn test"', 'parallel = { test = "yarn test", lint = "yarn lint" }')
+        )
+        task = config.tasks["check"]
+        self.assertEqual(task.parallel, (("test", "yarn test"), ("lint", "yarn lint")))
+        self.assertEqual(task.run, compose_parallel(task.parallel))
+
+    def test_run_and_parallel_are_exclusive(self) -> None:
+        message = "tasks.check: needs exactly one of run or parallel"
+        with self.assertRaisesRegex(ConfigError, message):
+            self._load(
+                MINIMAL.replace(
+                    'run = "yarn test"',
+                    'run = "yarn test"\nparallel = { test = "yarn test", lint = "yarn lint" }',
+                )
+            )
+        with self.assertRaisesRegex(ConfigError, message):
+            self._load(MINIMAL.replace('run = "yarn test"\n', ""))
+
+    def test_parallel_needs_two_steps(self) -> None:
+        with self.assertRaisesRegex(ConfigError, "tasks.check.parallel: needs at least 2 steps"):
+            self._load(MINIMAL.replace('run = "yarn test"', 'parallel = { test = "yarn test" }'))
+
+    def test_parallel_step_labels_are_checked(self) -> None:
+        for label in ["Lint", "1lint", "lint_all", "a" * 17]:
+            with self.subTest(label=label):
+                with self.assertRaisesRegex(ConfigError, "invalid step label"):
+                    self._load(
+                        MINIMAL.replace(
+                            'run = "yarn test"',
+                            f'parallel = {{ {label} = "yarn test", lint = "yarn lint" }}',
+                        )
+                    )
+        config = self._load(
+            MINIMAL.replace('run = "yarn test"', 'parallel = { lint-2 = "yarn lint", a = "yarn test" }')
+        )
+        self.assertEqual(config.tasks["check"].parallel, (("lint-2", "yarn lint"), ("a", "yarn test")))
+
+    def test_parallel_step_commands_rejected_when_blank(self) -> None:
+        with self.assertRaisesRegex(ConfigError, "tasks.check.parallel.lint: command is empty"):
+            self._load(MINIMAL.replace('run = "yarn test"', 'parallel = { test = "yarn test", lint = " " }'))
+
     def test_base_key_tracks_setup_and_inputs_only(self) -> None:
         config = self._load(MINIMAL)
         key = base_key(config)
@@ -206,6 +251,55 @@ class ConfigTest(unittest.TestCase):
             with self.subTest(text=text):
                 with self.assertRaises(ConfigError):
                     parse_duration(text)
+
+
+class ComposeParallelTest(unittest.TestCase):
+    def run_steps(self, *steps: tuple[str, str]) -> tuple[int, list[str]]:
+        completed = subprocess.run(
+            ["bash", "-c", compose_parallel(steps)],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+        return completed.returncode, completed.stdout.splitlines()
+
+    def test_exit_code_is_the_first_failure_in_declared_order(self) -> None:
+        code, lines = self.run_steps(("slow", "sleep 0.3; exit 3"), ("fast", "exit 5"))
+        self.assertEqual(code, 3)
+        self.assertEqual(lines[-2:], ["[slow] exited 3", "[fast] exited 5"])
+
+    def test_lines_are_prefixed_and_stderr_is_merged(self) -> None:
+        code, lines = self.run_steps(("alpha", "echo one; echo two >&2"), ("beta", "printf 'no newline'"))
+        self.assertEqual(code, 0)
+        self.assertIn("[alpha] one", lines)
+        self.assertIn("[alpha] two", lines)
+        self.assertIn("[beta] no newline", lines)
+        self.assertEqual(lines[-2:], ["[alpha] exited 0", "[beta] exited 0"])
+
+    def test_silent_step_still_reports_its_exit(self) -> None:
+        code, lines = self.run_steps(("quiet", "true"), ("loud", "echo hi"))
+        self.assertEqual(code, 0)
+        self.assertIn("[loud] hi", lines)
+        self.assertEqual(lines[-2:], ["[quiet] exited 0", "[loud] exited 0"])
+
+    def test_background_child_holding_stdout_does_not_hold_the_result(self) -> None:
+        with tempfile.TemporaryFile() as out:
+            started = time.monotonic()
+            completed = subprocess.run(
+                ["bash", "-c", compose_parallel((("server", "sleep 20 & echo started; exit 3"), ("ok", "true")))],
+                stdout=out,
+                stderr=subprocess.STDOUT,
+                check=False,
+                timeout=30,
+            )
+            elapsed = time.monotonic() - started
+            out.seek(0)
+            lines = out.read().decode().splitlines()
+        self.assertEqual(completed.returncode, 3)
+        self.assertLess(elapsed, 9)
+        self.assertIn("[server] started", lines)
+        self.assertEqual(lines[-2:], ["[server] exited 3", "[ok] exited 0"])
 
 
 class PolicyTest(unittest.TestCase):

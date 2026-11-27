@@ -1,4 +1,5 @@
 import re
+import shlex
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -29,6 +30,7 @@ class SetupSpec:
 class TaskSpec:
     name: str
     run: str
+    parallel: tuple[tuple[str, str], ...]
     timeout_s: int
     where: Literal["sprite", "local"]
     shards: int
@@ -50,8 +52,9 @@ class OffloadConfig:
 MAX_TIMEOUT_S = 6 * 3600
 _TOP_LEVEL_KEYS = frozenset({"version", "worker", "setup", "warm", "sync", "env", "tasks"})
 _WORKER_KEYS = frozenset({"memory_mb", "max", "egress", "setup_egress"})
-_TASK_KEYS = frozenset({"run", "timeout", "where", "shards", "artifacts", "env"})
+_TASK_KEYS = frozenset({"run", "parallel", "timeout", "where", "shards", "artifacts", "env"})
 _TASK_NAME = re.compile(r"[a-z][a-z0-9-]{0,31}")
+_STEP_LABEL = re.compile(r"[a-z][a-z0-9-]{0,15}")
 _DURATION = re.compile(r"([0-9]+)([smh])")
 _UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600}
 _ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -149,9 +152,18 @@ def _task(name: str, body: object, worker: WorkerSpec) -> TaskSpec:
         )
     table = _as_table(body, path)
     _check_keys(table, path, _TASK_KEYS)
+    if ("run" in table) == ("parallel" in table):
+        raise ConfigError(f"{path}: needs exactly one of run or parallel")
+    if "parallel" in table:
+        parallel = _parallel(table, path)
+        run = compose_parallel(parallel)
+    else:
+        parallel = ()
+        run = _command(_str(table, path, "run"), f"{path}.run")
     return TaskSpec(
         name=name,
-        run=_command(_str(table, path, "run"), f"{path}.run"),
+        run=run,
+        parallel=parallel,
         timeout_s=_timeout(_str(table, path, "timeout"), f"{path}.timeout"),
         where=_placement(_str(table, path, "where", default="sprite"), f"{path}.where"),
         shards=_int(table, path, "shards", low=1, high=worker.max, default=1),
@@ -161,6 +173,49 @@ def _task(name: str, body: object, worker: WorkerSpec) -> TaskSpec:
         ),
         env=MappingProxyType(_env(table, path, "env")),
     )
+
+
+def _parallel(table: Mapping[str, object], path: str) -> tuple[tuple[str, str], ...]:
+    where = f"{path}.parallel"
+    steps = _as_table(table["parallel"], where)
+    if len(steps) < 2:
+        raise ConfigError(f"{where}: needs at least 2 steps")
+    for label in steps:
+        if not _STEP_LABEL.fullmatch(label):
+            raise ConfigError(
+                f"{where}: invalid step label {label!r}, use lowercase letters, digits and "
+                "dashes, starting with a letter, at most 16 characters"
+            )
+    return tuple(
+        (label, _command(_str(steps, where, label), f"{where}.{label}")) for label in steps
+    )
+
+
+def compose_parallel(steps: tuple[tuple[str, str], ...]) -> str:
+    """Bash 3.2-compatible script running `steps` at once, prefixing their output, exiting with the first failure in order.
+
+    Each step's output goes through a process substitution so a background child that keeps the step's stdout open
+    can't hold up the wait; the summary then waits up to 5s for each step's output to drain. awk does the prefixing
+    because a shell read loop costs a syscall per byte.
+    """
+    lines = ["dir=$(mktemp -d) || exit 1", "trap 'rm -rf \"$dir\"' EXIT"]
+    for index, (label, command) in enumerate(steps):
+        prefix = shlex.quote(f"[{label}] ")
+        lines.append(
+            f"( bash -c {shlex.quote(command)} 2>&1; echo $? > \"$dir/{index}\" ) "
+            f"> >(awk -v p={prefix} '{{ print p $0; fflush() }}'; : 2>/dev/null > \"$dir/out{index}\") &"
+        )
+        lines.append(f"pid{index}=$!")
+    lines.append("wait " + " ".join(f'"$pid{index}"' for index in range(len(steps))))
+    drained = " && ".join(f'[ -e "$dir/out{index}" ]' for index in range(len(steps)))
+    lines.append(f"n=0; while [ $n -lt 50 ] && ! {{ {drained}; }}; do sleep 0.1; n=$((n + 1)); done")
+    for index, (label, _) in enumerate(steps):
+        lines.append(f"code{index}=$(cat \"$dir/{index}\" 2>/dev/null || echo 1)")
+        lines.append(f"printf '[%s] exited %s\\n' {shlex.quote(label)} \"$code{index}\"")
+    for index in range(len(steps)):
+        lines.append(f"if [ \"$code{index}\" != 0 ]; then exit \"$code{index}\"; fi")
+    lines.append("exit 0")
+    return "\n".join(lines)
 
 
 def _setup_inputs(root: Path, table: Mapping[str, object]) -> tuple[str, ...]:

@@ -133,6 +133,7 @@ def _exec(timeout: int, argv: list[str]) -> int:
     spec = TaskSpec(
         name="exec",
         run=command,
+        parallel=(),
         timeout_s=timeout,
         where="sprite",
         shards=1,
@@ -181,6 +182,12 @@ def _usage(days: int) -> int:
     return 0
 
 
+def _run_column(task: TaskSpec) -> str:
+    if task.parallel:
+        return "parallel: " + ", ".join(label for label, _ in task.parallel)
+    return task.run
+
+
 def _plan(name: str | None) -> int:
     config = load_config(_repo_root())
     tasks = [_task(config, name)] if name is not None else list(config.tasks.values())
@@ -206,7 +213,7 @@ def _plan(name: str | None) -> int:
     print()
     _print_table(
         ("task", "where", "shards", "timeout", "run"),
-        [(task.name, task.where, str(task.shards), f"{task.timeout_s}s", task.run) for task in tasks],
+        [(task.name, task.where, str(task.shards), f"{task.timeout_s}s", _run_column(task)) for task in tasks],
     )
     return 0
 

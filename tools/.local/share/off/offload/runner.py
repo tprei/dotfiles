@@ -653,6 +653,7 @@ def _run_local(config: OffloadConfig, task: TaskSpec, extra_args: list[str]) -> 
 
 def _run_sprite(config: OffloadConfig, task: TaskSpec, extra_args: list[str], launcher: Path | None) -> int:
     env = _base_env(config, task)
+    command = _command(task, extra_args)
     sprites = Sprites()
     host = host_slug()
     repo = repo_slug(config.root)
@@ -666,7 +667,7 @@ def _run_sprite(config: OffloadConfig, task: TaskSpec, extra_args: list[str], la
     run_pid(run_id).write_text(str(os.getpid()), encoding="utf-8")
     if launcher is not None:
         open_viewers(run_id, task.name, task.shards, config.root, launcher)
-    ctx = _Run(sprites, config, task, run_id, repo, _command(task, extra_args), env, _Live())
+    ctx = _Run(sprites, config, task, run_id, repo, command, env, _Live())
     try:
         exit_code = _combine(_run_shards(ctx, workers))
     except KeyboardInterrupt:
@@ -699,6 +700,8 @@ def _run_sprite(config: OffloadConfig, task: TaskSpec, extra_args: list[str], la
 
 
 def _command(task: TaskSpec, extra_args: list[str]) -> str:
+    if extra_args and task.parallel:
+        raise OffError("parallel tasks take no extra arguments")
     return task.run if not extra_args else f"{task.run} {shlex.join(extra_args)}"
 
 
