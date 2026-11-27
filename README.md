@@ -193,6 +193,15 @@ systemctl --user disable --now codex-usage-report.timer
 systemctl --user enable --now codex-usage-relay.timer
 ```
 
+Each run also writes iPhone widget files to `~/.local/state/codex-usage/widget/`: `small.png`, `medium.png`, and `large.png` for the home screen (same look as the photos, clock times in `OMP_USAGE_TZ`), plus `widget.json` with the lock screen summary, written last so it never points at a missing image. A widget failure exits 2 without skipping Telegram, and a Telegram failure doesn't skip the widget. openclaw serves them to the tailnet only, next to the app already on `/`:
+
+```sh
+sudo tailscale serve --bg --set-path /usage ~/.local/state/codex-usage/widget
+sudo tailscale serve --bg --set-path /omp-usage.js ~/dotfiles/dotfiles/scriptable/omp-usage.js
+```
+
+`scriptable/omp-usage.js` is the thin client for the free Scriptable app: open `https://openclaw.tail2fec5e.ts.net/omp-usage.js` in Safari on the phone, copy it into a new Scriptable script, then add a Scriptable widget (home screen small, medium, or large; lock screen circular, rectangular, or inline) and pick the script. Home sizes show the PNGs; lock screen sizes draw natively from `widget.json` with live countdowns. It asks iOS for a refresh every 15 minutes, caches the last good data for offline use, and opens the Telegram bot on tap. Layout changes ship from openclaw without touching the phone; only changes to the script itself need a re-paste.
+
 ### Sprite offload
 
 `tools/.local/bin/off` runs the tasks a repo declares in `offload.toml` on [Fly.io Sprites](https://fly.io/sprites) instead of this machine. Each machine gets its own workers per repo (`off-<host><hash>-<repo><hash>-<n>`; the hashes keep look-alike hostnames and same-named repos from different owners apart). A worker is built once from `[setup]`, locked down, and checkpointed. Setup sees only the `inputs` files, so nothing else from the tree ends up in the checkpoint. Every run restores that checkpoint, syncs the files `git ls-files -co --exclude-standard` lists (uncommitted edits and new files included, anything git ignores left out), runs the task, and lets the Sprite sleep. A change to `[setup]`, its `inputs`, or the worker policy rebuilds the worker.

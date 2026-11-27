@@ -6,6 +6,7 @@ import io
 import json
 import os
 import sqlite3
+import stat
 import subprocess
 import sys
 import tempfile
@@ -1913,6 +1914,82 @@ class RenderDashboardTests(unittest.TestCase):
             self.assertEqual(raised.exception.exit_code, 1)
 
 
+class WidgetExportTests(TempRootMixin):
+    def setUp(self):
+        super().setUp()
+        self.widget_dir = self.root / "widget"
+        env_patcher = mock.patch.dict(os.environ, {reporter.WIDGET_DIR_ENV: str(self.widget_dir), reporter.WIDGET_TZ_ENV: "Europe/London"})
+        env_patcher.start()
+        self.addCleanup(env_patcher.stop)
+        self.view = RenderDashboardTests.view(self)
+
+    def test_writes_three_images_then_manifest_with_private_modes(self):
+        renders = iter([b"small-png", b"medium-png", b"large-png"])
+        with mock.patch.object(reporter, "render_png", side_effect=lambda svg: next(renders)):
+            self.assertEqual(reporter.export_widget(self.view), 0)
+        self.assertEqual((self.widget_dir / "small.png").read_bytes(), b"small-png")
+        self.assertEqual((self.widget_dir / "medium.png").read_bytes(), b"medium-png")
+        self.assertEqual((self.widget_dir / "large.png").read_bytes(), b"large-png")
+        manifest = json.loads((self.widget_dir / "widget.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["schema"], 1)
+        self.assertEqual(manifest["generated_at_ms"], FIXED_NOW_MS)
+        self.assertEqual(manifest["images"], {"small": "small.png", "medium": "medium.png", "large": "large.png"})
+        self.assertEqual(manifest["lock"], json.loads(json.dumps(dashboard.widget_summary(self.view))))
+        self.assertEqual(stat.S_IMODE(self.widget_dir.stat().st_mode), 0o700)
+        self.assertEqual(
+            {path.name: stat.S_IMODE(path.stat().st_mode) for path in self.widget_dir.iterdir()},
+            {"small.png": 0o600, "medium.png": 0o600, "large.png": 0o600, "widget.json": 0o600},
+        )
+
+    def test_render_failure_keeps_the_previous_widget_files(self):
+        self.widget_dir.mkdir()
+        (self.widget_dir / "widget.json").write_bytes(b'{"schema":1,"old":true}')
+        (self.widget_dir / "small.png").write_bytes(b"old-small")
+        failure = reporter.UsageError("ffmpeg failed to render", 2)
+        with mock.patch.object(reporter, "render_png", side_effect=[b"new-small", failure]), \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(reporter.export_widget(self.view), 2)
+        self.assertEqual((self.widget_dir / "widget.json").read_bytes(), b'{"schema":1,"old":true}')
+        self.assertEqual((self.widget_dir / "small.png").read_bytes(), b"old-small")
+
+    def test_invalid_timezone_exits_one_and_writes_nothing(self):
+        with mock.patch.dict(os.environ, {reporter.WIDGET_TZ_ENV: "Mars/Olympus"}), \
+                mock.patch.object(reporter, "render_png") as render, \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(reporter.export_widget(self.view), 1)
+        render.assert_not_called()
+        self.assertFalse(self.widget_dir.exists())
+
+    def test_timezone_defaults_to_utc_and_accepts_iana_names(self):
+        with mock.patch.dict(os.environ, {reporter.WIDGET_TZ_ENV: ""}):
+            self.assertIs(reporter.widget_timezone(), timezone.utc)
+        self.assertEqual(str(reporter.widget_timezone()), "Europe/London")
+
+    def test_unknown_widget_family_is_rejected(self):
+        with self.assertRaises(ValueError):
+            dashboard.render_widget_svg(self.view, "extraLarge", timezone.utc)
+
+    def test_summary_orders_exhausted_then_running_out_then_hot(self):
+        def window(label, used, verdict, exhaust_in_ms=None, status="ok"):
+            pace = dashboard.Pace(verdict, 100.0, "+1.0%/h", "", exhaust_in_ms)
+            return dashboard.QuotaWindow(label, used, FIXED_NOW_MS + 3 * HOUR_MS, status, pace, 5 * HOUR_MS)
+
+        quota = dashboard.ProviderQuota(
+            "openai-codex",
+            "",
+            "Plus",
+            [
+                window("hot", 70.0, "HOT"),
+                window("running out", 60.0, "RUN OUT", exhaust_in_ms=HOUR_MS),
+                window("spent", 100.0, "EXHAUSTED", status="exhausted"),
+            ],
+        )
+        view = dashboard.Dashboard(FIXED_NOW_MS, FIXED_NOW_MS, [quota], None, None, ["WSL"], False)
+        summary = dashboard.widget_summary(view)
+        states = [summary["focus"]["state"], *(entry["state"] for entry in summary["next"])]
+        self.assertEqual(states, ["exhausted", "run_out", "hot"])
+
+
 class PublishDashboardTests(unittest.TestCase):
     def setUp(self):
         super().setUp()
@@ -1929,6 +2006,7 @@ class PublishDashboardTests(unittest.TestCase):
         forecast_patcher = mock.patch.object(reporter, "render_forecast", return_value=b"rendered-forecast")
         update_patcher = mock.patch.object(reporter, "update_pinned", return_value=True)
         announce_patcher = mock.patch.object(reporter, "announce_window_resets", return_value=0)
+        widget_patcher = mock.patch.object(reporter, "export_widget", return_value=0)
         self.run_usage = usage_patcher.start()
         self.collect_tokens = token_patcher.start()
         self.collect_history = history_patcher.start()
@@ -1936,7 +2014,8 @@ class PublishDashboardTests(unittest.TestCase):
         self.render_forecast = forecast_patcher.start()
         self.update = update_patcher.start()
         self.announce = announce_patcher.start()
-        for patcher in (usage_patcher, token_patcher, history_patcher, render_patcher, forecast_patcher, update_patcher, announce_patcher):
+        self.export_widget = widget_patcher.start()
+        for patcher in (usage_patcher, token_patcher, history_patcher, render_patcher, forecast_patcher, update_patcher, announce_patcher, widget_patcher):
             self.addCleanup(patcher.stop)
 
     def rendered_view(self):
@@ -2051,6 +2130,25 @@ class PublishDashboardTests(unittest.TestCase):
         reporter.publish_dashboard(self.config, force_pin=True)
         self.assertEqual(self.update.call_count, 2)
         self.assertTrue(all(call.kwargs["force_pin"] for call in self.update.call_args_list))
+
+    def test_widget_exports_once_before_the_first_telegram_update(self):
+        order = []
+        self.export_widget.side_effect = lambda view: order.append("widget") or 0
+        self.update.side_effect = lambda *args, **kwargs: order.append("telegram") or True
+        self.assertEqual(reporter.publish_dashboard(self.config), 0)
+        self.export_widget.assert_called_once_with(self.rendered_view())
+        self.assertEqual(order, ["widget", "telegram", "telegram"])
+
+    def test_widget_failure_exits_two_but_both_photos_still_update(self):
+        self.export_widget.return_value = 2
+        self.assertEqual(reporter.publish_dashboard(self.config), 2)
+        self.assertEqual(self.update.call_count, 2)
+
+    def test_telegram_failure_still_exports_the_widget(self):
+        self.update.side_effect = lambda *args, **kwargs: False
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(reporter.publish_dashboard(self.config), 2)
+        self.export_widget.assert_called_once()
 
 
 class RunModesTests(unittest.TestCase):

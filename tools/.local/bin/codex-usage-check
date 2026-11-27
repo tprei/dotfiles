@@ -32,11 +32,12 @@ import urllib.request
 import zlib
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timezone, tzinfo
 from html import escape
 from pathlib import Path
 from typing import IO, TypedDict
 from uuid import uuid4
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 CLAUDE_CONFIG_PATH = Path.home() / ".config" / "claude-usage" / "config"
 CODEX_STATE_PATH = Path.home() / ".config" / "codex-usage" / "state.json"
@@ -77,6 +78,10 @@ RELAY_SSH_TIMEOUT_SECONDS = 60
 RELAY_MAX_BYTES = 256 * 1024 * 1024
 RELAY_REMOTE_CHECK = "import gzip, json, sys; json.load(gzip.open(sys.argv[1]))"
 RELAY_ENTRY_FIELDS = {"tokens": ("records", "timestamp_ms"), "history": ("samples", "recorded_at_ms")}
+WIDGET_DIR_ENV = "OMP_USAGE_WIDGET_DIR"
+WIDGET_DIR = Path.home() / ".local" / "state" / "codex-usage" / "widget"
+WIDGET_TZ_ENV = "OMP_USAGE_TZ"
+WIDGET_SCHEMA = 1
 LIMITS_STATE_KEY = "message_id"
 LOCK_PATH = CODEX_STATE_PATH.parent / "update.lock"
 PINNED_STATE_KEY = "pinned_message_id"
@@ -1709,6 +1714,65 @@ def render_reset(events: list[dashboard.ResetEvent], now_ms: int) -> bytes:
     return render_png(svg)
 
 
+def render_widget(view: dashboard.Dashboard, family: str, tz: tzinfo) -> bytes:
+    require_dashboard()
+    try:
+        svg = dashboard.render_widget_svg(view, family, tz)
+    except OSError as error:
+        raise UsageError(f"failed to load dashboard assets: {error}", 1) from error
+    return render_png(svg)
+
+
+def widget_timezone() -> tzinfo:
+    value = os.environ.get(WIDGET_TZ_ENV, "").strip()
+    if not value:
+        return timezone.utc
+    try:
+        return ZoneInfo(value)
+    except (ZoneInfoNotFoundError, ValueError) as error:
+        raise UsageError(f"invalid {WIDGET_TZ_ENV}: {value!r}", 1) from error
+
+
+def write_widget_file(directory: Path, name: str, data: bytes) -> None:
+    descriptor, temporary = tempfile.mkstemp(dir=directory, prefix=f".{name}-", suffix=".tmp")
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(data)
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, directory / name)
+    except BaseException:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
+
+
+def export_widget(view: dashboard.Dashboard) -> int:
+    directory = Path(os.environ.get(WIDGET_DIR_ENV) or WIDGET_DIR)
+    try:
+        tz = widget_timezone()
+        images = {family: render_widget(view, family, tz) for family in dashboard.WIDGET_SIZES}
+    except UsageError as error:
+        return fail(error)
+    manifest = {
+        "schema": WIDGET_SCHEMA,
+        "generated_at_ms": view.now_ms,
+        "images": {family: f"{family}.png" for family in images},
+        "lock": dashboard.widget_summary(view),
+    }
+    try:
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(directory, 0o700)
+        for family, image in images.items():
+            write_widget_file(directory, f"{family}.png", image)
+        write_widget_file(directory, "widget.json", json.dumps(manifest, separators=(",", ":")).encode("utf-8"))
+    except OSError as error:
+        print(f"codex-usage-check: failed to write widget files: {error}", file=sys.stderr)
+        return 2
+    return 0
+
+
 def omp_payload_section() -> tuple[dict | None, int]:
     try:
         return run_omp_usage(), 0
@@ -1785,6 +1849,10 @@ def publish_dashboard(config: dict, *, force_pin: bool = False) -> int:
     checked_ms = time.time_ns() // 1_000_000
     try:
         view = build_dashboard(payload, tokens, history, checked_ms)
+    except UsageError as error:
+        return fail(error)
+    widget_code = export_widget(view)
+    try:
         image = render_dashboard(view)
         updated = update_pinned(
             config,
@@ -1795,10 +1863,10 @@ def publish_dashboard(config: dict, *, force_pin: bool = False) -> int:
             force_pin=force_pin,
         )
     except UsageError as error:
-        return fail(error)
+        return section_exit_code([fail(error), widget_code])
     if not updated:
         print("codex-usage-check: failed to update the usage dashboard message", file=sys.stderr)
-        return 2
+        return section_exit_code([2, widget_code])
     predictions_code = 0
     reset_code = 0
     if quotas_usable:
@@ -1808,7 +1876,7 @@ def publish_dashboard(config: dict, *, force_pin: bool = False) -> int:
         except UsageError as error:
             print(f"codex-usage-check: {error}", file=sys.stderr)
             reset_code = error.exit_code
-    return section_exit_code([*codes, predictions_code, reset_code])
+    return section_exit_code([*codes, widget_code, predictions_code, reset_code])
 
 
 def fail(error: Exception) -> int:

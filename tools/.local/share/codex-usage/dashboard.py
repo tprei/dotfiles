@@ -6,7 +6,7 @@ import re
 import unicodedata
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, tzinfo
 from functools import cache
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -1312,3 +1312,494 @@ def render_reset_svg(events: list[ResetEvent], now_ms: int) -> bytes:
         title=title,
         desc="Quota windows that rolled over with fresh capacity.",
     )
+
+
+WIDGET_SIZES: dict[str, tuple[int, int]] = {"small": (510, 510), "medium": (1092, 510), "large": (1092, 1146)}
+
+_W_EDGE = 48
+_W_INNER = 16
+_W_NUMBER = 120
+_W_TITLE = 46
+_W_STATUS = 40
+_W_BODY = 38
+_W_NOTE = 33
+_W_BADGE = 56
+_W_ROW_BADGE = 44
+_W_HERO_WIDTH = 404
+_W_LIST_X = 560
+_W_LIST_PITCH = 124
+_W_LIST_ROWS = 3
+_W_GROUP_HEAD = 68
+_W_ROW = 60
+_W_GROUP_GAP = 20
+_W_LABEL_WIDTH = 206
+_W_NUMBER_WIDTH = 124
+_W_STATUS_WIDTH = 344
+_W_FOOTER = 64
+_W_ISSUE = 64
+_W_OUT_STEP_MS = 5 * 60_000
+_W_LOCK_WINDOWS = 3
+_W_STATES = {
+    "EXHAUSTED": "exhausted",
+    "RUN OUT": "run_out",
+    "GATED": "gated",
+    "HOT": "hot",
+    "WARNING": "near",
+    "ON PACE": "on_pace",
+    "SPARE": "spare",
+}
+_W_SHORT_NAMES = {"openai-codex": "Codex", "anthropic": "Claude", "google-antigravity": "Antigravity"}
+_W_SPANS = {"hourly": "1h", "daily": "1d", "weekly": "7d", "monthly": "1mo"}
+_W_FILLER = frozenset({"quota", "limit", "token", "tokens", "request", "requests", "credit", "credits", "usage", "window"})
+_W_PARENS = re.compile(r"\(([^)]*)\)")
+_W_WORD = re.compile(r"[^\W_][\w.+-]*")
+
+
+def _w_provider(provider: str) -> str:
+    return _W_SHORT_NAMES.get(_PROVIDER_ALIASES.get(provider, provider)) or provider_name(provider)
+
+
+def _w_span(window: QuotaWindow) -> str:
+    if window.window_ms is not None:
+        if window.window_ms < 3_600_000:
+            return f"{max(round(window.window_ms / 60_000), 1)}min"
+        hours = round(window.window_ms / 3_600_000)
+        if hours < 48:
+            return f"{hours}h"
+        days = round(hours / 24)
+        return "1mo" if 28 <= days <= 31 else f"{days}d"
+    period = _PERIOD.search(window.label)
+    if period is not None:
+        unit = period[2][0].lower()
+        return period[1] + ("min" if unit == "m" else unit)
+    text = window.label.casefold()
+    return next((span for word, span in _W_SPANS.items() if word in text), "")
+
+
+def _w_qualifier(quota: ProviderQuota, window: QuotaWindow) -> str:
+    text = _clean_label(window.label, quota.provider)
+    skip = {word.casefold() for word in f"{provider_name(quota.provider)} {_w_provider(quota.provider)}".split()}
+    words: list[str] = []
+    seen: set[str] = set()
+    for piece in (_W_PARENS.sub(" ", text), *_W_PARENS.findall(text)):
+        for word in _W_WORD.findall(_PERIOD.sub(" ", piece)):
+            folded = word.casefold()
+            if folded in skip or folded in seen or folded in _W_FILLER or folded in _W_SPANS or folded.isdigit():
+                continue
+            seen.add(folded)
+            words.append(word)
+    return " ".join(words)
+
+
+def _w_label(quota: ProviderQuota, window: QuotaWindow) -> str:
+    label = " ".join(part for part in (_w_qualifier(quota, window), _w_span(window)) if part)
+    return label or _window_label(window, quota.provider)
+
+
+def _w_name(quota: ProviderQuota, window: QuotaWindow, tag: str) -> str:
+    return " ".join(part for part in (_w_provider(quota.provider), tag, _w_label(quota, window)) if part)
+
+
+def _w_tags(quotas: list[ProviderQuota]) -> list[str]:
+    providers = Counter(quota.provider for quota in quotas)
+    tags = []
+    for quota, account in zip(quotas, _account_labels(quotas)):
+        if providers[quota.provider] < 2:
+            tags.append("")
+        elif account.startswith("Account "):
+            tags.append("#" + account.split()[1])
+        else:
+            tags.append(account.partition("@")[0])
+    return tags
+
+
+def _w_clock(ms: int, now_ms: int, tz: tzinfo) -> str:
+    moment = datetime.fromtimestamp(ms / 1000, tz)
+    days = (moment.date() - datetime.fromtimestamp(now_ms / 1000, tz).date()).days
+    if days == 0:
+        return f"{moment:%H:%M}"
+    if 0 < days < 7:
+        return f"{moment:%a %H:%M}"
+    return f"{moment:%b} {moment.day}"
+
+
+def _w_out_ms(window: QuotaWindow, now_ms: int) -> int | None:
+    pace = window.pace
+    if _verdict(window) != "RUN OUT" or pace is None or pace.exhaust_in_ms is None:
+        return None
+    return now_ms + pace.exhaust_in_ms
+
+
+def _w_rank(window: QuotaWindow) -> tuple[int, float, float]:
+    verdict = _verdict(window)
+    reset = float(window.reset_ms) if window.reset_ms is not None else math.inf
+    pace = window.pace
+    if verdict == "EXHAUSTED":
+        return 0, -reset, 0.0
+    if verdict == "RUN OUT" and pace is not None and pace.exhaust_in_ms is not None:
+        return 1, float(pace.exhaust_in_ms), reset
+    used = window.used_percent
+    if used is None:
+        return 4, 0.0, reset
+    projected = pace.projected_percent if pace is not None else None
+    pressure = max(used, projected) if projected is not None else used
+    return (2 if verdict in _RISK_ORDER else 3), -pressure, reset
+
+
+def _w_ranked(view: Dashboard) -> list[tuple[ProviderQuota, QuotaWindow, str]]:
+    items = [
+        (quota, window, tag)
+        for quota, tag in zip(view.quotas, _w_tags(view.quotas))
+        for window in quota.windows
+    ]
+    return sorted(items, key=lambda item: _w_rank(item[1]))
+
+
+def _w_status(window: QuotaWindow, now_ms: int, tz: tzinfo) -> tuple[str, str, str, str]:
+    verdict = _verdict(window)
+    reset = ""
+    if window.reset_ms is not None and window.reset_ms > now_ms:
+        reset = _w_clock(window.reset_ms, now_ms, tz)
+    resets = f"Resets {reset}" if reset else ""
+    if verdict == "EXHAUSTED":
+        return "lock", _CORAL, f"Out till {reset}" if reset else "Out", ""
+    out_ms = _w_out_ms(window, now_ms)
+    if out_ms is not None:
+        rounded = round(out_ms / _W_OUT_STEP_MS) * _W_OUT_STEP_MS
+        if rounded <= now_ms:
+            rounded += _W_OUT_STEP_MS
+        return "alert", _CORAL, f"Out ~{_w_clock(rounded, now_ms, tz)}", resets
+    if verdict == "GATED":
+        return "lock", _AMBER, "Gated", resets
+    if verdict == "WARNING":
+        return "bolt", _AMBER, "Near limit", resets
+    projected = window.pace.projected_percent if window.pace is not None else None
+    if verdict in ("HOT", "ON PACE") and projected is not None:
+        _, tone, icon = _CHIPS[verdict]
+        share = f"~{round(projected)}%"
+        return icon, tone, f"{share} by {reset}" if reset else f"{share} at reset", ""
+    if verdict == "SPARE":
+        return "leaf", _MINT, f"Spare till {reset}" if reset else "Spare", ""
+    return "clock", _MUTED, resets, ""
+
+
+def _w_used(used: float) -> str:
+    if used >= 99.95:
+        return "100"
+    if 0 < used < 1:
+        return "<1"
+    return str(int(used))
+
+
+def _w_number(svg: _Svg, x: float, baseline: float, window: QuotaWindow, size: int, *, end: bool = False) -> float:
+    used = window.used_percent
+    if used is None:
+        width = size * 0.5
+        svg.rect(x - width if end else x, baseline - size * 0.32, width, size * 0.08, _MUTED, size * 0.04)
+        return width
+    digits = _w_used(used)
+    unit = size // 2
+    gap = max(2, size // 24)
+    width = _width(digits, size, mono=True) + gap + _width("%", unit, mono=True)
+    color = _CORAL if _verdict(window) == "EXHAUSTED" else _WHITE
+    svg.raw(
+        f'<text x="{x - width if end else x:.1f}" y="{baseline:.1f}" font-family="{_MONO_FONT}" font-weight="700">'
+        f'<tspan font-size="{size}" fill="{color}">{escape(digits)}</tspan>'
+        f'<tspan dx="{gap}" font-size="{unit}" fill="{_MUTED}">%</tspan></text>'
+    )
+    return width
+
+
+def _w_flame_size(window: QuotaWindow, size: int) -> int:
+    heat = _heat(window)
+    if heat == 2:
+        return size
+    if heat == 1:
+        return round(size * 0.78)
+    return 0
+
+
+def _w_flame(svg: _Svg, x: float, baseline: float, size: int) -> None:
+    if size:
+        svg.flame(x, baseline - size * 22 / 24, size)
+
+
+def _w_bar(svg: _Svg, x: float, y: float, width: float, height: int, window: QuotaWindow, provider: str) -> None:
+    radius = height / 2
+    svg.rect(x, y, width, height, _TRACK, radius)
+    used = window.used_percent
+    fill_end = x
+    if used is not None and used > 0:
+        fill = max(float(height), width * min(used, 100.0) / 100)
+        fill_end = x + fill
+        svg.rect(x, y, fill, height, _FLAME_ORANGE if _heat(window) else _provider_color(provider), radius)
+    projected = _projection(window)
+    if projected is None:
+        return
+    chip = _CHIPS.get(_verdict(window))
+    tone = chip[1] if chip is not None else _MUTED
+    marker = x + radius + (width - 2 * radius) * min(max(projected, 0.0), 100.0) / 100
+    if marker > fill_end:
+        start = max(x, fill_end - radius)
+        svg.rect(start, y, marker - start, height, tone, radius, opacity=0.3)
+    svg.circle(marker, y + radius, height * 0.62, tone, stroke=_INK, stroke_width=height * 0.28)
+
+
+def _w_badge(svg: _Svg, x: float, y: float, size: int, provider: str) -> None:
+    color = _provider_color(provider)
+    radius = size / 2
+    svg.circle(x + radius, y + radius, radius, color, opacity=0.16, stroke=_mix(color, _INK, 0.45), stroke_width=2)
+    if _logo(provider) is None:
+        svg.circle(x + radius, y + radius, size * 0.16, color)
+        return
+    inner = round(size * 0.58)
+    svg.logo_mark(x + radius - inner / 2, y + radius - inner / 2, inner, provider)
+
+
+def _w_title(svg: _Svg, x: float, baseline: float, room: float, name: str, account: str, size: int) -> None:
+    title = _fit(name, size, room, 700)
+    runs = [_Run(title, _WHITE, 700)]
+    rest = room - _width(title, size, 700) - 14
+    if account and rest > 80:
+        runs.append(_Run(_fit(account, _W_NOTE, rest), _MUTED, 500, _W_NOTE))
+    svg.runs(x, baseline, runs, size, gap=14)
+
+
+def _w_status_line(
+    svg: _Svg, x: float, baseline: float, room: float, status: tuple[str, str, str, str], size: int, icon: int
+) -> None:
+    name, tone, text, _ = status
+    if text:
+        weight = 500 if tone == _MUTED else 700
+        svg.icon(name, x, baseline - size * 0.78, icon, tone)
+        offset = icon + size * 0.3
+        svg.text(x + offset, baseline, _fit(text, size, room - offset, weight), size, tone, weight=weight)
+
+
+def _w_hero(
+    svg: _Svg, x: float, y: float, width: float, quota: ProviderQuota, window: QuotaWindow, tag: str,
+    now_ms: int, tz: tzinfo,
+) -> None:
+    _w_badge(svg, x, y, _W_BADGE, quota.provider)
+    name_x = x + _W_BADGE + 18
+    _w_title(svg, name_x, y + 44, x + width - name_x, _w_name(quota, window, tag), "", _W_TITLE)
+    number_width = _w_number(svg, x, y + 196, window, _W_NUMBER)
+    _w_flame(svg, x + number_width + 16, y + 192, _w_flame_size(window, 60))
+    _w_bar(svg, x, y + 226, width, 16, window, quota.provider)
+    status = _w_status(window, now_ms, tz)
+    _w_status_line(svg, x, y + 306, width, status, _W_STATUS, 36)
+    if status[3]:
+        svg.text(x + 48, y + 354, _fit(status[3], _W_NOTE, width - 48), _W_NOTE, _MUTED)
+
+
+def _w_focus_outline(svg: _Svg, window: QuotaWindow, now_ms: int, width: float, height: float) -> None:
+    opportunity = _opportunity(window, now_ms)
+    if opportunity:
+        svg.rainbow_outline(20, 20, width - 40, height - 40, 46, 0.92 if opportunity == 2 else 0.7)
+
+
+def _w_list_row(
+    svg: _Svg, x: float, y: float, right: float, quota: ProviderQuota, window: QuotaWindow, tag: str, now_ms: int,
+    tz: tzinfo,
+) -> None:
+    _w_badge(svg, x, y + 2, _W_ROW_BADGE, quota.provider)
+    text_x = x + _W_ROW_BADGE + 16
+    number_width = _w_number(svg, right, y + 36, window, _W_BODY, end=True)
+    flame = _w_flame_size(window, 32)
+    label_end = right - number_width - 16
+    if flame:
+        label_end -= flame + 8
+        _w_flame(svg, label_end + 8, y + 36, flame)
+    svg.text(text_x, y + 36, _fit(_w_name(quota, window, tag), _W_BODY, label_end - text_x, 700), _W_BODY, weight=700)
+    _w_bar(svg, text_x, y + 51, right - text_x, 10, window, quota.provider)
+    _w_status_line(svg, text_x, y + 95, right - text_x, _w_status(window, now_ms, tz), _W_NOTE, 30)
+
+
+def _w_table_row(
+    svg: _Svg, left: float, right: float, y: float, quota: ProviderQuota, window: QuotaWindow, now_ms: int, tz: tzinfo
+) -> None:
+    baseline = y + 42
+    status_x = right - _W_STATUS_WIDTH
+    number_right = status_x - 28
+    number_width = _w_number(svg, number_right, baseline, window, _W_BODY, end=True)
+    flame = _w_flame_size(window, 30)
+    _w_flame(svg, number_right - number_width - 8 - flame, baseline, flame)
+    svg.text(left, baseline, _fit(_w_label(quota, window), _W_BODY, _W_LABEL_WIDTH - 20), _W_BODY)
+    bar_x = left + _W_LABEL_WIDTH
+    _w_bar(svg, bar_x, y + 26, number_right - _W_NUMBER_WIDTH - bar_x, 12, window, quota.provider)
+    _w_status_line(svg, status_x, baseline, _W_STATUS_WIDTH, _w_status(window, now_ms, tz), _W_NOTE, 30)
+
+
+def _w_group_height(rows: int) -> int:
+    return _W_GROUP_HEAD + rows * _W_ROW + 8
+
+
+def _w_group(
+    svg: _Svg, top: float, width: float, quota: ProviderQuota, account: str, windows: list[QuotaWindow],
+    now_ms: int, tz: tzinfo,
+) -> None:
+    left = _W_EDGE + _W_INNER
+    right = width - _W_EDGE - _W_INNER
+    opportunities = [_opportunity(window, now_ms) for window in windows]
+    rainbow = bool(opportunities) and all(opportunities)
+    if rainbow:
+        svg.rainbow_outline(_W_EDGE, top, width - 2 * _W_EDGE, _w_group_height(len(windows)), 24, 0.9)
+    _w_badge(svg, left, top + 14, _W_ROW_BADGE, quota.provider)
+    _w_title(svg, left + 60, top + 50, right - left - 60, _w_provider(quota.provider), account, _W_BODY)
+    row_y = top + _W_GROUP_HEAD
+    if not windows:
+        svg.text(left, row_y + 42, "No windows reported", _W_NOTE, _MUTED)
+    for window, opportunity in zip(windows, opportunities):
+        if opportunity and not rainbow:
+            svg.rainbow_outline(
+                _W_EDGE, row_y + 2, width - 2 * _W_EDGE, _W_ROW - 4, 16, 0.92 if opportunity == 2 else 0.7
+            )
+        _w_table_row(svg, left, right, row_y, quota, window, now_ms, tz)
+        row_y += _W_ROW
+
+
+def _w_small(svg: _Svg, view: Dashboard, width: int, height: int, tz: tzinfo) -> str:
+    quota, window, tag = _w_ranked(view)[0]
+    _w_focus_outline(svg, window, view.now_ms, width, height)
+    _w_hero(svg, _W_EDGE, _W_EDGE, width - 2 * _W_EDGE, quota, window, tag, view.now_ms, tz)
+    return ""
+
+
+def _w_medium(svg: _Svg, view: Dashboard, width: int, height: int, tz: tzinfo) -> str:
+    ranked = _w_ranked(view)
+    quota, window, tag = ranked[0]
+    rest = ranked[1:1 + _W_LIST_ROWS]
+    hero_width = _W_HERO_WIDTH if rest else width - 2 * _W_EDGE
+    right = width - _W_EDGE - _W_INNER
+    opportunities = [_opportunity(item[1], view.now_ms) for item in rest]
+    uniform = all(opportunities)
+    if uniform and _opportunity(window, view.now_ms):
+        _w_focus_outline(svg, window, view.now_ms, width, height)
+    elif rest:
+        _w_focus_outline(svg, window, view.now_ms, hero_width + 2 * _W_EDGE, height)
+        if uniform:
+            svg.rainbow_outline(
+                _W_LIST_X - _W_INNER, _W_EDGE - 2, right - _W_LIST_X + 2 * _W_INNER,
+                len(rest) * _W_LIST_PITCH - 6, 24, 0.9,
+            )
+    _w_hero(svg, _W_EDGE, _W_EDGE, hero_width, quota, window, tag, view.now_ms, tz)
+    if rest:
+        rule_x = (_W_EDGE + hero_width + _W_LIST_X - _W_INNER) / 2
+        svg.raw(
+            f'<path d="M{rule_x:.1f} {_W_EDGE + 16}V{height - _W_EDGE - 16}" stroke="{_WHITE}" '
+            'stroke-opacity="0.1" stroke-width="2" stroke-linecap="round"/>'
+        )
+    for index, ((quota, window, tag), opportunity) in enumerate(zip(rest, opportunities)):
+        y = _W_EDGE + 12 + index * _W_LIST_PITCH
+        if opportunity and not uniform:
+            svg.rainbow_outline(
+                _W_LIST_X - _W_INNER, y - 14, right - _W_LIST_X + 2 * _W_INNER, _W_LIST_PITCH - 6, 20,
+                0.92 if opportunity == 2 else 0.7,
+            )
+        _w_list_row(svg, _W_LIST_X, y, right, quota, window, tag, view.now_ms, tz)
+    return ""
+
+
+def _w_large(svg: _Svg, view: Dashboard, width: int, height: int, tz: tzinfo) -> str:
+    top: float = _W_EDGE
+    if view.quota_issue:
+        svg.icon("alert", _W_EDGE + _W_INNER, top + 6, 32, _AMBER)
+        room = width - 2 * (_W_EDGE + _W_INNER) - 46
+        svg.text(_W_EDGE + _W_INNER + 46, top + 32, _fit(view.quota_issue, _W_NOTE, room, 700), _W_NOTE, _AMBER, weight=700)
+        top += _W_ISSUE
+    groups = sorted(
+        zip(view.quotas, _account_labels(view.quotas)),
+        key=lambda group: min((_w_rank(window) for window in group[0].windows), default=(5, 0.0, 0.0)),
+    )
+    limit = height - _W_EDGE - _W_FOOTER
+    hidden = 0
+    for quota, account in groups:
+        room = int((limit - top - _w_group_height(0)) // _W_ROW)
+        if hidden or room < 1:
+            hidden += len(quota.windows)
+            continue
+        shown = quota.windows[:room]
+        _w_group(svg, top, width, quota, account, shown, view.now_ms, tz)
+        hidden += len(quota.windows) - len(shown)
+        top += _w_group_height(max(len(shown), 1)) + _W_GROUP_GAP
+    return f"+{hidden} more" if hidden else ""
+
+
+def _w_unavailable(svg: _Svg, width: int, height: int, message: str) -> None:
+    center_x = width / 2
+    center_y = (height - _W_FOOTER) / 2 + 8
+    svg.circle(center_x, center_y - 44, 44, _SLATE, opacity=0.16, stroke=_mix(_SLATE, _INK, 0.45), stroke_width=2)
+    svg.icon("alert", center_x - 24, center_y - 70, 48, _SLATE)
+    svg.text(center_x, center_y + 50, _fit(message, _W_BODY, width - 2 * _W_EDGE, 700), _W_BODY, _MUTED, weight=700,
+             anchor="middle")
+
+
+def _w_footer(svg: _Svg, view: Dashboard, width: int, height: int, tz: tzinfo, note: str) -> None:
+    baseline = height - _W_EDGE - 2
+    updated = view.quota_updated_ms
+    stamp = "as of " + _w_clock(updated if updated is not None else view.now_ms, view.now_ms, tz)
+    right = width - _W_EDGE
+    stale = updated is not None and view.now_ms - updated >= _STALE_MS
+    if stale or (view.quotas and view.quota_issue):
+        svg.icon("alert", right - _width(stamp, _W_NOTE, 700) - 40, baseline - 26, 30, _AMBER)
+        svg.text(right, baseline, stamp, _W_NOTE, _AMBER, weight=700, anchor="end")
+    else:
+        svg.text(right, baseline, stamp, _W_NOTE, _MUTED, anchor="end")
+    if note:
+        svg.text(_W_EDGE + _W_INNER, baseline, note, _W_NOTE, _MUTED)
+
+
+def render_widget_svg(view: Dashboard, family: str, tz: tzinfo) -> bytes:
+    if family not in WIDGET_SIZES:
+        raise ValueError(f"unknown widget family: {family!r}")
+    width, height = WIDGET_SIZES[family]
+    svg = _Svg()
+    note = ""
+    if not any(quota.windows for quota in view.quotas):
+        message = view.quota_issue or ("No windows reported" if view.quotas else "Quota data unavailable")
+        _w_unavailable(svg, width, height, message)
+    elif family == "small":
+        note = _w_small(svg, view, width, height, tz)
+    elif family == "medium":
+        note = _w_medium(svg, view, width, height, tz)
+    else:
+        note = _w_large(svg, view, width, height, tz)
+    _w_footer(svg, view, width, height, tz, note)
+    return svg.finish(
+        height,
+        width=width,
+        title=f"OMP usage {family} widget",
+        desc="Most urgent quota windows with local run-out and reset times.",
+    )
+
+
+def _w_lock(quota: ProviderQuota, window: QuotaWindow, tag: str, now_ms: int) -> dict[str, object]:
+    used = window.used_percent
+    projected = window.pace.projected_percent if window.pace is not None else None
+    return {
+        "provider": " ".join(part for part in (_w_provider(quota.provider), tag) if part),
+        "window": _w_label(quota, window),
+        "used": round(used, 1) if used is not None else None,
+        "state": _W_STATES.get(_verdict(window), "unknown"),
+        "heat": _heat(window),
+        "projected": round(projected, 1) if projected is not None else None,
+        "out_ms": _w_out_ms(window, now_ms),
+        "reset_ms": window.reset_ms,
+    }
+
+
+def widget_summary(view: Dashboard) -> dict[str, object]:
+    """Lock screen data; `focus` and `next` follow one urgency order.
+
+    Exhausted windows come first, latest reset first. Windows projected to run out follow, soonest
+    exhaustion first. Gated, hot, and near-limit windows come next, then every other window with
+    usage; both tiers sort by the higher of used and projected percent, then soonest reset.
+    Windows without usage come last, and ties keep report order.
+    """
+    entries = [_w_lock(quota, window, tag, view.now_ms) for quota, window, tag in _w_ranked(view)[:_W_LOCK_WINDOWS]]
+    return {
+        "updated_ms": view.quota_updated_ms,
+        "issue": view.quota_issue,
+        "focus": entries[0] if entries else None,
+        "next": entries[1:],
+    }
