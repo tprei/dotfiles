@@ -44,10 +44,11 @@ class OffloadConfig:
     sync_exclude: tuple[str, ...]
     env_pass: tuple[str, ...]
     tasks: Mapping[str, TaskSpec]
+    warm: tuple[str, ...] = ()
 
 
 MAX_TIMEOUT_S = 6 * 3600
-_TOP_LEVEL_KEYS = frozenset({"version", "worker", "setup", "sync", "env", "tasks"})
+_TOP_LEVEL_KEYS = frozenset({"version", "worker", "setup", "warm", "sync", "env", "tasks"})
 _WORKER_KEYS = frozenset({"memory_mb", "max", "egress", "setup_egress"})
 _TASK_KEYS = frozenset({"run", "timeout", "where", "shards", "artifacts", "env"})
 _TASK_NAME = re.compile(r"[a-z][a-z0-9-]{0,31}")
@@ -109,6 +110,13 @@ def parse_config(root: Path, data: Mapping[str, object]) -> OffloadConfig:
         ),
     )
 
+    warm_table = _table(data, "", "warm")
+    _check_keys(warm_table, "warm", frozenset({"run"}))
+    warm = tuple(
+        _command(line, "warm.run")
+        for line in _str_list(warm_table, "warm", "run", min_items=1 if warm_table else 0)
+    )
+
     sync_table = _table(data, "", "sync")
     _check_keys(sync_table, "sync", frozenset({"exclude"}))
     env_table = _table(data, "", "env")
@@ -128,6 +136,7 @@ def parse_config(root: Path, data: Mapping[str, object]) -> OffloadConfig:
             _env_name(name, "env.pass") for name in _str_list(env_table, "env", "pass")
         ),
         tasks=MappingProxyType(tasks),
+        warm=warm,
     )
 
 

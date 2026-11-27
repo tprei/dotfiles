@@ -76,6 +76,7 @@ def _parser() -> argparse.ArgumentParser:
     reset = commands.add_parser("_reset")
     reset.add_argument("name")
     reset.add_argument("checkpoint")
+    reset.add_argument("--root", type=Path, required=True)
     return parser
 
 
@@ -95,7 +96,7 @@ def _dispatch(args: argparse.Namespace, extra: list[str]) -> int:
     if command == "exec":
         return _exec(args.timeout, extra)
     if command == "_reset":
-        return _reset(args.name, args.checkpoint)
+        return _reset(args.name, args.checkpoint, args.root)
     if command == "status":
         return _status()
     if command == "watch":
@@ -141,8 +142,8 @@ def _exec(timeout: int, argv: list[str]) -> int:
     return run_task(config, spec, [], launcher=Path(sys.argv[0]).resolve())
 
 
-def _reset(name: str, checkpoint: str) -> int:
-    reset_worker(Sprites(), name, checkpoint)
+def _reset(name: str, checkpoint: str, root: Path) -> int:
+    reset_worker(Sprites(), name, checkpoint, root)
     return 0
 
 
@@ -199,6 +200,7 @@ def _plan(name: str | None) -> int:
     print(f"workers  {worker_prefix(host, repo)}[1-{config.worker.max}]  {config.worker.memory_mb} MiB each")
     print(f"sync     {len(files)} files, {size / 1024**2:.1f} MiB (what git would add; sync excludes applied)")
     print(f"env      {env}")
+    print(f"warm     {'; '.join(config.warm) or 'none'}")
     print("policy")
     print(json.dumps(policies, indent=2))
     print()

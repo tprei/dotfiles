@@ -10,6 +10,7 @@ import textwrap
 import threading
 import time
 import unittest
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from unittest import mock
@@ -18,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / ".local" / "share" 
 
 from offload import runner
 from offload.cli import main
-from offload.config import load_config
+from offload.config import OffloadConfig, load_config
 from offload.identity import host_slug, repo_slug, worker_name
 from offload.sprites import Sprites
 from offload.state import Lease, lease_workers, lock_path, read_cache, write_cache
@@ -222,8 +223,8 @@ OFFLOAD_TOML = textwrap.dedent(
 ).lstrip()
 
 
-def _reset_inline(_launcher: Path, name: str, checkpoint_id: str) -> None:
-    runner.reset_worker(Sprites(), name, checkpoint_id)
+def _reset_inline(_launcher: Path, name: str, checkpoint_id: str, root: Path) -> None:
+    runner.reset_worker(Sprites(), name, checkpoint_id, root)
 
 
 class RunnerEndToEndTest(unittest.TestCase):
@@ -430,6 +431,94 @@ class RunnerEndToEndTest(unittest.TestCase):
         self.assertEqual(code, 0, output)
         self.assertNotIn("./untracked.txt", output)
 
+    def use_warm(self, *lines: str, setup: str = "echo setup-ran && ls -A > ../setup-saw") -> None:
+        warm = "[warm]\nrun = [" + ", ".join(json.dumps(line) for line in lines) + "]\n\n[env]"
+        text = OFFLOAD_TOML.replace("[env]", warm).replace("echo setup-ran && ls -A > ../setup-saw", setup)
+        (self.repo / "offload.toml").write_text(text)
+
+    def base_snapshot(self) -> Path:
+        cache = read_cache(self.workers[0])
+        assert cache is not None
+        return self.tmp / "fake-root" / f"{self.workers[0]}.cp" / cache.base_checkpoint / "work"
+
+    def test_warm_caches_land_in_the_base(self) -> None:
+        self.use_warm("echo primed > .tool-cache && echo warmed")
+        code, output = self.off("run", "ok")
+        self.assertEqual(code, 0, output)
+        self.assertIn("[warm] warmed", output)
+        self.assertEqual((self.base_snapshot() / ".tool-cache").read_text(), "primed\n")
+
+    def test_failing_warm_command_keeps_the_build(self) -> None:
+        self.use_warm("echo partial > .tool-cache; exit 7")
+        code, output = self.off("run", "ok")
+        self.assertEqual(code, 0, output)
+        self.assertIn("exited 7; its cache is kept", output)
+        self.assertTrue((self.base_snapshot() / ".tool-cache").exists())
+
+    def test_drift_counts_files_that_differ_from_the_base(self) -> None:
+        self.assertEqual(self.off("run", "ok")[0], 0)
+        (self.repo / "untracked.txt").write_text("changed\n")
+        (self.repo / "added.txt").write_text("new\n")
+        self.assertEqual(self.off("run", "ok")[0], 0)
+        cache = read_cache(self.workers[0])
+        assert cache is not None
+        self.assertEqual(cache.drift, 2)
+
+    def test_drift_past_the_threshold_refreshes_the_base(self) -> None:
+        self.use_warm("cat untracked.txt > .tool-cache", setup="mkdir -p gen && echo out > gen/setup.txt")
+        self.assertEqual(self.off("run", "ok")[0], 0)
+        old = read_cache(self.workers[0])
+        assert old is not None
+        (self.repo / "untracked.txt").write_text("changed\n")
+        (self.repo / "added.txt").write_text("new\n")
+        with mock.patch.object(runner, "REFRESH_AFTER_FILES", 1):
+            code, output = self.off("run", "ok")
+        self.assertEqual(code, 0, output)
+        new = read_cache(self.workers[0])
+        assert new is not None
+        self.assertNotEqual(new.base_checkpoint, old.base_checkpoint)
+        self.assertEqual((new.drift, new.clean), (0, True))
+        checkpoints = json.loads(self.state_file.read_text())["sprites"][self.workers[0]]["checkpoints"]
+        self.assertEqual([cp["id"] for cp in checkpoints], [new.base_checkpoint])
+        snapshot = self.base_snapshot()
+        self.assertEqual((snapshot / "untracked.txt").read_text(), "changed\n")
+        self.assertEqual((snapshot / ".tool-cache").read_text(), "changed\n")
+        self.assertTrue((snapshot / "added.txt").exists())
+        self.assertTrue((snapshot / "gen" / "setup.txt").exists())
+        (self.repo / "added.txt").unlink()
+        code, output = self.off("run", "tree")
+        self.assertEqual(code, 0, output)
+        self.assertNotIn("./added.txt", output)
+        self.assertIn("./gen/setup.txt", output)
+        self.assertIn(["POST", f"/checkpoints/{new.base_checkpoint}/restore", self.workers[0]], self.calls())
+
+    def test_failed_refresh_keeps_the_old_base(self) -> None:
+        self.assertEqual(self.off("run", "ok")[0], 0)
+        old = read_cache(self.workers[0])
+        assert old is not None
+        (self.repo / "untracked.txt").write_text("changed\n")
+        real_sync = runner._sync_up
+        calls: list[str] = []
+
+        def failing_refresh_sync(
+            sprites: Sprites, config: OffloadConfig, name: str, files: list[str], emit: Callable[[str], None]
+        ) -> int:
+            calls.append(name)
+            if len(calls) == 2:
+                raise runner.OffError("sync dropped")
+            return real_sync(sprites, config, name, files, emit)
+
+        with mock.patch.object(runner, "REFRESH_AFTER_FILES", 1), mock.patch.object(runner, "_sync_up", failing_refresh_sync):
+            code, output = self.off("run", "ok")
+        self.assertEqual(code, 0, output)
+        self.assertIn("base refresh failed", output)
+        cache = read_cache(self.workers[0])
+        assert cache is not None
+        self.assertEqual((cache.base_checkpoint, cache.clean), (old.base_checkpoint, True))
+        code, output = self.off("run", "show")
+        self.assertEqual(code, 0, output)
+        self.assertIn("./untracked.txt", output)
+
     def test_missing_cached_base_fails_once_then_lists_checkpoints_again(self) -> None:
         self.assertEqual(self.off("run", "ok")[0], 0)
         cache = read_cache(self.workers[0])
@@ -598,10 +687,8 @@ class SpawnResetTest(unittest.TestCase):
         )
         env = {"XDG_STATE_HOME": state, "OMP_BASH_SESSION": "session-1", "OFF_ORG": "kept"}
         with mock.patch.dict(os.environ, env):
-            runner._spawn_reset(launcher, "worker", "cp")
-        deadline = time.monotonic() + 10
-        while not seen.exists() and time.monotonic() < deadline:
-            time.sleep(0.05)
+            child = runner._spawn_reset(launcher, "worker", "cp", Path(state))
+        self.assertEqual(child.wait(timeout=10), 0)
         child_env = json.loads(seen.read_text())
         self.assertNotIn("OMP_BASH_SESSION", child_env)
         self.assertEqual(child_env["OFF_ORG"], "kept")

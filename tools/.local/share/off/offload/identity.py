@@ -50,13 +50,13 @@ def base_key(config: OffloadConfig) -> str:
         path: hashlib.sha256((config.root / path).read_bytes()).hexdigest()
         for path in sorted(config.setup.inputs)
     }
-    manifest = json.dumps(
-        {
-            "schema": BASE_SCHEMA,
-            "run": list(config.setup.run),
-            "inputs": inputs,
-            "setup_egress": list(config.worker.setup_egress),
-        },
-        sort_keys=True,
-    )
-    return hashlib.sha256(manifest.encode()).hexdigest()[:12]
+    manifest: dict[str, object] = {
+        "schema": BASE_SCHEMA,
+        "run": list(config.setup.run),
+        "inputs": inputs,
+        "setup_egress": list(config.worker.setup_egress),
+    }
+    if config.warm:
+        manifest["warm"] = list(config.warm)
+    encoded = json.dumps(manifest, sort_keys=True)
+    return hashlib.sha256(encoded.encode()).hexdigest()[:12]

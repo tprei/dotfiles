@@ -175,6 +175,19 @@ class ConfigTest(unittest.TestCase):
         (self.root / "yarn.lock").write_bytes(b"lock v2\n")
         self.assertNotEqual(base_key(config), key)
 
+    def test_warm_commands_parse_and_change_the_base_only_when_present(self) -> None:
+        plain = self._load(MINIMAL)
+        self.assertEqual(plain.warm, ())
+        warm_text = MINIMAL.replace("[tasks.check]", '[warm]\nrun = ["yarn tsc --noEmit"]\n\n[tasks.check]')
+        warmed = self._load(warm_text)
+        self.assertEqual(warmed.warm, ("yarn tsc --noEmit",))
+        self.assertNotEqual(base_key(warmed), base_key(plain))
+        self.assertNotEqual(base_key(warmed), base_key(self._load(warm_text.replace("--noEmit", "-b"))))
+        with self.assertRaisesRegex(ConfigError, "warm.run: needs at least 1 entry"):
+            self._load(MINIMAL.replace("[tasks.check]", "[warm]\nrun = []\n\n[tasks.check]"))
+        with self.assertRaisesRegex(ConfigError, "warm"):
+            self._load(MINIMAL.replace("[tasks.check]", '[warm]\nrun = ["x"]\nwhen = "always"\n\n[tasks.check]'))
+
     def test_load_config_reads_offload_toml(self) -> None:
         (self.root / "offload.toml").write_text(MINIMAL)
         config = load_config(self.root)

@@ -4,7 +4,7 @@ import json
 import os
 import subprocess
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeVar
@@ -102,10 +102,13 @@ class Sprites:
                 checkpoints.append(Checkpoint(id=checkpoint_id, comment=_optional_text(record, "comment")))
         return checkpoints
 
-    def checkpoint(self, name: str, comment: str) -> Checkpoint:
+    def checkpoint(self, name: str, comment: str, *, existing: Collection[str] = ()) -> Checkpoint:
+        """Create a checkpoint; `existing` lists ids taken before, so a same-comment older one is never mistaken for it."""
         events = _events(self.api(name, "/checkpoint", "POST", {"comment": comment}, timeout=LONG_CALL_TIMEOUT_S))
         _require_complete(events, "checkpoint")
-        created = next((cp for cp in self.checkpoints(name) if cp.comment == comment), None)
+        created = next(
+            (cp for cp in self.checkpoints(name) if cp.comment == comment and cp.id not in existing), None
+        )
         if created is None:
             raise SpriteError(f"checkpoint {comment!r} missing from {name} after create")
         return created
