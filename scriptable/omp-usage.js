@@ -16,6 +16,7 @@ const HOME = ["small", "medium", "large"];
 const VIEW_IDS = ["now", "forecast", "recent"];
 const VIEW_TITLES = { now: "Now", forecast: "Forecast", recent: "Recent" };
 const REFRESH_ACTION = "refresh";
+const NEXT_ACTION = "forecast-next";
 const SYMBOLS = {
   exhausted: "lock.fill",
   run_out: "exclamationmark.triangle.fill",
@@ -97,6 +98,7 @@ const files = FileManager.local();
 const cacheDir = files.joinPath(files.libraryDirectory(), "omp-usage");
 const feedPath = files.joinPath(cacheDir, "widget.json");
 const viewPath = files.joinPath(cacheDir, "view.txt");
+const turnPath = files.joinPath(cacheDir, "forecast-turn.txt");
 const logoCache = {};
 
 function ensureCacheDir() {
@@ -134,7 +136,7 @@ function readCache(family) {
 
 async function snapshot(family, action) {
   const cached = readCache(family);
-  const switching = VIEW_IDS.includes(action);
+  const switching = VIEW_IDS.includes(action) || action === NEXT_ACTION;
   if (switching && cached && Date.now() - cached.savedMs < VIEW_CACHE_MS) return { feed: cached.feed, offline: false };
   try {
     const feed = decode(await fetchFeed(), family);
@@ -156,6 +158,18 @@ function savedView() {
 function saveView(view) {
   ensureCacheDir();
   files.writeString(viewPath, view);
+}
+
+function forecastTurn() {
+  if (!files.fileExists(turnPath)) return 0;
+  const turn = Number.parseInt(files.readString(turnPath), 10);
+  return Number.isFinite(turn) ? turn : 0;
+}
+
+function advanceForecast() {
+  ensureCacheDir();
+  files.writeString(turnPath, String(forecastTurn() + 1));
+  saveView("forecast");
 }
 
 function detailUrl(view) {
@@ -617,19 +631,37 @@ function addTile(row, group, family, now) {
   tile.cornerRadius = 13.5;
   tile.size = new Size(TILE[family], 0);
   tile.setPadding(4, 0, 4, 0);
-  const art = addCentered(tile).addImage(ringImage({ ...group, second: null }, ring));
+  const art = addCentered(tile).addImage(ringImage(group, ring));
   art.imageSize = new Size(ring, ring);
   tile.addSpacer(4);
-  const figure = addCentered(tile);
-  if (group.hot) {
-    addFlame(figure, group.focus, 10);
-    figure.addSpacer(2);
-  }
-  addLabel(figure, percent(group.focus.used), Font.boldRoundedSystemFont(14), figureColor(group.focus)).minimumScaleFactor = 0.7;
-  const window = addCentered(tile);
-  addLabel(window, group.focus.short, Font.semiboldSystemFont(10), LABEL).minimumScaleFactor = 0.6;
+  addRingKey(tile, group.focus, "outer", group.hot);
+  if (group.second) addRingKey(tile, group.second, "inner", false);
   const caption = addCentered(tile);
   if (!addVerdict(caption, group.focus, now, day, 10)) addLabel(caption, ownerName(group.focus), Font.mediumSystemFont(10), SECONDARY);
+}
+
+function ringKeyImage(which, hex) {
+  const size = 10;
+  const context = canvas(size, size);
+  const center = size / 2;
+  arc(context, center, 4, 0, 360, new Color(hex, which === "outer" ? 1 : TRACK_ALPHA), 1.6, false);
+  arc(context, center, 1.6, 0, 360, new Color(hex, which === "inner" ? 1 : TRACK_ALPHA), 1.6, false);
+  return context.getImage();
+}
+
+function addRingKey(tile, entry, which, hot) {
+  const line = addCentered(tile);
+  line.centerAlignContent();
+  line.addImage(ringKeyImage(which, stateHex(entry))).imageSize = new Size(9, 9);
+  line.addSpacer(3);
+  const strong = which === "outer";
+  addLabel(line, percent(entry.used), strong ? Font.boldRoundedSystemFont(13) : Font.semiboldRoundedSystemFont(11), strong ? figureColor(entry) : SECONDARY).minimumScaleFactor = 0.7;
+  line.addSpacer(2);
+  addLabel(line, entry.short, Font.mediumSystemFont(strong ? 10 : 9), SECONDARY).minimumScaleFactor = 0.6;
+  if (hot) {
+    line.addSpacer(2);
+    addFlame(line, entry, 9);
+  }
 }
 
 function addVerdict(stack, entry, now, time, size) {
@@ -708,7 +740,20 @@ function addForecastHero(body, item, now, position, count) {
   const head = addRow(body);
   addWindowTitle(head, item.entry, 14);
   head.addSpacer();
-  if (count > 1) addLabel(head, `${position + 1}/${count}`, Font.mediumSystemFont(11), SECONDARY);
+  if (count < 2) return addForecastBody(body, item, now);
+  const next = head.addStack();
+  next.backgroundColor = RAISED;
+  next.cornerRadius = 10;
+  next.setPadding(3, 8, 3, 6);
+  next.centerAlignContent();
+  addLabel(next, `${position + 1}/${count}`, Font.semiboldRoundedSystemFont(11), SECONDARY);
+  next.addSpacer(3);
+  addSymbol(next, "chevron.right", 9, LABEL);
+  next.setAction("Next provider", { id: NEXT_ACTION });
+  addForecastBody(body, item, now);
+}
+
+function addForecastBody(body, item, now) {
   body.addSpacer(3);
   const [value, caption] = headline(item.plan, item.entry, now);
   const figure = body.addStack();
@@ -738,7 +783,7 @@ function forecastView(body, family, feed, now) {
     owners.add(key);
     return true;
   });
-  const lead = leads[Math.floor(now / CYCLE_MS) % leads.length];
+  const lead = leads[(Math.floor(now / CYCLE_MS) + forecastTurn()) % leads.length];
   addForecastHero(body, lead, now, leads.indexOf(lead), leads.length);
   if (family !== "large") return;
   const rest = items.filter((item) => item !== lead).slice(0, LIST_ROWS);
@@ -1088,6 +1133,7 @@ function lockWidget(family, result) {
 
 async function build(family, action) {
   if (VIEW_IDS.includes(action)) saveView(action);
+  if (action === NEXT_ACTION) advanceForecast();
   const result = await snapshot(family, action);
   if (!result) return errorWidget(family, UNREACHABLE);
   if (!HOME.includes(family)) return lockWidget(family, result);
