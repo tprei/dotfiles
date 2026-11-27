@@ -184,6 +184,7 @@ def sync_argv(config: OffloadConfig, shell: str) -> list[str]:
     return [
         "rsync",
         "-a",
+        "-z",
         "--from0",
         "--files-from=-",
         "--ignore-missing-args",
@@ -270,6 +271,9 @@ def ensure_ready(
     marker = base_marker(config)
     info = _find(sprites, name)
     if info is not None:
+        cache = _matching_cache(config, name)
+        if cache is not None:
+            return _ready(sprites, config, name, info, cache.base_checkpoint, clean=cache.clean)
         checkpoint = next((cp for cp in sprites.checkpoints(name) if cp.comment == marker), None)
         if checkpoint is not None:
             return _ready(sprites, config, name, info, checkpoint.id, clean=_clean_at(name, checkpoint.id))
@@ -383,17 +387,20 @@ def _clean_at(name: str, checkpoint_id: str) -> bool:
     return cache is not None and cache.clean and cache.base_checkpoint == checkpoint_id
 
 
-def _is_ready(config: OffloadConfig, name: str) -> bool:
+def _matching_cache(config: OffloadConfig, name: str) -> WorkerCache | None:
     cache = _cache_if_readable(name)
-    return (
-        cache is not None
-        and cache.base_key == base_key(config)
-        and cache.policy_hash == policy_hash(config.worker)
-    )
+    if cache is None or cache.base_key != base_key(config) or cache.policy_hash != policy_hash(config.worker):
+        return None
+    return cache
+
+
+def _is_ready(config: OffloadConfig, name: str) -> bool:
+    return _matching_cache(config, name) is not None
 
 
 def reset_worker(sprites: Sprites, name: str, checkpoint_id: str) -> None:
     marker = _reset_marker(name)
+    restored = False
     try:
         with Lease(lock_path(name)):
             cache = _cache_if_readable(name)
@@ -402,8 +409,20 @@ def reset_worker(sprites: Sprites, name: str, checkpoint_id: str) -> None:
             marker.write_text(str(os.getpid()), encoding="utf-8")
             sprites.restore(name, checkpoint_id)
             write_cache(name, replace(cache, clean=True))
+            restored = True
     finally:
         _clear_reset_marker(marker)
+    if restored:
+        _prune_restore_points(sprites, name)
+
+
+def _prune_restore_points(sprites: Sprites, name: str) -> None:
+    try:
+        for checkpoint in sprites.checkpoints(name):
+            if checkpoint.comment.startswith("pre-restore "):
+                sprites.delete_checkpoint(name, checkpoint.id)
+    except (SpriteError, OSError) as error:
+        _warn(f"could not prune restore points on {name}: {error}")
 
 
 def _reset_marker(name: str) -> Path:
@@ -650,7 +669,11 @@ def _execute(ctx: _Run, index: int, name: str, emit: Callable[[str], None]) -> i
 
 def _attempt(ctx: _Run, index: int, name: str, base_id: str, limit: int, emit: Callable[[str], None]) -> _Exec:
     if not _clean_at(name, base_id):
-        ctx.sprites.restore(name, base_id)
+        try:
+            ctx.sprites.restore(name, base_id)
+        except SpriteError:
+            delete_cache(name)
+            raise
     _touch(ctx.config, name, base_id, clean=False)
     files = sync_files(ctx.config)
     _sync_up(ctx.sprites, ctx.config, name, files, emit)

@@ -115,6 +115,9 @@ class Sprites:
         events = _retry_idempotent(lambda: _events(self.api(name, path, "POST", timeout=LONG_CALL_TIMEOUT_S)))
         _require_complete(events, "restore")
 
+    def delete_checkpoint(self, name: str, checkpoint_id: str) -> None:
+        self.api(name, f"/checkpoints/{checkpoint_id}", "DELETE")
+
     def set_network(self, name: str, rules: list[dict[str, str]]) -> None:
         self.api(name, "/policy/network", "POST", {"rules": rules})
 
