@@ -386,7 +386,7 @@ class RunnerEndToEndTest(unittest.TestCase):
         self.assertIn(["GET", "/checkpoints", self.workers[0]], self.calls()[before:])
 
     def test_sync_compresses_the_stream(self) -> None:
-        argv = runner.sync_argv(load_config(self.repo), "sh")
+        argv = runner.sync_argv(load_config(self.repo), "sh", by_content=False)
         self.assertEqual(argv[:3], ["rsync", "-a", "-z"])
 
     def test_setup_change_rebuilds_the_worker(self) -> None:
@@ -529,6 +529,64 @@ class RunnerEndToEndTest(unittest.TestCase):
         assert cache is not None
         self.assertEqual(cache.drift, 2)
 
+    def test_only_another_checkout_compares_content(self) -> None:
+        origin = ["git", "-C", str(self.repo), "remote", "add", "origin", "https://example.invalid/t.git"]
+        subprocess.run(origin, check=True)
+        self.workers = [worker_name(host_slug(), repo_slug(self.repo), index) for index in (1, 2)]
+        syncs = self.record_syncs()
+        for _ in range(2):
+            self.assertEqual(self.off("run", "ok")[0], 0)
+        self.assertNotIn("--checksum", syncs[-1])
+        other = self.tmp / "other"
+        shutil.copytree(self.repo, other, symlinks=True)
+        later = time.time() + 3600
+        for path in other.rglob("*"):
+            if ".git" not in path.relative_to(other).parts and path.is_file():
+                os.utime(path, (later, later))
+        os.chdir(other)
+        self.assertEqual(self.off("run", "ok")[0], 0)
+        self.assertIn("--checksum", syncs[-1])
+        self.assertEqual(self.drift(), 0)
+        (other / "untracked.txt").write_text("changed in other\n")
+        with mock.patch.object(runner, "REFRESH_AFTER_FILES", 1):
+            self.assertEqual(self.off("run", "ok")[0], 0)
+        self.assertEqual(self.off("run", "ok")[0], 0)
+        self.assertNotIn("--checksum", syncs[-1])
+        self.assertEqual(self.drift(), 0)
+
+    def test_a_base_from_an_unknown_checkout_is_retaken_once(self) -> None:
+        self.assertEqual(self.off("run", "ok")[0], 0)
+        cache = read_cache(self.workers[0])
+        assert cache is not None
+        write_cache(self.workers[0], replace(cache, base_root=""))
+        syncs = self.record_syncs()
+        self.assertEqual(self.off("run", "ok")[0], 0)
+        self.assertIn("--checksum", syncs[0])
+        refreshed = read_cache(self.workers[0])
+        assert refreshed is not None
+        self.assertNotEqual(refreshed.base_checkpoint, cache.base_checkpoint)
+        self.assertEqual(self.off("run", "ok")[0], 0)
+        self.assertNotIn("--checksum", syncs[-1])
+
+    def record_syncs(self) -> list[list[str]]:
+        syncs: list[list[str]] = []
+        real_rsync = runner._rsync
+
+        def recording_rsync(argv: list[str], stdin: str | None = None) -> subprocess.CompletedProcess[str]:
+            if "--files-from=-" in argv:
+                syncs.append(argv)
+            return real_rsync(argv, stdin=stdin)
+
+        patcher = mock.patch.object(runner, "_rsync", recording_rsync)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return syncs
+
+    def drift(self) -> int:
+        cache = read_cache(self.workers[0])
+        assert cache is not None
+        return cache.drift
+
     def test_drift_past_the_threshold_refreshes_the_base(self) -> None:
         self.use_warm("cat untracked.txt > .tool-cache", setup="mkdir -p gen && echo out > gen/setup.txt")
         self.assertEqual(self.off("run", "ok")[0], 0)
@@ -566,12 +624,18 @@ class RunnerEndToEndTest(unittest.TestCase):
         calls: list[str] = []
 
         def failing_refresh_sync(
-            sprites: Sprites, config: OffloadConfig, name: str, files: list[str], emit: Callable[[str], None]
+            sprites: Sprites,
+            config: OffloadConfig,
+            name: str,
+            files: list[str],
+            emit: Callable[[str], None],
+            *,
+            by_content: bool,
         ) -> int:
             calls.append(name)
             if len(calls) == 2:
                 raise runner.OffError("sync dropped")
-            return real_sync(sprites, config, name, files, emit)
+            return real_sync(sprites, config, name, files, emit, by_content=by_content)
 
         with mock.patch.object(runner, "REFRESH_AFTER_FILES", 1), mock.patch.object(runner, "_sync_up", failing_refresh_sync):
             code, output = self.off("run", "ok")

@@ -95,6 +95,7 @@ class WorkerCache:
     last_used: float
     clean: bool = False
     drift: int = 0
+    base_root: str = ""
 
 
 def read_cache(name: str) -> WorkerCache | None:
