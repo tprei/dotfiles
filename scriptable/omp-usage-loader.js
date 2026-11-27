@@ -3,6 +3,7 @@ const files = FileManager.local();
 const directory = files.joinPath(files.libraryDirectory(), "omp-usage");
 const codePath = files.joinPath(directory, "widget-code.js");
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+const CODE_FRESH_MS = 10 * 60 * 1000;
 
 async function download() {
   const request = new Request(SOURCE);
@@ -20,9 +21,14 @@ function cached() {
   return new AsyncFunction(files.readString(codePath));
 }
 
+function fresh() {
+  if (!files.fileExists(codePath)) return false;
+  if (config.runsInApp || (args.widgetAction && args.widgetAction.id === "refresh")) return false;
+  return Boolean(args.widgetAction) || Date.now() - files.modificationDate(codePath).getTime() < CODE_FRESH_MS;
+}
+
 async function program() {
-  const tapped = args.widgetAction && args.widgetAction.id !== "refresh";
-  if (tapped && files.fileExists(codePath)) return cached();
+  if (fresh()) return cached();
   try {
     return await download();
   } catch (error) {

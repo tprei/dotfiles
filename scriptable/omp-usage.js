@@ -5,6 +5,9 @@ const BASE = "https://openclaw.tail2fec5e.ts.net/usage/";
 const BOT_URL = "tg://resolve?domain=PreiPreiClaudeButlerBot";
 const FEED_SCHEMA = 2;
 const REFRESH_MS = 5 * 60 * 1000;
+const TAP_DEBOUNCE_MS = 2000;
+const SETTLE_MS = 20 * 1000;
+const AUTO_STEP_MS = 60 * 1000;
 const STALE_MS = 20 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -102,6 +105,7 @@ const feedPath = files.joinPath(cacheDir, "widget.json");
 const viewPath = files.joinPath(cacheDir, "view.txt");
 const turnPath = files.joinPath(cacheDir, "forecast-turn.txt");
 const usageTurnPath = files.joinPath(cacheDir, "usage-turn.txt");
+const actionPath = files.joinPath(cacheDir, "last-action.txt");
 const logoCache = {};
 
 function ensureCacheDir() {
@@ -137,10 +141,9 @@ function readCache(family) {
   }
 }
 
-async function snapshot(family, action) {
+async function snapshot(family, cacheFirst) {
   const cached = readCache(family);
-  const switching = VIEW_IDS.includes(action) || action === NEXT_ACTION || action === USAGE_NEXT_ACTION;
-  if (switching && cached) return { feed: cached.feed, offline: false };
+  if (cacheFirst && cached) return { feed: cached.feed, offline: false };
   try {
     const feed = decode(await fetchFeed(), family);
     ensureCacheDir();
@@ -163,26 +166,46 @@ function saveView(view) {
   files.writeString(viewPath, view);
 }
 
-function usageTurn() {
-  if (!files.fileExists(usageTurnPath)) return 0;
-  const turn = Number.parseInt(files.readString(usageTurnPath), 10);
+function turnOf(path) {
+  if (!files.fileExists(path)) return 0;
+  const turn = Number.parseInt(files.readString(path), 10);
   return Number.isFinite(turn) ? turn : 0;
 }
 
-function advanceUsage() {
+function advanceTurn(path, steps) {
   ensureCacheDir();
-  files.writeString(usageTurnPath, String(usageTurn() + 1));
+  files.writeString(path, String(turnOf(path) + steps));
+}
+
+function usageTurn() {
+  return turnOf(usageTurnPath);
 }
 
 function forecastTurn() {
-  if (!files.fileExists(turnPath)) return 0;
-  const turn = Number.parseInt(files.readString(turnPath), 10);
-  return Number.isFinite(turn) ? turn : 0;
+  return turnOf(turnPath);
 }
 
-function advanceForecast() {
-  ensureCacheDir();
-  files.writeString(turnPath, String(forecastTurn() + 1));
+function ageOf(path) {
+  if (!files.fileExists(path)) return Infinity;
+  return Date.now() - files.modificationDate(path).getTime();
+}
+
+function interaction(action) {
+  const since = ageOf(actionPath);
+  if (action !== null) {
+    ensureCacheDir();
+    files.writeString(actionPath, String(Date.now()));
+  }
+  return {
+    tapped: action !== null && action !== REFRESH_ACTION && since >= TAP_DEBOUNCE_MS,
+    settling: action === null && since < SETTLE_MS,
+    cacheFirst: action !== REFRESH_ACTION && (action !== null || since < SETTLE_MS),
+  };
+}
+
+function autoAdvance(path, steps, moment) {
+  if (moment.settling || ageOf(path) < AUTO_STEP_MS) return;
+  advanceTurn(path, steps);
 }
 
 function detailUrl(view) {
@@ -1396,22 +1419,24 @@ function usageMode(family) {
 }
 
 async function buildUsage(family, action) {
-  if (action === null) advanceUsage();
-  if (action === USAGE_NEXT_ACTION) {
-    advanceUsage();
-    advanceUsage();
-  }
-  const result = await snapshot(family, action);
+  const moment = interaction(action);
+  if (action === null) autoAdvance(usageTurnPath, 1, moment);
+  if (action === USAGE_NEXT_ACTION && moment.tapped) advanceTurn(usageTurnPath, 2);
+  const result = await snapshot(family, moment.cacheFirst);
   if (!result) return errorWidget(family, UNREACHABLE);
   return usageWidget(family, result);
 }
 
 async function build(family, action) {
   if (usageMode(family)) return buildUsage(family, action);
+  const moment = interaction(action);
   if (VIEW_IDS.includes(action)) saveView(action);
-  if (action === NEXT_ACTION) saveView("forecast");
-  if ((action === null && HOME.includes(family)) || action === NEXT_ACTION) advanceForecast();
-  const result = await snapshot(family, action);
+  if (action === NEXT_ACTION && moment.tapped) {
+    saveView("forecast");
+    advanceTurn(turnPath, 1);
+  }
+  if (action === null && HOME.includes(family)) autoAdvance(turnPath, 1, moment);
+  const result = await snapshot(family, moment.cacheFirst);
   if (!result) return errorWidget(family, UNREACHABLE);
   if (!HOME.includes(family)) return lockWidget(family, result);
   return family === "small" ? smallWidget(result) : homeWidget(family, savedView(), result);
