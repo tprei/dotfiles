@@ -18,7 +18,7 @@ Use when the repo's git top level has `offload.toml`, or before heavy tests, bui
 5. Before a Sprite run, `off` syncs the files `git ls-files -co --exclude-standard` lists to the worker, so uncommitted edits and new files are tested. Anything git ignores, and `.git` itself, is not synced. During a run, network access is limited to the `egress` domains in `offload.toml`.
 6. A worker is built from `[setup]` the first time it is used, and again after a change to `[setup]` or to its `inputs` files. Setup sees only the `inputs` files. Expect that run to be slow.
 7. Sprite tasks pull their `artifacts` paths back after the run to `~/.local/state/off/artifacts/<repo>/<run_id>/<shard>/` (under `$XDG_STATE_HOME/off` when that is set). A missing path is a warning, not a failure.
-8. The user can follow the live log: `off run` may open a Tern tab per Sprite shard, and `off watch RUN_ID [--shard N]` follows a shard's log in any terminal.
+8. The user can follow the live log: `off watch RUN_ID [--shard N]` follows a shard's log in any terminal, and `off run` opens a Tern session per Sprite shard only from an interactive terminal, so agent shells never get one.
 9. `off exec -- <command>` runs a command no task declares, on a Sprite worker, with `--timeout` (default 30m). Use it when the user asks to offload something no task covers.
 
 ## Exit codes
