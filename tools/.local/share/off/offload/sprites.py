@@ -4,16 +4,22 @@ import json
 import os
 import subprocess
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypeVar
 
 CALL_TIMEOUT_S = 120
 LONG_CALL_TIMEOUT_S = 900
 DESTROY_RETRY_WAIT_S = 3
+SPRITE_RETRY_WAITS_S = (1, 2)
 
 
 class SpriteError(Exception):
+    pass
+
+
+class SpriteCallError(SpriteError):
     pass
 
 
@@ -53,7 +59,9 @@ class Sprites:
         self._org = org or resolve_org()
 
     def list_sprites(self, prefix: str) -> list[SpriteInfo]:
-        payload = _json_object(self._call(["list", "-o", self._org, "--json", "--prefix", prefix], CALL_TIMEOUT_S))
+        payload = _retry_idempotent(
+            lambda: _json_object(self._call(["list", "-o", self._org, "--json", "--prefix", prefix], CALL_TIMEOUT_S))
+        )
         sprites = payload.get("sprites")
         if not isinstance(sprites, list):
             raise SpriteError("unexpected sprite list output: no sprites array")
@@ -87,7 +95,7 @@ class Sprites:
 
     def checkpoints(self, name: str) -> list[Checkpoint]:
         checkpoints: list[Checkpoint] = []
-        for item in _json_list(self.api(name, "/checkpoints")):
+        for item in _retry_idempotent(lambda: _json_list(self.api(name, "/checkpoints"))):
             record = _as_object(item, "checkpoint object")
             checkpoint_id = _text(record, "id")
             if checkpoint_id != "Current":
@@ -103,9 +111,8 @@ class Sprites:
         return created
 
     def restore(self, name: str, checkpoint_id: str) -> None:
-        events = _events(
-            self.api(name, f"/checkpoints/{checkpoint_id}/restore", "POST", timeout=LONG_CALL_TIMEOUT_S)
-        )
+        path = f"/checkpoints/{checkpoint_id}/restore"
+        events = _retry_idempotent(lambda: _events(self.api(name, path, "POST", timeout=LONG_CALL_TIMEOUT_S)))
         _require_complete(events, "restore")
 
     def set_network(self, name: str, rules: list[dict[str, str]]) -> None:
@@ -122,20 +129,19 @@ class Sprites:
             self._call(["config", "update", "-o", self._org, "-s", name, "--url-auth", "sprite"], CALL_TIMEOUT_S)
 
     def exec_argv(
-        self, name: str, command: list[str], *, cwd: str, upload: tuple[Path, str] | None
+        self, name: str, command: list[str], *, cwd: str, uploads: Sequence[tuple[Path, str]]
     ) -> list[str]:
         argv = [self._binary, "exec", "-o", self._org, "-s", name, "--no-stdin", "--no-port-forward", "--dir", cwd]
-        if upload is not None:
-            source, dest = upload
+        for source, dest in uploads:
             argv += ["--file", f"{source}:{dest}"]
         return [*argv, "--", *command]
 
     def start_exec(
-        self, name: str, command: list[str], *, cwd: str, upload: tuple[Path, str] | None
+        self, name: str, command: list[str], *, cwd: str, uploads: Sequence[tuple[Path, str]]
     ) -> subprocess.Popen[str]:
         try:
             return subprocess.Popen(
-                self.exec_argv(name, command, cwd=cwd, upload=upload),
+                self.exec_argv(name, command, cwd=cwd, uploads=uploads),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -156,11 +162,23 @@ class Sprites:
         except FileNotFoundError as error:
             raise SpriteError(f"sprite binary not found: {self._binary}") from error
         except subprocess.TimeoutExpired as error:
-            raise SpriteError(f"sprite {args[0]} timed out after {timeout:g}s") from error
+            raise SpriteCallError(f"sprite {args[0]} timed out after {timeout:g}s") from error
         if completed.returncode != 0:
             detail = summarize_output(completed.stderr) or summarize_output(completed.stdout)
-            raise SpriteError(f"sprite {args[0]} exited {completed.returncode}: {detail}")
+            raise SpriteCallError(f"sprite {args[0]} exited {completed.returncode}: {detail}")
         return completed.stdout
+
+
+T = TypeVar("T")
+
+
+def _retry_idempotent(call: Callable[[], T]) -> T:
+    for wait in SPRITE_RETRY_WAITS_S:
+        try:
+            return call()
+        except SpriteCallError:
+            time.sleep(wait)
+    return call()
 
 
 def _curl_args(method: str, body: object | None) -> list[str]:

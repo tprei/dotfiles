@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 import sys
@@ -324,6 +325,22 @@ class StateTest(unittest.TestCase):
         self.assertEqual(read_cache("off-a"), cache)
         delete_cache("off-a")
         self.assertIsNone(read_cache("off-a"))
+        delete_cache("off-a")
+
+    def test_cache_without_clean_key_loads_as_not_clean(self) -> None:
+        cache = WorkerCache(
+            base_key="base-a",
+            base_checkpoint="cp-1",
+            policy_hash="policy-a",
+            last_used=1.5,
+            clean=True,
+        )
+        write_cache("off-a", cache)
+        path = self.state / "off" / "workers" / "off-a.json"
+        record = json.loads(path.read_text())
+        del record["clean"]
+        path.write_text(json.dumps(record))
+        self.assertEqual(read_cache("off-a"), replace(cache, clean=False))
         delete_cache("off-a")
 
     def test_records_append_and_read(self) -> None:

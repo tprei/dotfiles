@@ -13,9 +13,9 @@ import sys
 import tempfile
 import threading
 import time
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import FrameType
@@ -38,18 +38,28 @@ from .state import (
     new_run_id,
     read_cache,
     run_log,
+    state_root,
     write_cache,
 )
 from .tern import open_viewers
 
 WORKDIR: Final = "/home/sprite/work"
 ENV_FILE: Final = "/tmp/off.env"
+OFF_DIR: Final = "/home/sprite/.off"
+BASE_LIST: Final = f"{OFF_DIR}/base-files"
+RUN_LIST: Final = "/tmp/off.files"
 EXIT_TIMEOUT: Final = 124
 EXIT_OFF_ERROR: Final = 125
 EXIT_INTERRUPTED: Final = 130
 KILL_GRACE_S: Final = 120
 SETUP_TIMEOUT_S: Final = 3600
 RSYNC_TIMEOUT_S: Final = 1800
+SYNC_ATTEMPTS: Final = 3
+SYNC_RETRY_DELAY_S: Final = 2
+RSYNC_TRANSPORT_CODES: Final = frozenset({10, 12, 30, 35, 255})
+TASK_ATTEMPTS: Final = 2
+# Worker .bashrc runs readline setup that warns without a tty; the exported stub silences it for login shells.
+NO_BIND: Final = "bind() { :; }; export -f bind; "
 IDLE_RETENTION_S: Final = 7 * 24 * 3600
 EXIT_SENTINEL: Final = "__off_exit__"
 _SENTINEL_LINE: Final = re.compile(rf"{EXIT_SENTINEL} ([0-9a-f]+) (\d+)\n?")
@@ -147,12 +157,12 @@ def base_marker(config: OffloadConfig) -> str:
     return f"off:base:{base_key(config)}:{policy_hash(config.worker)}"
 
 
-def run_task(config: OffloadConfig, task: TaskSpec, extra_args: list[str], *, viewer: Path | None = None) -> int:
+def run_task(config: OffloadConfig, task: TaskSpec, extra_args: list[str], *, launcher: Path | None = None) -> int:
     previous = signal.signal(signal.SIGTERM, _raise_interrupt)
     try:
         if task.where == "local":
             return _run_local(config, task, extra_args)
-        return _run_sprite(config, task, extra_args, viewer)
+        return _run_sprite(config, task, extra_args, launcher)
     except (OffError, SpriteError, OSError) as error:
         _say(sys.stderr, f"off: error: {error}\n")
         return EXIT_OFF_ERROR
@@ -205,7 +215,7 @@ def ensure_ready(
     if info is not None:
         checkpoint = next((cp for cp in sprites.checkpoints(name) if cp.comment == marker), None)
         if checkpoint is not None:
-            return _ready(sprites, config, name, info, checkpoint.id)
+            return _ready(sprites, config, name, info, checkpoint.id, clean=_clean_at(name, checkpoint.id))
         sprites.destroy(name)
         delete_cache(name)
     try:
@@ -216,12 +226,20 @@ def ensure_ready(
     info = _find(sprites, name)
     if info is None:
         raise OffError(f"worker {name} is missing after setup")
-    return _ready(sprites, config, name, info, checkpoint_id)
+    return _ready(sprites, config, name, info, checkpoint_id, clean=True)
 
 
-def _ready(sprites: Sprites, config: OffloadConfig, name: str, info: SpriteInfo, checkpoint_id: str) -> str:
+def _ready(
+    sprites: Sprites,
+    config: OffloadConfig,
+    name: str,
+    info: SpriteInfo,
+    checkpoint_id: str,
+    *,
+    clean: bool,
+) -> str:
     sprites.ensure_private_url(name, info)
-    _touch(config, name, checkpoint_id)
+    _touch(config, name, checkpoint_id, clean=clean)
     return checkpoint_id
 
 
@@ -235,13 +253,13 @@ def _bootstrap(
         sprites, name, ["mkdir", "-p", WORKDIR], live, cwd="/home/sprite", failure="could not create work dir"
     )
     # Only the setup inputs go in before setup: setup has open egress and its tree is checkpointed for good.
-    _sync_up(sprites, config, name, list(config.setup.inputs))
+    _sync_up(sprites, config, name, list(config.setup.inputs), setup_emit)
     for line in config.setup.run:
         bounded = f"timeout --kill-after=15s {SETUP_TIMEOUT_S}s bash -lc {shlex.quote(line)}"
         _exec_checked(
             sprites,
             name,
-            ["bash", "-lc", bounded],
+            ["bash", "-c", NO_BIND + bounded],
             live,
             cwd=WORKDIR,
             failure=f"setup failed: {line}",
@@ -252,6 +270,21 @@ def _bootstrap(
     sprites.set_network(name, run_network_rules(config.worker))
     sprites.set_memory(name, memory_policy(config.worker.memory_mb))
     _exec_checked(sprites, name, ["true"], live, cwd=WORKDIR, failure="worker did not come back after lockdown")
+    files = sync_files(config)
+    _sync_up(sprites, config, name, files, setup_emit)
+    listing = _write_file_list(files)
+    try:
+        _exec_checked(
+            sprites,
+            name,
+            ["bash", "-c", f"mkdir -p {OFF_DIR} && mv {RUN_LIST} {BASE_LIST}"],
+            live,
+            cwd=WORKDIR,
+            failure="could not record the base file list",
+            uploads=[(listing, RUN_LIST)],
+        )
+    finally:
+        listing.unlink(missing_ok=True)
     return sprites.checkpoint(name, marker).id
 
 
@@ -267,7 +300,7 @@ def _find(sprites: Sprites, name: str) -> SpriteInfo | None:
     return next((info for info in sprites.list_sprites(name) if info.name == name), None)
 
 
-def _touch(config: OffloadConfig, name: str, checkpoint_id: str) -> None:
+def _touch(config: OffloadConfig, name: str, checkpoint_id: str, *, clean: bool) -> None:
     write_cache(
         name,
         WorkerCache(
@@ -275,8 +308,65 @@ def _touch(config: OffloadConfig, name: str, checkpoint_id: str) -> None:
             base_checkpoint=checkpoint_id,
             policy_hash=policy_hash(config.worker),
             last_used=time.time(),
+            clean=clean,
         ),
     )
+
+
+def _cache_if_readable(name: str) -> WorkerCache | None:
+    try:
+        return read_cache(name)
+    except (ValueError, TypeError) as error:
+        _warn(f"unreadable cache for {name}: {error}")
+        return None
+
+
+def _clean_at(name: str, checkpoint_id: str) -> bool:
+    cache = _cache_if_readable(name)
+    return cache is not None and cache.clean and cache.base_checkpoint == checkpoint_id
+
+
+def _is_ready(config: OffloadConfig, name: str) -> bool:
+    cache = _cache_if_readable(name)
+    return (
+        cache is not None
+        and cache.base_key == base_key(config)
+        and cache.policy_hash == policy_hash(config.worker)
+    )
+
+
+def reset_worker(sprites: Sprites, name: str, checkpoint_id: str) -> None:
+    with Lease(lock_path(name)):
+        cache = _cache_if_readable(name)
+        if cache is None or cache.clean or cache.base_checkpoint != checkpoint_id:
+            return
+        sprites.restore(name, checkpoint_id)
+        write_cache(name, replace(cache, clean=True))
+
+
+def _spawn_reset(launcher: Path, name: str, checkpoint_id: str) -> None:
+    with (state_root() / "reset.log").open("a", encoding="utf-8") as log:
+        subprocess.Popen(
+            [sys.executable, str(launcher), "_reset", name, checkpoint_id],
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+
+
+def _reset_workers(sprites: Sprites, workers: list[str], launcher: Path | None) -> None:
+    for name in workers:
+        cache = _cache_if_readable(name)
+        if cache is None or cache.clean or not cache.base_checkpoint:
+            continue
+        try:
+            if launcher is None:
+                reset_worker(sprites, name, cache.base_checkpoint)
+            else:
+                _spawn_reset(launcher, name, cache.base_checkpoint)
+        except (SpriteError, OSError) as error:
+            _warn(f"could not reset worker {name}: {error}")
 
 
 def _run_local(config: OffloadConfig, task: TaskSpec, extra_args: list[str]) -> int:
@@ -300,7 +390,7 @@ def _run_local(config: OffloadConfig, task: TaskSpec, extra_args: list[str]) -> 
         return EXIT_INTERRUPTED
 
 
-def _run_sprite(config: OffloadConfig, task: TaskSpec, extra_args: list[str], viewer: Path | None) -> int:
+def _run_sprite(config: OffloadConfig, task: TaskSpec, extra_args: list[str], launcher: Path | None) -> int:
     env = _base_env(config, task)
     sprites = Sprites()
     host = host_slug()
@@ -310,10 +400,11 @@ def _run_sprite(config: OffloadConfig, task: TaskSpec, extra_args: list[str], vi
     started_at = datetime.now(UTC)
     started = time.monotonic()
     _say(sys.stderr, f"off: run {run_id} ({task.name}, {task.shards} shard(s)) log: {run_log(run_id, 1)}\n")
-    leases = lease_workers(names, task.shards)
+    ready = [name for name in names[task.shards :] if _is_ready(config, name)]
+    leases = lease_workers([*names[: task.shards], *ready], task.shards)
     workers = [name for name, _ in leases]
-    if viewer is not None:
-        open_viewers(run_id, task.shards, config.root, viewer)
+    if launcher is not None:
+        open_viewers(run_id, task.shards, config.root, launcher)
     ctx = _Run(sprites, config, task, run_id, repo, _command(task, extra_args), env, _Live())
     try:
         exit_code = _combine(_run_shards(ctx, workers))
@@ -322,6 +413,7 @@ def _run_sprite(config: OffloadConfig, task: TaskSpec, extra_args: list[str], vi
     finally:
         for _, lease in leases:
             lease.release()
+        _reset_workers(sprites, workers, launcher)
     if task.artifacts:
         _say(sys.stderr, f"off: artifacts: {artifact_root(repo, run_id)}/\n")
     try:
@@ -398,46 +490,74 @@ def _run_shard(ctx: _Run, index: int, name: str) -> int:
 
 def _execute(ctx: _Run, index: int, name: str, emit: Callable[[str], None]) -> int:
     base_id = ensure_ready(ctx.sprites, ctx.config, name, ctx.live, lambda line: emit(f"[setup] {line}"))
-    ctx.sprites.restore(name, base_id)
-    _sync_up(ctx.sprites, ctx.config, name, sync_files(ctx.config))
-    envfile = _write_env_file(
-        {**ctx.env, "CI": "1", "OFF": "1", "OFF_SHARD": str(index), "OFF_SHARDS": str(ctx.task.shards)}
-    )
     limit = ctx.task.timeout_s
-    nonce = secrets.token_hex(8)
-    sentinel = f"{EXIT_SENTINEL} {nonce}"
-    script = (
-        f"if ! . {ENV_FILE}; then printf '\\n{sentinel} {EXIT_OFF_ERROR}\\n'; exit {EXIT_OFF_ERROR}; fi; "
-        f"rm -f {ENV_FILE}; start=$SECONDS; "
-        f"timeout --kill-after=15s {limit}s bash -lc {shlex.quote(ctx.command)}; code=$?; "
-        f'if [ "$code" -eq 137 ] && [ $((SECONDS - start)) -ge {limit} ]; then code={EXIT_TIMEOUT}; fi; '
-        f"printf '\\n{sentinel} %d\\n' \"$code\"; exit \"$code\""
-    )
-    try:
-        proc = ctx.sprites.start_exec(name, ["bash", "-lc", script], cwd=WORKDIR, upload=(envfile, ENV_FILE))
-        with ctx.live.track(proc):
-            result = _pump(proc, emit, limit + KILL_GRACE_S, nonce)
-    finally:
-        envfile.unlink(missing_ok=True)
-    if result.task_code is None:
-        _stop_remote(ctx.sprites, name, base_id)
+    attempt = 1
+    while True:
+        result = _attempt(ctx, index, name, base_id, emit)
+        if result.task_code is not None:
+            _pull_artifacts(ctx, name, index)
+            _touch(ctx.config, name, base_id, clean=False)
+            return result.task_code
+        _stop_remote(ctx.sprites, ctx.config, name, base_id)
         if ctx.live.interrupted.is_set():
             emit("off: interrupted; the remote task was stopped\n")
             return EXIT_INTERRUPTED
         if result.expired:
             emit(f"off: local watchdog stopped the task after {limit + KILL_GRACE_S}s\n")
             return EXIT_TIMEOUT
-        raise OffError(f"lost the task on {name}: sprite exec exited {result.client_code} without a result")
-    _pull_artifacts(ctx, name, index)
-    _touch(ctx.config, name, base_id)
-    return result.task_code
+        if attempt == TASK_ATTEMPTS:
+            raise OffError(f"lost the task on {name}: sprite exec exited {result.client_code} without a result")
+        attempt += 1
+        emit(f"off: lost the connection to {name}; retrying once\n")
 
 
-def _stop_remote(sprites: Sprites, name: str, base_id: str) -> None:
+def _attempt(ctx: _Run, index: int, name: str, base_id: str, emit: Callable[[str], None]) -> _Exec:
+    if not _clean_at(name, base_id):
+        ctx.sprites.restore(name, base_id)
+    _touch(ctx.config, name, base_id, clean=False)
+    files = sync_files(ctx.config)
+    _sync_up(ctx.sprites, ctx.config, name, files, emit)
+    envfile = _write_env_file(
+        {**ctx.env, "CI": "1", "OFF": "1", "OFF_SHARD": str(index), "OFF_SHARDS": str(ctx.task.shards)}
+    )
+    listing = _write_file_list(files)
+    limit = ctx.task.timeout_s
+    nonce = secrets.token_hex(8)
+    sentinel = f"{EXIT_SENTINEL} {nonce}"
+    script = (
+        f"if ! . {ENV_FILE}; then printf '\\n{sentinel} {EXIT_OFF_ERROR}\\n'; exit {EXIT_OFF_ERROR}; fi; "
+        f"rm -f {ENV_FILE}; "
+        f"if [ -f {BASE_LIST} ]; then "
+        f"LC_ALL=C comm -z -23 <(LC_ALL=C sort -zu {BASE_LIST}) <(LC_ALL=C sort -zu {RUN_LIST}) "
+        f"| xargs -0 -r rm -f --; fi; "
+        f"rm -f {RUN_LIST}; "
+        f"start=$SECONDS; "
+        f"timeout --kill-after=15s {limit}s bash -lc {shlex.quote(ctx.command)}; code=$?; "
+        f'if [ "$code" -eq 137 ] && [ $((SECONDS - start)) -ge {limit} ]; then code={EXIT_TIMEOUT}; fi; '
+        f"printf '\\n{sentinel} %d\\n' \"$code\"; exit \"$code\""
+    )
+    try:
+        proc = ctx.sprites.start_exec(
+            name,
+            ["bash", "-c", NO_BIND + script],
+            cwd=WORKDIR,
+            uploads=[(envfile, ENV_FILE), (listing, RUN_LIST)],
+        )
+        with ctx.live.track(proc):
+            result = _pump(proc, emit, limit + KILL_GRACE_S, nonce)
+    finally:
+        envfile.unlink(missing_ok=True)
+        listing.unlink(missing_ok=True)
+    return result
+
+
+def _stop_remote(sprites: Sprites, config: OffloadConfig, name: str, base_id: str) -> None:
     try:
         sprites.restore(name, base_id)
     except (SpriteError, OSError) as error:
         _warn(f"could not stop the remote task on {name}: {error}")
+    else:
+        _touch(config, name, base_id, clean=True)
 
 
 def _pump(proc: subprocess.Popen[str], emit: Callable[[str], None], limit_s: float, nonce: str) -> _Exec:
@@ -499,6 +619,13 @@ def _write_env_file(env: Mapping[str, str]) -> Path:
     return Path(name)
 
 
+def _write_file_list(files: list[str]) -> Path:
+    descriptor, name = tempfile.mkstemp(prefix="off-files-", suffix=".list")
+    with os.fdopen(descriptor, "w", encoding="utf-8", errors="surrogateescape") as handle:
+        handle.write("\0".join(files))
+    return Path(name)
+
+
 def _pull_artifacts(ctx: _Run, name: str, index: int) -> None:
     if not ctx.task.artifacts:
         return
@@ -514,10 +641,17 @@ def _pull_artifacts(ctx: _Run, name: str, index: int) -> None:
             _warn(f"artifact {path} not pulled: {summarize_output(completed.stderr)}")
 
 
-def _sync_up(sprites: Sprites, config: OffloadConfig, name: str, files: list[str]) -> None:
-    completed = _rsync(sync_argv(config, sprites.rsync_shell(name)), stdin="\0".join(files))
-    if completed.returncode != 0:
-        raise OffError(f"sync to {name} failed: {summarize_output(completed.stderr)}")
+def _sync_up(
+    sprites: Sprites, config: OffloadConfig, name: str, files: list[str], emit: Callable[[str], None]
+) -> None:
+    for attempt in range(1, SYNC_ATTEMPTS + 1):
+        completed = _rsync(sync_argv(config, sprites.rsync_shell(name)), stdin="\0".join(files))
+        if completed.returncode == 0:
+            return
+        if completed.returncode not in RSYNC_TRANSPORT_CODES or attempt == SYNC_ATTEMPTS:
+            raise OffError(f"sync to {name} failed: {summarize_output(completed.stderr)}")
+        emit(f"off: sync to {name} interrupted (rsync exit {completed.returncode}); retrying\n")
+        time.sleep(SYNC_RETRY_DELAY_S)
 
 
 def _rsync(argv: list[str], stdin: str | None = None) -> subprocess.CompletedProcess[str]:
@@ -546,8 +680,9 @@ def _exec_checked(
     cwd: str,
     failure: str,
     emit: Callable[[str], None] | None = None,
+    uploads: Sequence[tuple[Path, str]] = (),
 ) -> None:
-    proc = sprites.start_exec(name, argv, cwd=cwd, upload=None)
+    proc = sprites.start_exec(name, argv, cwd=cwd, uploads=uploads)
     output = emit or _discard
     if proc.stdout is None:
         raise OffError("sprite exec has no output stream")

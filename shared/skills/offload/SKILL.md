@@ -1,6 +1,6 @@
 ---
 name: offload
-description: Run a repo's declared tasks through the off CLI on Sprite workers. Use when a repo has an offload.toml, or before running heavy tests, builds, typechecks, or soak runs.
+description: Run a repo's declared tasks through the off CLI on Sprite workers. Use when a repo has an offload.toml, or before running heavy tests, builds, typechecks, or soak runs. Also use when the user says "offload X".
 ---
 
 # Offload
@@ -19,15 +19,16 @@ Use when the repo's git top level has `offload.toml`, or before heavy tests, bui
 6. A worker is built from `[setup]` the first time it is used, and again after a change to `[setup]` or to its `inputs` files. Setup sees only the `inputs` files. Expect that run to be slow.
 7. Sprite tasks pull their `artifacts` paths back after the run to `~/.local/state/off/artifacts/<repo>/<run_id>/<shard>/` (under `$XDG_STATE_HOME/off` when that is set). A missing path is a warning, not a failure.
 8. The user can follow the live log: `off run` may open a Tern tab per Sprite shard, and `off watch RUN_ID [--shard N]` follows a shard's log in any terminal.
+9. `off exec -- <command>` runs a command no task declares, on a Sprite worker, with `--timeout` (default 30m). Use it when the user asks to offload something no task covers.
 
 ## Exit codes
 
 - Any other non-zero code is the task's own exit code, so the task failed. Read the log at the path `off run` prints, then fix the cause or report it. Do not rerun it unchanged.
 - `124`: the task timed out. Read the log to see where it stopped. Do not rerun it unchanged. Changing `timeout` means editing `offload.toml`, which needs the user.
-- `125`: an off or infrastructure error. Read the `off: error: <msg>` line on stderr. Retry once only if the message says the worker was busy or unreachable, or that the task was lost. Otherwise stop and report the message.
+- `125`: an off or infrastructure error. Read the `off: error: <msg>` line on stderr. Retry once only if the message says the worker was busy or unreachable. A `lost the task` message means off already retried, so report it instead of retrying. Otherwise stop and report the message.
 - `130`: the run was interrupted, and off stopped the remote task. Don't retry unless the user asks.
 
 ## Rules
 
 - Never call `sprite` directly. `off` owns worker creation, network and privilege policy, and sync.
-- Never edit `offload.toml` without the user. If no task covers the command you need, ask the user whether to add one.
+- Never edit `offload.toml` without the user. If no task covers a command, use `off exec`.

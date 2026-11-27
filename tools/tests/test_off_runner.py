@@ -19,6 +19,7 @@ from offload import runner
 from offload.cli import main
 from offload.config import load_config
 from offload.identity import host_slug, repo_slug, worker_name
+from offload.sprites import Sprites
 from offload.state import Lease, lease_workers, lock_path
 
 FAKE_SPRITE = textwrap.dedent(
@@ -39,9 +40,16 @@ FAKE_SPRITE = textwrap.dedent(
     def option(args, flag):
         return args[args.index(flag) + 1] if flag in args else None
 
+    def options(args, flag):
+        return [args[index + 1] for index, arg in enumerate(args) if arg == flag]
+
     def remap(text, name):
         base = ROOT / name
-        return text.replace("/home/sprite", str(base / "home" / "sprite")).replace("/tmp/off.env", str(base / "off.env"))
+        return (
+            text.replace("/home/sprite", str(base / "home" / "sprite"))
+            .replace("/tmp/off.env", str(base / "off.env"))
+            .replace("/tmp/off.files", str(base / "off.files"))
+        )
 
     def complete(message):
         print(json.dumps({"type": "info", "data": message, "time": "t"}))
@@ -80,6 +88,11 @@ FAKE_SPRITE = textwrap.dedent(
         sprite = state["sprites"][name]
         home = ROOT / name / "home" / "sprite"
         state["calls"].append([method, path, name])
+        marker = os.environ.get("FAKE_SPRITE_FAIL_CHECKPOINTS_ONCE", "")
+        if path == "/checkpoints" and marker and not Path(marker).exists():
+            Path(marker).touch()
+            print("checkpoints unavailable", file=sys.stderr)
+            sys.exit(22)
         if path == "/checkpoints":
             print(json.dumps([{"id": "Current"}] + sprite["checkpoints"]))
         elif path == "/checkpoint":
@@ -95,14 +108,15 @@ FAKE_SPRITE = textwrap.dedent(
         else:
             print("{}")
     elif command == "exec":
-        upload = option(args, "--file")
-        if upload:
+        for upload in options(args, "--file"):
             source, dest = upload.split(":", 1)
             shutil.copy(source, remap(dest, name))
         cwd = remap(option(args, "--dir") or "/home/sprite", name)
         argv = [remap(part, name) for part in args[args.index("--") + 1:]]
         state["calls"].append(["exec", name, *argv])
-        if os.environ.get("FAKE_SPRITE_DROP") and any("__off_exit__" in part for part in argv):
+        drops = int(os.environ.get("FAKE_SPRITE_DROP", "0"))
+        if any("__off_exit__" in part for part in argv) and state.get("dropped", 0) < drops:
+            state["dropped"] = state.get("dropped", 0) + 1
             save(state)
             sys.exit(255)
         save(state)
@@ -127,6 +141,11 @@ FAKE_RSYNC = textwrap.dedent(
     del args[at:at + 2]
     home = str(ROOT / name / "home" / "sprite")
     local = [arg.removeprefix("env:").replace("/home/sprite", home) if arg.startswith("env:") else arg for arg in args]
+    failures = ROOT / "rsync-failures"
+    failed = int(failures.read_text()) if failures.exists() else 0
+    if failed < int(os.environ.get("FAKE_RSYNC_FAILURES", "0")):
+        failures.write_text(str(failed + 1))
+        sys.exit(12)
     os.execv(os.environ["REAL_RSYNC"], [os.environ["REAL_RSYNC"], *local])
     '''
 ).lstrip()
@@ -140,7 +159,7 @@ OFFLOAD_TOML = textwrap.dedent(
 
     [setup]
     inputs = ["package.json"]
-    run = ["echo setup-ran"]
+    run = ["echo setup-ran && ls -A > ../setup-saw"]
 
     [env]
     pass = ["OFF_TEST_TOKEN"]
@@ -175,6 +194,10 @@ OFFLOAD_TOML = textwrap.dedent(
     timeout = "1m"
     """
 ).lstrip()
+
+
+def _reset_inline(_launcher: Path, name: str, checkpoint_id: str) -> None:
+    runner.reset_worker(Sprites(), name, checkpoint_id)
 
 
 class RunnerEndToEndTest(unittest.TestCase):
@@ -220,6 +243,9 @@ class RunnerEndToEndTest(unittest.TestCase):
         previous = Path.cwd()
         os.chdir(self.repo)
         self.addCleanup(os.chdir, previous)
+        spawn = mock.patch.object(runner, "_spawn_reset", _reset_inline)
+        spawn.start()
+        self.addCleanup(spawn.stop)
         self.workers = [worker_name(host_slug(), repo_slug(self.repo), index) for index in (1, 2)]
 
     def off(self, *argv: str) -> tuple[int, str]:
@@ -324,19 +350,89 @@ class RunnerEndToEndTest(unittest.TestCase):
         self.assertEqual(code, 0, output)
         self.assertIn("server stopped", output)
 
-    def test_base_holds_only_setup_inputs(self) -> None:
+    def test_setup_sees_only_its_inputs(self) -> None:
         self.assertEqual(self.off("run", "ok")[0], 0)
-        snapshot = self.tmp / "fake-root" / f"{self.workers[0]}.cp" / "v2" / "work"
-        self.assertEqual(sorted(path.name for path in snapshot.iterdir()), ["package.json"])
+        saw = self.tmp / "fake-root" / self.workers[0] / "home" / "sprite" / "setup-saw"
+        self.assertEqual(saw.read_text(), "package.json\n")
+
+    def test_base_holds_the_tree_but_no_ignored_files(self) -> None:
+        self.assertEqual(self.off("run", "ok")[0], 0)
+        snapshot = self.tmp / "fake-root" / f"{self.workers[0]}.cp" / "v2"
+        self.assertTrue((snapshot / "work" / "untracked.txt").is_file())
+        self.assertTrue((snapshot / "work" / "package.json").is_file())
+        self.assertTrue((snapshot / ".off" / "base-files").is_file())
+        leaked = [path for path in snapshot.rglob("*") if path.name in {"secret.env", "local-only.txt"}]
+        self.assertEqual(leaked, [])
+
+    def test_file_deleted_locally_disappears_on_the_worker(self) -> None:
+        code, output = self.off("run", "show")
+        self.assertEqual(code, 0, output)
+        self.assertIn("./untracked.txt", output)
+        (self.repo / "untracked.txt").unlink()
+        code, output = self.off("run", "show")
+        self.assertEqual(code, 0, output)
+        self.assertNotIn("./untracked.txt", output)
+
+    def test_run_waits_for_a_busy_built_worker_instead_of_building_another(self) -> None:
+        self.assertEqual(self.off("run", "ok")[0], 0)
+        holder = Lease(lock_path(self.workers[0]))
+        self.assertTrue(holder.try_acquire())
+        threading.Timer(0.5, holder.release).start()
+        code, output = self.off("run", "ok")
+        self.assertEqual(code, 0, output)
+        creates = [call[1] for call in self.calls() if call[0] == "create"]
+        self.assertEqual(creates, [self.workers[0]])
+
+    def test_exec_runs_an_ad_hoc_command_and_keeps_its_exit_code(self) -> None:
+        code, output = self.off("exec", "--", "echo hi && exit 4")
+        self.assertEqual(code, 4, output)
+        self.assertIn("hi", output)
 
     def test_lost_connection_is_an_off_error_and_stops_the_task(self) -> None:
         self.assertEqual(self.off("run", "ok")[0], 0)
-        with mock.patch.dict(os.environ, {"FAKE_SPRITE_DROP": "1"}):
+        with mock.patch.dict(os.environ, {"FAKE_SPRITE_DROP": "2"}):
             code, output = self.off("run", "ok")
         self.assertEqual(code, runner.EXIT_OFF_ERROR, output)
+        self.assertIn("retrying once", output)
         self.assertIn("lost the task", output)
         restores = [call for call in self.calls() if call[0] == "POST" and call[1].endswith("/restore")]
         self.assertEqual(len(restores), 3)
+
+    def test_lost_connection_is_retried_once(self) -> None:
+        self.assertEqual(self.off("run", "ok")[0], 0)
+        with mock.patch.dict(os.environ, {"FAKE_SPRITE_DROP": "1"}):
+            code, output = self.off("run", "ok")
+        self.assertEqual(code, 0, output)
+        self.assertIn("retrying once", output)
+        self.assertIn("hello from 1", output)
+
+    def test_sync_failure_is_retried(self) -> None:
+        env = {"FAKE_RSYNC_FAILURES": "1"}
+        with mock.patch.dict(os.environ, env), mock.patch.object(runner, "SYNC_RETRY_DELAY_S", 0):
+            code, output = self.off("run", "ok")
+        self.assertEqual(code, 0, output)
+        self.assertIn("rsync exit 12); retrying", output)
+
+    def test_sync_gives_up_after_three_attempts(self) -> None:
+        env = {"FAKE_RSYNC_FAILURES": "3"}
+        with mock.patch.dict(os.environ, env), mock.patch.object(runner, "SYNC_RETRY_DELAY_S", 0):
+            code, output = self.off("run", "ok")
+        self.assertEqual(code, runner.EXIT_OFF_ERROR, output)
+        self.assertIn("sync to", output)
+
+    def test_checkpoints_failure_is_retried(self) -> None:
+        marker = self.tmp / "checkpoints-failed"
+        with mock.patch.dict(os.environ, {"FAKE_SPRITE_FAIL_CHECKPOINTS_ONCE": str(marker)}):
+            code, output = self.off("run", "ok")
+        self.assertEqual(code, 0, output)
+        self.assertTrue(marker.exists())
+
+    def test_exec_timeout_above_the_cap_is_a_usage_error(self) -> None:
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as caught:
+            main(["exec", "--timeout", "7h", "--", "true"])
+        self.assertEqual(caught.exception.code, 2)
+        self.assertIn("exceeds the 6h maximum", err.getvalue())
 
 
 class LeaseOrderTest(unittest.TestCase):
