@@ -21,7 +21,8 @@ function cached() {
 }
 
 async function program() {
-  if (args.widgetAction && files.fileExists(codePath)) return cached();
+  const tapped = args.widgetAction && args.widgetAction.id !== "refresh";
+  if (tapped && files.fileExists(codePath)) return cached();
   try {
     return await download();
   } catch (error) {
