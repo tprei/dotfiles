@@ -525,6 +525,25 @@ class LeaseOrderTest(unittest.TestCase):
         self.assertEqual(sorted(finished), ["a", "b"])
 
 
+class SpawnResetTest(unittest.TestCase):
+    def test_reset_child_is_not_tracked_as_agent_work(self) -> None:
+        state = self.enterContext(tempfile.TemporaryDirectory())
+        seen = Path(state) / "seen-env.json"
+        launcher = Path(state) / "launcher.py"
+        launcher.write_text(
+            f"import json, os\nopen({str(seen)!r}, 'w').write(json.dumps(dict(os.environ)))\n"
+        )
+        env = {"XDG_STATE_HOME": state, "OMP_BASH_SESSION": "session-1", "OFF_ORG": "kept"}
+        with mock.patch.dict(os.environ, env):
+            runner._spawn_reset(launcher, "worker", "cp")
+        deadline = time.monotonic() + 10
+        while not seen.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        child_env = json.loads(seen.read_text())
+        self.assertNotIn("OMP_BASH_SESSION", child_env)
+        self.assertEqual(child_env["OFF_ORG"], "kept")
+
+
 class PruneScriptTest(unittest.TestCase):
     def setUp(self) -> None:
         temporary = tempfile.TemporaryDirectory()
