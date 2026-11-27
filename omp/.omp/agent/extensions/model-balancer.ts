@@ -4,8 +4,11 @@
  * A pool is one model served by several providers. A spawn whose first pattern
  * belongs to a pool starts on the pool's next member that offers the requested
  * effort, rotating across spawns. When auto-retry abandons a model, its quota
- * bucket (provider plus model family) cools down for a while, so pool members
- * rotate past a spent quota instead of paying a failed request per spawn.
+ * bucket (provider plus model family) cools down, longer for a usage-limit
+ * failure, so pool members rotate past a spent quota instead of paying a failed
+ * request per spawn. Until `DRAIN_UNTIL`, a fresh `DRAIN_PROVIDER` member wins
+ * every spawn so its plan is used up before cancellation; after it, that
+ * provider leaves every pool.
  */
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import type { Api, Model } from "@oh-my-pi/pi-ai";
@@ -18,6 +21,8 @@ const POOLS: readonly (readonly string[])[] = [
 ];
 
 const COOLDOWN_MS = 10 * 60_000;
+const QUOTA_COOLDOWN_MS = 60 * 60_000;
+const QUOTA_REASON = /usage.?limit|quota|rate.?limit|429/i;
 const DRAIN_PROVIDER = "opencode-go/";
 const DRAIN_UNTIL = Date.parse("2026-12-08T00:00:00");
 const SUFFIXES = ["off", "auto", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
@@ -31,7 +36,7 @@ interface Selector {
 }
 
 const cursors = new Map<string, number>();
-const cooledAt = new Map<string, number>();
+const cooledUntil = new Map<string, number>();
 
 function isSuffix(value: unknown): value is Suffix {
 	return (SUFFIXES as readonly unknown[]).includes(value);
@@ -65,7 +70,8 @@ function serves(level: Suffix | undefined, model: Model<Api> | undefined): boole
 
 export default function modelBalancer(pi: ExtensionAPI) {
 	pi.on("retry_fallback_applied", event => {
-		cooledAt.set(bucket(parse(event.from).base), Date.now());
+		const span = QUOTA_REASON.test(event.reason ?? "") ? QUOTA_COOLDOWN_MS : COOLDOWN_MS;
+		cooledUntil.set(bucket(parse(event.from).base), Date.now() + span);
 	});
 
 	pi.on("before_subagent_spawn", async (event, ctx) => {
@@ -78,12 +84,13 @@ export default function modelBalancer(pi: ExtensionAPI) {
 		const now = Date.now();
 		const members = pool
 			.map(member => parse(member))
+			.filter(selector => now < DRAIN_UNTIL || !selector.base.startsWith(DRAIN_PROVIDER))
 			.filter(selector => ctx.models.resolve(selector.base) !== undefined);
 		const starts = members.filter(
 			selector => selector.level !== undefined || serves(source.level, ctx.models.resolve(selector.base)),
 		);
 		if (starts.length < 2) return undefined;
-		const fresh = starts.filter(selector => now - (cooledAt.get(bucket(selector.base)) ?? 0) >= COOLDOWN_MS);
+		const fresh = starts.filter(selector => now >= (cooledUntil.get(bucket(selector.base)) ?? 0));
 		const choices = fresh.length > 0 ? fresh : starts;
 
 		const drain = now < DRAIN_UNTIL ? fresh.find(selector => selector.base.startsWith(DRAIN_PROVIDER)) : undefined;
