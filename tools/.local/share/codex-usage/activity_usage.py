@@ -13,6 +13,7 @@ import json
 import math
 import os
 import sys
+import unicodedata
 from collections.abc import Iterable, Iterator
 from datetime import datetime, timezone
 from pathlib import Path
@@ -69,10 +70,14 @@ def _count_phrase(count: int, singular: str, plural: str | None = None) -> str:
     return f"{count} {plural if plural is not None else singular + 's'}"
 
 
+_UNPRINTABLE = frozenset({"Cc", "Co", "Cs"})
+
+
 def _clean_text(value: object, limit: int = _TEXT_MAX_CHARS) -> str | None:
     if not isinstance(value, str):
         return None
-    text = " ".join(value.split())
+    printable = "".join(" " if unicodedata.category(char) in _UNPRINTABLE else char for char in value)
+    text = " ".join(printable.split())
     if not text:
         return None
     return text[:limit]

@@ -279,6 +279,18 @@ class CollectActivityGroupingTests(TempRootMixin):
         collection = self.collect()
         self.assertEqual([record["title"] for record in collection["records"]], ["Fix the login bug"])
 
+    def test_title_drops_icon_glyphs_and_control_characters(self):
+        self.write_session(
+            "agent/sessions/proj/session.jsonl",
+            [
+                title_entry("\uf2c6 CODEX: Remake\x1b[0m widget"),
+                session_entry(cwd="/repos/app"),
+                assistant_entry("a1", START_MS + HOUR_MS),
+            ],
+        )
+        collection = self.collect()
+        self.assertEqual([record["title"] for record in collection["records"]], ["CODEX: Remake [0m widget"])
+
     def test_home_directories_and_root_are_not_projects(self):
         home = Path.home().as_posix()
         self.assertIsNone(activity_usage._project_slug(home))
