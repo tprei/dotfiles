@@ -1,5 +1,5 @@
 [Unit]
-Description=OMP provider usage one pinned dashboard refresh
+Description=OMP provider usage pinned Telegram photos refresh
 
 [Timer]
 OnBootSec=1min

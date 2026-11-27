@@ -163,11 +163,11 @@ One-time Telegram setup (token and chat id stay out of the repo; writes `~/.conf
 TELEGRAM_BOT_TOKEN=<token from @BotFather> claude-usage-check --setup-telegram
 ```
 
-`tools/.local/bin/codex-usage-check` wraps `omp usage --json --redact` for every provider authenticated in the default OMP profile (OpenAI Codex, Anthropic, OpenCode Go, ZAI). OMP pauses its Google Antigravity sign-in (Google suspended accounts that used third-party sign-in), so Gemini quotas aren't fetched and Antigravity appears only in the token section. It needs OMP auth, not a standalone `codex`. It keeps two pinned photos in the chat, **Usage** and **Predictions**, via `tools/.config/systemd/user/codex-usage-report.{service,timer}`: the timer starts a run 1 minute after boot and again 1 minute after the previous run finishes, with 1s accuracy and no random delay, and the oneshot service keeps its OMP, SSH, and PATH environment plus 300s startup timeout while the timer owns retries (the script flocks against manual overlap). Each run quietly edits both pinned messages in place, re-sending and re-pinning one when it's deleted, reusing the Claude Telegram config and keeping `message_id`, `pinned_message_id`, `forecast_message_id`, and `forecast_pinned_message_id` in `~/.config/codex-usage/state.json` (0600, untracked):
+`tools/.local/bin/codex-usage-check` wraps `omp usage --json --redact` for every provider authenticated in the default OMP profile (OpenAI Codex, Anthropic, OpenCode Go, ZAI). OMP pauses its Google Antigravity sign-in (Google suspended accounts that used third-party sign-in), so Gemini quotas aren't fetched and Antigravity appears only in the token section. It needs OMP auth, not a standalone `codex`. It keeps two pinned photos in the chat, **Usage** and **Predictions**, and runs on the always-on Oracle box `openclaw` via `tools/.config/systemd/user/codex-usage-report.{service,timer}`: the timer starts a run 1 minute after boot and again 1 minute after the previous run finishes, with 1s accuracy and no random delay, and the oneshot service uses `%h` paths so it works under any user, with a 300s startup timeout while the timer owns retries (the script flocks against manual overlap). Each run quietly edits both pinned messages in place, re-sending and re-pinning one when it's deleted, reading the Telegram bot token and chat from `~/.config/claude-usage/config` and keeping `message_id`, `pinned_message_id`, `forecast_message_id`, and `forecast_pinned_message_id` in `~/.config/codex-usage/state.json` (0600, untracked):
 
 - Usage: one card per provider and account with its logo, a bar per window, used percent, reset countdown, and a pace pill, plus the 30-day token card. An alert strip on top shows the worst risk and the next reset. Flames mark heavy use (75% or more used, hot or running-out pace, top token providers); rainbow borders mark untapped quota that will reset unused.
 - Predictions: each window's 48-hour usage sparkline, now to projected percent at reset, burn rate, verdict (`EXHAUSTED`, `RUN OUT`, `HOT`, `ON PACE`, `SPARE`, `GATED`, or `NO DATA`), and advice. `tools/.local/share/codex-usage/usage_history.py` reads `usage_history` from every OMP `agent.db` on both machines, measures burn over 24 hours (3 hours for windows of 6 hours or less), and projects usage to reset. Short windows (6 hours or less) are bound to the co-moving long window (24 hours or more) with the least slack; a pooled gain ratio (excluding intervals longer than the short window or containing a dip) prices a full short burn in long-window percent, shown on `SPARE` and `ON PACE` (`~8% of 7d`), and the verdict is `GATED` when that burn exceeds the long window's remaining room. A window that reset inside the lookback counts only post-drop samples; under an hour of history reports `NO DATA`.
-- Tokens: 30 days per provider across all OMP session records, read locally and over strict batch-mode SSH. Known models are priced even without provider cost. Unreachable machines show as partial, not zero. Shared accounts mean it isn't a billing report.
+- Tokens: 30 days per provider across all OMP session records. openclaw reads its own `~/.omp` and every bundle in `~/.local/state/codex-usage/relay/`. WSL runs `codex-usage-relay.{service,timer}` every 5 minutes: `codex-usage-check --relay openclaw` collects WSL's sessions and history plus mini-1's over strict batch-mode SSH, then pushes one gzipped JSON bundle (`WSL.json.gz`) to openclaw, which checks it parses before replacing the previous one, because openclaw can't reach either machine. Relayed collections are re-windowed to the reporter's window. The reporter unit names the sources it expects (`OMP_USAGE_RELAY_SOURCES=WSL`), so a missing bundle reads `WSL relay missing` and a bundle older than 15 minutes still counts but reads `WSL relay 20m old`; both mark the data partial. Known models are priced even without provider cost. Unreachable machines show as partial, not zero. Shared accounts mean it isn't a billing report.
 
 The headers show quota data age and a `Partial pace history` flag when history comes from fewer machines; tokens show as partial when an SSH source is unreachable, so gaps never read as fresh. Captions hold a short checked-at UTC stamp. Steady runs stay quiet: the same pinned photos are edited and nothing new appears.
 
@@ -177,8 +177,17 @@ The first refresh after upgrading migrates in place: the old quota photo becomes
 
 Rendering pipes the SVG through FFmpeg's `svg_pipe` input, which needs FFmpeg built with librsvg (the current setup has it). The renderer runs FFmpeg with `FONTCONFIG_FILE` pointing at `tools/.local/share/codex-usage/fonts.conf`, so the bundled OFL fonts in `fonts/` resolve without a system install. Provider logos live in `logos/`.
 
+On openclaw (`host-admin`, dotfiles in `~/dotfiles/dotfiles`):
+
 ```sh
 systemctl --user daemon-reload
 systemctl --user enable --now codex-usage-report.timer
-systemctl --user restart codex-usage-report.timer   # only when the timer was already enabled
+```
+
+On WSL, the reporter timer stays disabled and only the relay runs:
+
+```sh
+systemctl --user daemon-reload
+systemctl --user disable --now codex-usage-report.timer
+systemctl --user enable --now codex-usage-relay.timer
 ```

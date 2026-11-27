@@ -1,10 +1,9 @@
 [Unit]
-Description=OMP provider usage one pinned dashboard refresh
+Description=OMP provider usage pinned Telegram photos refresh
 
 [Service]
 Type=oneshot
-ExecStart=/home/prei/.local/bin/codex-usage-check --telegram
-Environment=OMP_BIN=/home/prei/.local/bin/omp
-Environment=OMP_TOKEN_SSH_HOST=mbn@mini-1
-Environment=PATH=/home/prei/.local/bin:/home/prei/.bun/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.local/bin/codex-usage-check --telegram
+Environment=PATH=%h/.local/bin:%h/.bun/bin:/usr/local/bin:/usr/bin:/bin
+Environment=OMP_USAGE_RELAY_SOURCES=WSL
 TimeoutStartSec=300

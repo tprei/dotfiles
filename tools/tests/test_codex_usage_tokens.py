@@ -1,4 +1,5 @@
 import contextlib
+import gzip
 import importlib.machinery
 import importlib.util
 import io
@@ -1126,7 +1127,31 @@ class MergeHistoryTests(unittest.TestCase):
             ["anthropic", "zai"],
         )
 
-class CollectTokenSnapshotWindowTests(unittest.TestCase):
+
+class RelayDirMixin(TempRootMixin):
+    def setUp(self):
+        super().setUp()
+        self.relay_dir = self.root / "relay"
+        relay_patcher = mock.patch.dict(
+            os.environ, {reporter.RELAY_DIR_ENV: str(self.relay_dir), reporter.RELAY_SOURCES_ENV: ""}
+        )
+        relay_patcher.start()
+        self.addCleanup(relay_patcher.stop)
+
+    def write_relay_bytes(self, name, data):
+        self.relay_dir.mkdir(parents=True, exist_ok=True)
+        path = self.relay_dir / f"{name}{reporter.RELAY_SUFFIX}"
+        path.write_bytes(data)
+        return path
+
+    def write_relay_file(self, name, text):
+        return self.write_relay_bytes(name, gzip.compress(text.encode("utf-8")))
+
+    def write_bundle(self, name, bundle):
+        return self.write_relay_file(name, json.dumps(bundle))
+
+
+class CollectTokenSnapshotWindowTests(RelayDirMixin):
     def test_collects_thirty_utc_dates_with_partial_today(self):
         now_ms = int(datetime(2026, 9, 14, 15, 20, tzinfo=timezone.utc).timestamp() * 1000)
         start_ms = int(datetime(2026, 8, 16, tzinfo=timezone.utc).timestamp() * 1000)
@@ -1176,7 +1201,7 @@ class CollectTokenSnapshotWindowTests(unittest.TestCase):
         self.assertEqual(sorted(snapshot["sources_ok"]), ["WSL", "mini-1"])
         self.assertEqual(snapshot["issues"], [])
 
-class CollectHistorySnapshotTests(unittest.TestCase):
+class CollectHistorySnapshotTests(RelayDirMixin):
     def test_history_window_covers_seven_days_ending_now(self):
         now_ms = 1_789_000_000_000
         start_ms = now_ms - 7 * DAY_MS
@@ -1225,7 +1250,7 @@ class CollectHistorySnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot["samples"], [wsl_sample, mini_sample])
         self.assertEqual(snapshot["issues"], [])
 
-    def test_unconfigured_ssh_host_yields_issue_and_keeps_local_samples(self):
+    def test_unconfigured_ssh_host_keeps_local_samples_without_issue(self):
         now_ms = 1_789_000_000_000
         start_ms = now_ms - 7 * DAY_MS
         wsl_sample = history_sample(recorded_at_ms=start_ms + 1_000, used_fraction=0.1)
@@ -1248,7 +1273,7 @@ class CollectHistorySnapshotTests(unittest.TestCase):
 
         collector.assert_not_called()
         remote.assert_not_called()
-        self.assertEqual(snapshot["issues"], ["mini-1 unconfigured"])
+        self.assertEqual(snapshot["issues"], [])
         self.assertEqual(snapshot["sources_ok"], ["WSL"])
         self.assertEqual(snapshot["samples"], [wsl_sample])
 
@@ -1292,7 +1317,7 @@ class GatherCollectionsTests(unittest.TestCase):
         def local_history(requested_start, requested_end):
             return "WSL", local, []
 
-        with mock.patch.object(reporter, "check_ssh_host", return_value="mini-1"), mock.patch.object(
+        with mock.patch.object(reporter, "check_ssh_host", return_value="mbn@mini-1.tail.ts.net"), mock.patch.object(
             reporter, "collector_source", side_effect=reporter.UsageError("collector unreadable: x", 1)
         ), mock.patch.object(reporter, "remote_collection") as remote:
             collections, issues = reporter.gather_collections(
@@ -1302,6 +1327,206 @@ class GatherCollectionsTests(unittest.TestCase):
         remote.assert_not_called()
         self.assertEqual(collections, [("WSL", local)])
         self.assertEqual(issues, ["mini-1 unavailable: collector unreadable"])
+
+
+def relay_section(collections=None, issues=None):
+    return {"start_ms": 0, "end_ms": 1, "collections": collections or [], "issues": issues or []}
+
+
+def relay_bundle(source="WSL", generated_at_ms=FIXED_NOW_MS, tokens=None, history=None):
+    return {
+        "schema": 1,
+        "source": source,
+        "generated_at_ms": generated_at_ms,
+        "tokens": tokens or relay_section(),
+        "history": history or relay_section(),
+    }
+
+
+class SourceLabelTests(unittest.TestCase):
+    def test_override_is_stripped_and_used(self):
+        with mock.patch.dict(os.environ, {reporter.SOURCE_LABEL_ENV: " WSL "}):
+            self.assertEqual(reporter.local_source_label(), "WSL")
+
+    def test_invalid_override_is_an_error_not_a_hostname_fallback(self):
+        with mock.patch.dict(os.environ, {reporter.SOURCE_LABEL_ENV: "bad label!"}), \
+                self.assertRaises(reporter.UsageError) as raised:
+            reporter.local_source_label()
+        self.assertEqual(raised.exception.exit_code, 1)
+
+    def test_hostname_first_label_is_used_without_override(self):
+        with mock.patch.dict(os.environ), mock.patch.object(
+            reporter.socket, "gethostname", return_value="prei-box.tail.ts.net"
+        ):
+            os.environ.pop(reporter.SOURCE_LABEL_ENV, None)
+            self.assertEqual(reporter.local_source_label(), "prei-box")
+
+    def test_unsafe_hostname_is_an_error(self):
+        with mock.patch.dict(os.environ), mock.patch.object(reporter.socket, "gethostname", return_value="a;b"):
+            os.environ.pop(reporter.SOURCE_LABEL_ENV, None)
+            with self.assertRaises(reporter.UsageError):
+                reporter.local_source_label()
+
+    def test_remote_label_drops_user_and_domain(self):
+        self.assertEqual(reporter.remote_label("mbn@mini-1.tail.ts.net"), "mini-1")
+
+
+class RelayCollectionsTests(RelayDirMixin):
+    def test_missing_relay_directory_yields_nothing_when_no_source_is_expected(self):
+        self.assertEqual(reporter.relay_collections("tokens", 0, 1, FIXED_NOW_MS), ([], []))
+
+    def test_expected_source_without_a_bundle_is_reported_missing(self):
+        with mock.patch.dict(os.environ, {reporter.RELAY_SOURCES_ENV: "WSL, mini-1"}):
+            collections, issues = reporter.relay_collections("tokens", 0, 1, FIXED_NOW_MS)
+        self.assertEqual(collections, [])
+        self.assertEqual(issues, ["WSL relay missing", "mini-1 relay missing"])
+
+    def test_present_expected_source_is_not_reported_missing(self):
+        self.write_bundle("WSL", relay_bundle())
+        with mock.patch.dict(os.environ, {reporter.RELAY_SOURCES_ENV: "WSL"}):
+            _, issues = reporter.relay_collections("tokens", 0, 1, FIXED_NOW_MS)
+        self.assertEqual(issues, [])
+
+    def test_future_dated_bundle_reports_clock_skew(self):
+        self.write_bundle("WSL", relay_bundle(generated_at_ms=FIXED_NOW_MS + 3 * HOUR_MS))
+        _, issues = reporter.relay_collections("tokens", 0, 1, FIXED_NOW_MS)
+        self.assertEqual(issues, ["WSL relay clock 3h ahead"])
+
+    def test_malformed_timestamps_reach_the_merge_validator(self):
+        record = {**merge_record("bad", timestamp_ms=FIXED_NOW_MS - HOUR_MS), "timestamp_ms": "5"}
+        collection = {"start_ms": 0, "end_ms": 1, "records": [record], "issues": []}
+        self.write_bundle("WSL", relay_bundle(tokens=relay_section([{"source": "WSL", "collection": collection}])))
+        collections, _ = reporter.relay_collections("tokens", 0, FIXED_NOW_MS, FIXED_NOW_MS)
+        self.assertEqual(collections[0][1]["records"], [record])
+
+    def test_token_records_are_kept_only_inside_reader_window(self):
+        window_start = FIXED_NOW_MS - 7 * DAY_MS
+        inside = merge_record("inside", timestamp_ms=window_start)
+        last_inside = merge_record("last-inside", timestamp_ms=FIXED_NOW_MS - 1)
+        collection = {
+            "start_ms": 0,
+            "end_ms": 1,
+            "records": [
+                merge_record("before", timestamp_ms=window_start - 1),
+                inside,
+                last_inside,
+                merge_record("at-end", timestamp_ms=FIXED_NOW_MS),
+            ],
+            "issues": [],
+        }
+        self.write_bundle("WSL", relay_bundle(tokens=relay_section([{"source": "WSL", "collection": collection}])))
+
+        collections, issues = reporter.relay_collections("tokens", window_start, FIXED_NOW_MS, FIXED_NOW_MS)
+
+        self.assertEqual(issues, [])
+        self.assertEqual(
+            collections,
+            [("WSL", {"start_ms": window_start, "end_ms": FIXED_NOW_MS, "records": [inside, last_inside], "issues": []})],
+        )
+
+    def test_history_samples_are_kept_only_inside_reader_window(self):
+        window_start = FIXED_NOW_MS - 7 * DAY_MS
+        inside = history_sample(recorded_at_ms=window_start)
+        collection = {
+            "start_ms": 0,
+            "end_ms": 1,
+            "samples": [
+                history_sample(recorded_at_ms=window_start - 1),
+                inside,
+                history_sample(recorded_at_ms=FIXED_NOW_MS),
+            ],
+            "issues": [],
+        }
+        self.write_bundle("WSL", relay_bundle(history=relay_section([{"source": "WSL", "collection": collection}])))
+
+        collections, issues = reporter.relay_collections("history", window_start, FIXED_NOW_MS, FIXED_NOW_MS)
+
+        self.assertEqual(issues, [])
+        self.assertEqual(
+            collections,
+            [("WSL", {"start_ms": window_start, "end_ms": FIXED_NOW_MS, "samples": [inside], "issues": []})],
+        )
+
+    def test_stale_bundle_reports_age_and_keeps_its_data(self):
+        window_start = FIXED_NOW_MS - 7 * DAY_MS
+        generated_at_ms = FIXED_NOW_MS - (reporter.RELAY_STALE_MS + 60_000)
+        collection = {"start_ms": 0, "end_ms": 1, "records": [], "issues": []}
+        self.write_bundle(
+            "WSL",
+            relay_bundle(
+                generated_at_ms=generated_at_ms,
+                tokens=relay_section([{"source": "WSL", "collection": collection}], ["mini-1 unavailable: ssh timed out"]),
+            ),
+        )
+
+        collections, issues = reporter.relay_collections("tokens", window_start, FIXED_NOW_MS, FIXED_NOW_MS)
+
+        self.assertEqual(issues, ["WSL relay 16m old", "mini-1 unavailable: ssh timed out"])
+        self.assertEqual(
+            collections,
+            [("WSL", {"start_ms": window_start, "end_ms": FIXED_NOW_MS, "records": [], "issues": []})],
+        )
+
+    def test_unreadable_bundles_are_reported_and_skipped(self):
+        self.write_relay_file("broken", "{not json")
+        self.write_bundle("wrong-schema", {**relay_bundle(), "schema": 2})
+        self.write_relay_bytes("truncated", gzip.compress(json.dumps(relay_bundle()).encode("utf-8"))[:40])
+        self.write_relay_file("nested", "[" * 200_000)
+
+        collections, issues = reporter.relay_collections("tokens", 0, 1, FIXED_NOW_MS)
+
+        self.assertEqual(collections, [])
+        self.assertEqual(
+            issues,
+            ["broken relay unreadable", "nested relay unreadable", "truncated relay unreadable", "wrong-schema relay unreadable"],
+        )
+
+
+class RelayRoundTripTests(RelayDirMixin):
+    def test_wsl_bundle_merges_into_openclaw_snapshots(self):
+        now_ms = int(datetime(2026, 9, 14, 15, 20, tzinfo=timezone.utc).timestamp() * 1000)
+        wsl_token = merge_record("wsl-token", timestamp_ms=now_ms - 3_000, tokens=10, estimated_usd=0.1)
+        mini_token = merge_record("mini-token", timestamp_ms=now_ms - 2_000, tokens=20, estimated_usd=0.2)
+        openclaw_token = merge_record("openclaw-token", timestamp_ms=now_ms - 1_000, tokens=30, estimated_usd=0.3)
+        wsl_sample = history_sample(recorded_at_ms=now_ms - 3_000, used_fraction=0.1)
+        openclaw_sample = history_sample(recorded_at_ms=now_ms - 1_000, used_fraction=0.2)
+
+        def wsl_gather(source_path, local, start_ms, end_ms):
+            if source_path == reporter.TOKEN_USAGE_PATH:
+                return [
+                    ("WSL", {"start_ms": start_ms, "end_ms": end_ms, "records": [wsl_token], "issues": []}),
+                    ("mini-1", {"start_ms": start_ms, "end_ms": end_ms, "records": [mini_token], "issues": []}),
+                ], []
+            return [("WSL", {"start_ms": start_ms, "end_ms": end_ms, "samples": [wsl_sample], "issues": []})], []
+
+        with mock.patch.dict(os.environ, {reporter.SOURCE_LABEL_ENV: "WSL"}), mock.patch.object(
+            reporter, "gather_collections", side_effect=wsl_gather
+        ):
+            bundle = reporter.build_relay_bundle(now_ms)
+        self.write_bundle("WSL", bundle)
+
+        def openclaw_gather(source_path, local, start_ms, end_ms):
+            if source_path == reporter.TOKEN_USAGE_PATH:
+                return [("openclaw", {"start_ms": start_ms, "end_ms": end_ms, "records": [openclaw_token], "issues": []})], []
+            return [("openclaw", {"start_ms": start_ms, "end_ms": end_ms, "samples": [openclaw_sample], "issues": []})], []
+
+        with mock.patch.dict(os.environ, {reporter.SOURCE_LABEL_ENV: "openclaw"}), mock.patch.object(
+            reporter, "gather_collections", side_effect=openclaw_gather
+        ):
+            tokens = reporter.collect_token_snapshot(now_ms)
+            history = reporter.collect_history_snapshot(now_ms)
+
+        self.assertEqual(sorted(tokens["sources_ok"]), ["WSL", "mini-1", "openclaw"])
+        self.assertEqual(tokens["issues"], [])
+        total = provider_total(tokens, "openai-codex")
+        self.assertEqual(total["tokens"], 60)
+        self.assertAlmostEqual(total["estimated_usd"], 0.6, places=9)
+        self.assertEqual(sorted(history["sources_ok"]), ["WSL", "openclaw"])
+        self.assertEqual(history["issues"], [])
+        self.assertEqual(
+            sorted(sample["recorded_at_ms"] for sample in history["samples"]),
+            [now_ms - 3_000, now_ms - 1_000],
+        )
 
 
 class TelegramStateMixin(TempRootMixin):
@@ -1887,6 +2112,89 @@ class RunModesTests(unittest.TestCase):
                 contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(reporter.setup_telegram(), 1)
         publish.assert_not_called()
+
+
+class RunRelayTests(unittest.TestCase):
+    def test_pushes_bundle_over_ssh_and_returns_zero(self):
+        bundle = relay_bundle(source="WSL")
+        with mock.patch.object(reporter, "build_relay_bundle", return_value=bundle), mock.patch.object(
+            reporter.subprocess, "run", return_value=subprocess.CompletedProcess(args=[], returncode=0)
+        ) as run:
+            self.assertEqual(reporter.run_relay("openclaw"), 0)
+        self.assertEqual(
+            run.call_args.args[0],
+            [
+                reporter.TOKEN_SSH_BINARY,
+                "-T",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "StrictHostKeyChecking=yes",
+                "-o",
+                "ConnectTimeout=10",
+                "openclaw",
+                "umask 077 && mkdir -p .local/state/codex-usage/relay && "
+                "cat > .local/state/codex-usage/relay/.WSL.tmp && "
+                f"python3 -c '{reporter.RELAY_REMOTE_CHECK}' .local/state/codex-usage/relay/.WSL.tmp && "
+                "mv .local/state/codex-usage/relay/.WSL.tmp .local/state/codex-usage/relay/WSL.json.gz",
+            ],
+        )
+        self.assertEqual(json.loads(gzip.decompress(run.call_args.kwargs["input"])), bundle)
+        self.assertEqual(run.call_args.kwargs["timeout"], 60)
+        self.assertIs(run.call_args.kwargs["check"], False)
+
+    def test_nonzero_ssh_exit_returns_two(self):
+        with mock.patch.object(reporter, "build_relay_bundle", return_value=relay_bundle()), mock.patch.object(
+            reporter.subprocess, "run", return_value=subprocess.CompletedProcess(args=[], returncode=255)
+        ), contextlib.redirect_stderr(io.StringIO()) as stderr:
+            self.assertEqual(reporter.run_relay("openclaw"), 2)
+        self.assertEqual(stderr.getvalue(), "codex-usage-check: relay ssh exited 255\n")
+
+    def test_ssh_timeout_returns_two(self):
+        with mock.patch.object(reporter, "build_relay_bundle", return_value=relay_bundle()), mock.patch.object(
+            reporter.subprocess, "run", side_effect=subprocess.TimeoutExpired(cmd="ssh", timeout=60)
+        ), contextlib.redirect_stderr(io.StringIO()) as stderr:
+            self.assertEqual(reporter.run_relay("openclaw"), 2)
+        self.assertEqual(stderr.getvalue(), "codex-usage-check: relay ssh timed out\n")
+
+    def test_ssh_os_error_returns_two(self):
+        with mock.patch.object(reporter, "build_relay_bundle", return_value=relay_bundle()), mock.patch.object(
+            reporter.subprocess, "run", side_effect=OSError("ssh missing")
+        ), contextlib.redirect_stderr(io.StringIO()) as stderr:
+            self.assertEqual(reporter.run_relay("openclaw"), 2)
+        self.assertEqual(stderr.getvalue(), "codex-usage-check: relay ssh failed: ssh missing\n")
+
+    def test_dash_prefixed_host_is_rejected_before_ssh(self):
+        with mock.patch.object(reporter, "build_relay_bundle") as build, mock.patch.object(
+            reporter.subprocess, "run"
+        ) as run, contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(reporter.run_relay("-oProxyCommand=x"), 1)
+        build.assert_not_called()
+        run.assert_not_called()
+
+
+class RelayModeTests(unittest.TestCase):
+    def test_relay_runs_without_telegram_lock(self):
+        with mock.patch.object(reporter, "run_relay", return_value=0) as relay, mock.patch.object(
+            reporter, "acquire_update_lock"
+        ) as lock:
+            self.assertEqual(reporter.main(["--relay", "openclaw"]), 0)
+        relay.assert_called_once_with("openclaw")
+        lock.assert_not_called()
+
+    def test_relay_requires_exactly_one_host(self):
+        with mock.patch.object(reporter, "run_relay") as relay, contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(reporter.main(["--relay"]), 1)
+            self.assertEqual(reporter.main(["--relay", "-oProxyCommand=x"]), 1)
+        relay.assert_not_called()
+
+    def test_relay_cannot_combine_with_telegram(self):
+        with mock.patch.object(reporter, "run_relay") as relay, mock.patch.object(
+            reporter, "acquire_update_lock"
+        ) as lock, contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(reporter.main(["--relay", "openclaw", "--telegram"]), 1)
+        relay.assert_not_called()
+        lock.assert_not_called()
 
 
 class MultipartFormTests(unittest.TestCase):

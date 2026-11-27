@@ -1,0 +1,10 @@
+[Unit]
+Description=Relay OMP token and quota history to the usage reporter host
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/codex-usage-check --relay openclaw
+Environment=OMP_USAGE_SOURCE_LABEL=WSL
+Environment=OMP_TOKEN_SSH_HOST=mbn@mini-1
+Environment=PATH=%h/.local/bin:%h/.bun/bin:/usr/local/bin:/usr/bin:/bin
+TimeoutStartSec=300
