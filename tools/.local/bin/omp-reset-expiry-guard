@@ -9,6 +9,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 
+SETTLED_STATUSES = {"redeemed", "expired"}
+JUNIPER_PROGRAM = "juniper_tide"
+
+
 @dataclass(frozen=True)
 class Spend:
     target: str
@@ -17,11 +21,10 @@ class Spend:
 
 
 @dataclass(frozen=True)
-class Stranded:
-    provider: str
-    credential_id: int
-    credit_id: str
-    expires_at: datetime
+class Problem:
+    account: str
+    credit_id: str | None
+    reason: str
 
 
 def positive_hours(value: str) -> float:
@@ -31,47 +34,55 @@ def positive_hours(value: str) -> float:
     return parsed
 
 
-def expires_at(credit: dict[str, Any]) -> datetime:
-    return datetime.fromisoformat(credit["expiresAt"])
+def parse_expiry(raw: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed
 
 
-def expiring_credits(account: dict[str, Any], now: datetime, deadline: datetime) -> list[dict[str, Any]]:
-    return [
-        credit
-        for credit in account.get("credits", [])
-        if credit.get("status") == "available" and "expiresAt" in credit and now < expires_at(credit) <= deadline
-    ]
-
-
-def plan(accounts: list[dict[str, Any]], now: datetime, deadline: datetime) -> tuple[list[Spend], list[Stranded]]:
+def plan(accounts: list[dict[str, Any]], now: datetime, deadline: datetime) -> tuple[list[Spend], list[Problem]]:
     spends: list[Spend] = []
-    stranded: list[Stranded] = []
+    problems: list[Problem] = []
     for account in accounts:
         provider = account["provider"]
-        credential_id = account["credentialId"]
-        expiring = expiring_credits(account, now, deadline)
+        if provider not in ("openai-codex", "anthropic"):
+            continue
+        name = f"{provider}/{account['credentialId']}"
+        if account.get("error"):
+            problems.append(Problem(name, None, f"could not list resets: {account['error']}"))
+            continue
+        expiring: list[tuple[datetime, dict[str, Any]]] = []
+        for credit in account.get("credits", []):
+            status = credit.get("status", "available")
+            if status in SETTLED_STATUSES or "expiresAt" not in credit:
+                continue
+            if provider == "openai-codex" and status != "available":
+                continue
+            if credit.get("program") == JUNIPER_PROGRAM:
+                continue
+            when = parse_expiry(credit["expiresAt"])
+            if when is None:
+                problems.append(Problem(name, credit["id"], f"unreadable expiresAt {credit['expiresAt']!r}"))
+            elif now < when <= deadline:
+                expiring.append((when, credit))
         if not expiring:
             continue
         if provider == "openai-codex":
-            soonest = min(expiring, key=expires_at)
-            spends.append(Spend(f"openai-codex/{credential_id}", soonest["id"], expires_at(soonest)))
-        elif provider == "anthropic":
-            selected = next(
-                (
-                    credit
-                    for credit in expiring
-                    if credit["id"] == account.get("nextCreditId") and credit.get("usable") is True
-                ),
-                None,
-            )
-            if selected is not None:
-                spends.append(Spend(f"anthropic/{credential_id}", selected["id"], expires_at(selected)))
-            stranded.extend(
-                Stranded(provider, credential_id, credit["id"], expires_at(credit))
-                for credit in expiring
-                if credit is not selected
-            )
-    return spends, stranded
+            when, credit = min(expiring, key=lambda item: item[0])
+            spends.append(Spend(name, credit["id"], when))
+            continue
+        for when, credit in expiring:
+            if credit["id"] != account.get("nextCreditId") or credit.get("usable") is not True:
+                problems.append(Problem(name, credit["id"], f"expires {when.isoformat()} but Anthropic isn't offering it"))
+            elif credit.get("requiresLimit") is True:
+                problems.append(Problem(name, credit["id"], f"expires {when.isoformat()} but works only at a limit"))
+            else:
+                spends.append(Spend(name, credit["id"], when))
+    return spends, problems
 
 
 def main() -> int:
@@ -88,24 +99,12 @@ def main() -> int:
         sys.stderr.write(listing.stderr)
         return 1
     now = datetime.now(timezone.utc)
-    accounts = json.loads(listing.stdout)["accounts"]
-    spends, stranded = plan(accounts, now, now + timedelta(hours=args.within_hours))
+    spends, problems = plan(json.loads(listing.stdout)["accounts"], now, now + timedelta(hours=args.within_hours))
 
-    failed = False
-    for account in accounts:
-        if account.get("error"):
-            failed = True
-            print(
-                f"{account['provider']}/{account['credentialId']}: could not list resets: {account['error']}",
-                file=sys.stderr,
-            )
-    for credit in stranded:
-        failed = True
-        print(
-            f"{credit.provider}/{credit.credential_id}: credit {credit.credit_id} expires "
-            f"{credit.expires_at.isoformat()} but is not the provider's selected reset, so it can't be spent",
-            file=sys.stderr,
-        )
+    failed = bool(problems)
+    for problem in problems:
+        subject = problem.account if problem.credit_id is None else f"{problem.account} credit {problem.credit_id}"
+        print(f"{subject}: {problem.reason}", file=sys.stderr)
     for spend in spends:
         verb = "would spend" if args.dry_run else "spending"
         print(f"{spend.target}: {verb} credit {spend.credit_id}, expires {spend.expires_at.isoformat()}")
