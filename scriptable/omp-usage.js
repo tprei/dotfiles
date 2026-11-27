@@ -190,22 +190,35 @@ function ageOf(path) {
   return Date.now() - files.modificationDate(path).getTime();
 }
 
-function interaction(action) {
+function recordAction() {
   const since = ageOf(actionPath);
-  if (action !== null) {
-    ensureCacheDir();
-    files.writeString(actionPath, String(Date.now()));
-  }
-  return {
-    tapped: action !== null && action !== REFRESH_ACTION && since >= TAP_DEBOUNCE_MS,
-    settling: action === null && since < SETTLE_MS,
-    cacheFirst: action !== REFRESH_ACTION && (action !== null || since < SETTLE_MS),
-  };
+  ensureCacheDir();
+  files.writeString(actionPath, String(Date.now()));
+  return since >= TAP_DEBOUNCE_MS;
 }
 
-function autoAdvance(path, steps, moment) {
-  if (moment.settling || ageOf(path) < AUTO_STEP_MS) return;
+function settling() {
+  return ageOf(actionPath) < SETTLE_MS;
+}
+
+function autoAdvance(path, steps, settled) {
+  if (settled || ageOf(path) < AUTO_STEP_MS) return;
   advanceTurn(path, steps);
+}
+
+async function handleAction(family, action) {
+  const fresh = recordAction();
+  if (action === REFRESH_ACTION) {
+    await snapshot(family, false);
+    return;
+  }
+  if (VIEW_IDS.includes(action)) saveView(action);
+  if (!fresh) return;
+  if (action === USAGE_NEXT_ACTION) advanceTurn(usageTurnPath, 2);
+  if (action === NEXT_ACTION) {
+    saveView("forecast");
+    advanceTurn(turnPath, 1);
+  }
 }
 
 function detailUrl(view) {
@@ -808,8 +821,6 @@ function addForecastHero(body, item, now, position, count) {
   head.addSpacer();
   if (count < 2) return addForecastBody(body, item, now);
   addLabel(head, `${position + 1}/${count}`, Font.semiboldRoundedSystemFont(11), SECONDARY);
-  head.addSpacer(3);
-  addSymbol(head, "chevron.right", 9, SECONDARY);
   addForecastBody(body, item, now);
 }
 
@@ -1303,14 +1314,15 @@ function bucketChart(slide, usage, metric, width, height, labelled) {
 function addGoTo(row, url) {
   const button = row.addStack();
   button.backgroundColor = RAISED;
-  button.cornerRadius = 10;
-  button.setPadding(4, 5, 4, 5);
-  addSymbol(button, "arrow.up.right", 10, SECONDARY);
+  button.cornerRadius = 11;
+  button.setPadding(5, 8, 5, 8);
+  addSymbol(button, "arrow.up.right", 11, LABEL);
   button.url = url;
 }
 
 function addUsageHeader(widget, slide, metric, position, count) {
   const head = addRow(widget);
+  head.url = detailUrl("recent");
   if (slide.provider) addLogo(head, slide.provider, 16);
   else addSymbol(head, "chart.bar.fill", 13, SECONDARY);
   head.addSpacer(6);
@@ -1418,33 +1430,27 @@ function usageMode(family) {
   return HOME.includes(family) && String(args.widgetParameter || "").trim().toLowerCase() === USAGE_MODE;
 }
 
-async function buildUsage(family, action) {
-  const moment = interaction(action);
-  if (action === null) autoAdvance(usageTurnPath, 1, moment);
-  if (action === USAGE_NEXT_ACTION && moment.tapped) advanceTurn(usageTurnPath, 2);
-  const result = await snapshot(family, moment.cacheFirst);
+async function buildUsage(family) {
+  const settled = settling();
+  autoAdvance(usageTurnPath, 1, settled);
+  const result = await snapshot(family, settled);
   if (!result) return errorWidget(family, UNREACHABLE);
   return usageWidget(family, result);
 }
 
-async function build(family, action) {
-  if (usageMode(family)) return buildUsage(family, action);
-  const moment = interaction(action);
-  if (VIEW_IDS.includes(action)) saveView(action);
-  if (action === NEXT_ACTION && moment.tapped) {
-    saveView("forecast");
-    advanceTurn(turnPath, 1);
-  }
-  if (action === null && HOME.includes(family)) autoAdvance(turnPath, 1, moment);
-  const result = await snapshot(family, moment.cacheFirst);
+async function build(family) {
+  if (usageMode(family)) return buildUsage(family);
+  const settled = settling();
+  if (HOME.includes(family)) autoAdvance(turnPath, 1, settled);
+  const result = await snapshot(family, settled);
   if (!result) return errorWidget(family, UNREACHABLE);
   if (!HOME.includes(family)) return lockWidget(family, result);
   return family === "small" ? smallWidget(result) : homeWidget(family, savedView(), result);
 }
 
-async function render(family, action) {
+async function render(family) {
   try {
-    return await build(family, action);
+    return await build(family);
   } catch (error) {
     console.error(error);
     return errorWidget(family, BROKEN);
@@ -1454,12 +1460,16 @@ async function render(family, action) {
 const requested = config.runsInApp ? "medium" : config.widgetFamily || "medium";
 const family = requested === "extraLarge" ? "large" : requested;
 const action = args.widgetAction ? args.widgetAction.id : null;
-const widget = await render(family, action);
-if (!HOME.includes(family)) widget.url = BOT_URL;
-widget.refreshAfterDate = new Date(Date.now() + REFRESH_MS);
-if (config.runsInApp) {
-  await widget.presentMedium();
+if (action !== null) {
+  await handleAction(family, action);
 } else {
-  Script.setWidget(widget);
+  const widget = await render(family);
+  if (!HOME.includes(family)) widget.url = BOT_URL;
+  widget.refreshAfterDate = new Date(Date.now() + REFRESH_MS);
+  if (config.runsInApp) {
+    await widget.presentMedium();
+  } else {
+    Script.setWidget(widget);
+  }
 }
 Script.complete();
