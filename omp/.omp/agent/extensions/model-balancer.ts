@@ -86,7 +86,7 @@ export default function modelBalancer(pi: ExtensionAPI) {
 		const fresh = starts.filter(selector => now - (cooledAt.get(bucket(selector.base)) ?? 0) >= COOLDOWN_MS);
 		const choices = fresh.length > 0 ? fresh : starts;
 
-		const drain = now < DRAIN_UNTIL ? choices.find(selector => selector.base.startsWith(DRAIN_PROVIDER)) : undefined;
+		const drain = now < DRAIN_UNTIL ? fresh.find(selector => selector.base.startsWith(DRAIN_PROVIDER)) : undefined;
 		const index = (cursors.get(source.base) ?? 0) % choices.length;
 		cursors.set(source.base, index + 1);
 		const picked = drain ?? choices[index];
