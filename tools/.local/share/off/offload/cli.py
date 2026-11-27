@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from offload.config import ConfigError, OffloadConfig, TaskSpec, load_config, parse_timeout
+from offload.heavy import refusal
 from offload.identity import base_key, host_slug, repo_slug, worker_prefix
 from offload.policy import (
     LOCKED_PRIVILEGES,
@@ -35,6 +36,8 @@ from offload.tern import watch
 
 CPU_HOUR_USD = 0.0385
 GB_HOUR_USD = 0.021875
+# Not 2: make, pytest, tsc and eslint all exit 2 on real failures, which an agent would then wrongly rerun locally.
+EXIT_REFUSED = 64
 
 
 def main(argv: Sequence[str]) -> int:
@@ -116,8 +119,16 @@ def _timeout_arg(text: str) -> int:
 
 
 def _exec(timeout: int, argv: list[str]) -> int:
-    config = load_config(_repo_root())
     command = argv[0] if len(argv) == 1 else shlex.join(argv)
+    reason = refusal(command)
+    if reason is not None:
+        print(
+            f"off: refusing to offload {command!r}: {reason}; "
+            "run it locally, or declare it as a task in offload.toml",
+            file=sys.stderr,
+        )
+        return EXIT_REFUSED
+    config = load_config(_repo_root())
     spec = TaskSpec(
         name="exec",
         run=command,

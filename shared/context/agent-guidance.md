@@ -41,7 +41,7 @@ Speak English. Communicate like a principal engineer: direct, no flattery, no fa
 ## Offload
 
 - In a repo whose git root has `offload.toml`, run heavy checks (tests, typecheck, lint, build, soak) with `off run <task>` instead of locally. Don't ask first, and only mention `off` when it fails.
-- "Offload X" means run X through `off`: the matching declared task, else `off exec -- <command>`.
+- Use `off exec` only when the user says "offload X" and no task covers X. It refuses commands that aren't test, build, lint or typecheck runners (exit 64): run those locally. Quick commands (versions, file reads, git) always run locally.
 - Exit codes and details: the `offload` skill.
 
 ## Code hygiene
