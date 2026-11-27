@@ -22,7 +22,7 @@ from pathlib import Path
 from types import FrameType
 from typing import Final, TextIO
 
-from .config import OffloadConfig, TaskSpec
+from .config import ConfigError, OffloadConfig, TaskSpec, load_config
 from .identity import base_key, host_slug, repo_slug, worker_name, worker_prefix
 from .policy import LOCKED_PRIVILEGES, memory_policy, policy_hash, run_network_rules, setup_network_rules
 from .sprites import SpriteError, Sprites, SpriteInfo, summarize_output
@@ -62,18 +62,19 @@ SYNC_RETRY_DELAY_S: Final = 2
 RSYNC_TRANSPORT_CODES: Final = frozenset({10, 12, 30, 35, 255})
 TASK_ATTEMPTS: Final = 2
 MIN_RETRY_S: Final = 60
-RESET_WAIT_S: Final = 120
 RESET_POLL_S: Final = 0.2
+WARM_TIMEOUT_S: Final = 600
 # Worker .bashrc runs readline setup that warns without a tty; the exported stub silences it for login shells.
 NO_BIND: Final = "bind() { :; }; export -f bind; "
 UNSET_BIND: Final = "unset -f bind; "
 IDLE_RETENTION_S: Final = 7 * 24 * 3600
+REFRESH_AFTER_FILES: Final = 50
 # The image's `python3` is a pyenv shim that follows a repo's .python-version and hangs on versions it lacks.
 SYSTEM_PYTHON: Final = "/usr/bin/python3"
-# Runs on the worker in WORKDIR right after the sync: removes base files deleted locally since the worker was built.
-# The sync already replaced swapped paths (rsync --force), so a stale path under a parent that is now a symlink or a
-# file is gone or belongs to something else, and is skipped rather than followed.
-PRUNE_SCRIPT: Final = """
+# Shared by the per-run prune and the base refresh, run on the worker in WORKDIR: removes base files deleted locally
+# since the base was taken. The sync already replaced swapped paths (rsync --force), so a stale path under a parent
+# that is now a symlink or a file is gone or belongs to something else, and is skipped rather than followed.
+_PRUNE_CORE: Final = """
 import os, sys
 base_path, run_path = sys.argv[1], sys.argv[2]
 for required in (base_path, run_path):
@@ -82,7 +83,8 @@ for required in (base_path, run_path):
 with open(base_path, "rb") as handle:
     base = {path for path in handle.read().split(b"\\0") if path}
 with open(run_path, "rb") as handle:
-    current = {path for path in handle.read().split(b"\\0") if path}
+    current_list = [path for path in handle.read().split(b"\\0") if path]
+current = set(current_list)
 
 def under_real_dirs(path):
     parent = os.path.dirname(path)
@@ -104,8 +106,23 @@ for path in sorted(base - current, reverse=True):
         except OSError:
             break
         parent = os.path.dirname(parent)
+"""
+PRUNE_SCRIPT: Final = _PRUNE_CORE + "os.unlink(run_path)\n"
+# Before a refresh's sync: the new base lists what it listed before plus paths the sync will create, so setup
+# outputs stay unlisted and are never pruned.
+REFRESH_SCRIPT: Final = (
+    _PRUNE_CORE
+    + """
+def kept(path):
+    if path in base or not os.path.lexists(path):
+        return True
+    return os.path.isdir(path) and not os.path.islink(path)
+
+with open(base_path, "wb") as handle:
+    handle.write(b"\\0".join(path for path in current_list if kept(path)))
 os.unlink(run_path)
 """
+)
 # Runs once at bootstrap before the tree sync: only paths the sync creates are listed, never setup inputs or outputs.
 BASE_LIST_SCRIPT: Final = """
 import os, sys
@@ -119,6 +136,7 @@ os.unlink(run_path)
 """
 EXIT_SENTINEL: Final = "__off_exit__"
 _SENTINEL_LINE: Final = re.compile(rf"{EXIT_SENTINEL} ([0-9a-f]+) (\d+)\n?")
+_TRANSFERRED: Final = re.compile(r"Number of regular files transferred: ([0-9,.]+)")
 _OUTPUT_LOCK: Final = threading.Lock()
 
 
@@ -189,6 +207,7 @@ def sync_argv(config: OffloadConfig, shell: str) -> list[str]:
         "--files-from=-",
         "--ignore-missing-args",
         "--force",
+        "--stats",
         "-e",
         shell,
         f"{config.root}/",
@@ -316,15 +335,8 @@ def _bootstrap(
     # Only the setup inputs go in before setup: setup has open egress and its tree is checkpointed for good.
     _sync_up(sprites, config, name, list(config.setup.inputs), setup_emit)
     for line in config.setup.run:
-        bounded = f"timeout --kill-after=15s {SETUP_TIMEOUT_S}s bash -lc {shlex.quote(UNSET_BIND + line)}"
         _exec_checked(
-            sprites,
-            name,
-            ["bash", "-c", NO_BIND + bounded],
-            live,
-            cwd=WORKDIR,
-            failure=f"setup failed: {line}",
-            emit=setup_emit,
+            sprites, name, _bounded_shell(line), live, cwd=WORKDIR, failure=f"setup failed: {line}", emit=setup_emit
         )
     # Checkpoints capture policies, and restoring one taken before set_privileges hangs, so lock first.
     sprites.set_privileges(name, LOCKED_PRIVILEGES)
@@ -346,7 +358,25 @@ def _bootstrap(
     finally:
         listing.unlink(missing_ok=True)
     _sync_up(sprites, config, name, files, setup_emit)
+    _warm(sprites, config, name, live, setup_emit)
     return sprites.checkpoint(name, marker).id
+
+
+def _bounded_shell(line: str, limit_s: int = SETUP_TIMEOUT_S) -> list[str]:
+    bounded = f"timeout --kill-after=15s {limit_s}s bash -lc {shlex.quote(UNSET_BIND + line)}"
+    return ["bash", "-c", NO_BIND + bounded]
+
+
+def _warm(sprites: Sprites, config: OffloadConfig, name: str, live: _Live, emit: Callable[[str], None]) -> None:
+    """Prime tool caches in the tree; a failing command still leaves a usable cache, so its exit is reported only."""
+
+    def warm_emit(line: str) -> None:
+        emit(f"[warm] {line}")
+
+    for line in config.warm:
+        code = _exec_status(sprites, name, _bounded_shell(line, WARM_TIMEOUT_S), live, cwd=WORKDIR, emit=warm_emit)
+        if code != 0:
+            warm_emit(f"{line} exited {code}; its cache is kept\n")
 
 
 def _discard_worker(sprites: Sprites, name: str) -> None:
@@ -361,7 +391,10 @@ def _find(sprites: Sprites, name: str) -> SpriteInfo | None:
     return next((info for info in sprites.list_sprites(name) if info.name == name), None)
 
 
-def _touch(config: OffloadConfig, name: str, checkpoint_id: str, *, clean: bool) -> None:
+def _touch(config: OffloadConfig, name: str, checkpoint_id: str, *, clean: bool, drift: int | None = None) -> None:
+    if drift is None:
+        previous = _cache_if_readable(name)
+        drift = previous.drift if previous is not None and previous.base_checkpoint == checkpoint_id else 0
     write_cache(
         name,
         WorkerCache(
@@ -370,6 +403,7 @@ def _touch(config: OffloadConfig, name: str, checkpoint_id: str, *, clean: bool)
             policy_hash=policy_hash(config.worker),
             last_used=time.time(),
             clean=clean,
+            drift=drift,
         ),
     )
 
@@ -398,7 +432,7 @@ def _is_ready(config: OffloadConfig, name: str) -> bool:
     return _matching_cache(config, name) is not None
 
 
-def reset_worker(sprites: Sprites, name: str, checkpoint_id: str) -> None:
+def reset_worker(sprites: Sprites, name: str, checkpoint_id: str, root: Path) -> None:
     marker = _reset_marker(name)
     restored = False
     try:
@@ -408,12 +442,85 @@ def reset_worker(sprites: Sprites, name: str, checkpoint_id: str) -> None:
                 return
             marker.write_text(str(os.getpid()), encoding="utf-8")
             sprites.restore(name, checkpoint_id)
-            write_cache(name, replace(cache, clean=True))
+            cache = replace(cache, clean=True)
+            write_cache(name, cache)
             restored = True
+            if cache.drift >= REFRESH_AFTER_FILES:
+                _refresh(sprites, name, cache, root)
     finally:
         _clear_reset_marker(marker)
     if restored:
         _prune_restore_points(sprites, name)
+
+
+def _refresh(sprites: Sprites, name: str, cache: WorkerCache, root: Path) -> None:
+    """Retake the base from the current tree, warm caches included, on a worker just restored to its base."""
+    try:
+        config = load_config(root)
+    except ConfigError as error:
+        _warn(f"base refresh skipped on {name}: {error}")
+        return
+    if cache.base_key != base_key(config) or cache.policy_hash != policy_hash(config.worker):
+        return
+
+    def emit(line: str) -> None:
+        _say(sys.stdout, f"{name}: {line}")
+
+    marker = base_marker(config)
+    try:
+        existing = {checkpoint.id for checkpoint in sprites.checkpoints(name)}
+        files = sync_files(config)
+    except (OffError, SpriteError, OSError) as error:
+        _warn(f"base refresh skipped on {name}: {error}")
+        return
+    live = _Live()
+    write_cache(name, replace(cache, clean=False))
+    try:
+        listing = _write_file_list(files)
+        try:
+            _exec_checked(
+                sprites,
+                name,
+                [SYSTEM_PYTHON, "-c", REFRESH_SCRIPT, BASE_LIST, RUN_LIST],
+                live,
+                cwd=WORKDIR,
+                failure="could not refresh the base file list",
+                uploads=[(listing, RUN_LIST)],
+            )
+        finally:
+            listing.unlink(missing_ok=True)
+        _sync_up(sprites, config, name, files, emit)
+        _warm(sprites, config, name, live, emit)
+        refreshed = sprites.checkpoint(name, marker, existing=existing).id
+    except (OffError, SpriteError, OSError) as error:
+        _warn(f"base refresh failed on {name}, keeping the old base: {error}")
+        _drop_new_bases(sprites, name, marker, existing)
+        _restore_after_failed_refresh(sprites, name, cache)
+        return
+    write_cache(name, replace(cache, base_checkpoint=refreshed, drift=0, clean=True))
+    try:
+        sprites.delete_checkpoint(name, cache.base_checkpoint)
+    except (SpriteError, OSError) as error:
+        _warn(f"could not delete the old base {cache.base_checkpoint} on {name}: {error}")
+
+
+def _drop_new_bases(sprites: Sprites, name: str, marker: str, existing: set[str]) -> None:
+    """A refresh that failed after its checkpoint POST may have left a full snapshot behind."""
+    try:
+        for checkpoint in sprites.checkpoints(name):
+            if checkpoint.comment == marker and checkpoint.id not in existing:
+                sprites.delete_checkpoint(name, checkpoint.id)
+    except (SpriteError, OSError) as error:
+        _warn(f"could not remove a half-made base on {name}: {error}")
+
+
+def _restore_after_failed_refresh(sprites: Sprites, name: str, cache: WorkerCache) -> None:
+    try:
+        sprites.restore(name, cache.base_checkpoint)
+    except (SpriteError, OSError) as error:
+        _warn(f"could not restore {name} after a failed refresh; the next run restores it: {error}")
+        return
+    write_cache(name, replace(cache, clean=True))
 
 
 def _prune_restore_points(sprites: Sprites, name: str) -> None:
@@ -448,13 +555,16 @@ def _resetting(name: str) -> bool:
 
 
 def _acquire_after_reset(lease: Lease, name: str) -> bool:
-    """Take the lease, waiting while a background reset holds it; give up at once if a run holds it."""
-    deadline = time.monotonic() + RESET_WAIT_S
+    """Take the lease, waiting as long as a live background reset or refresh holds it; give up at once on a run."""
+    announced = False
     while True:
         if lease.try_acquire():
             return True
-        if not _resetting(name) or time.monotonic() >= deadline:
+        if not _resetting(name):
             return False
+        if not announced:
+            _say(sys.stderr, f"off: waiting for {name} to finish its background reset\n")
+            announced = True
         time.sleep(RESET_POLL_S)
 
 
@@ -493,11 +603,11 @@ def _lease(config: OffloadConfig, names: list[str], count: int) -> list[tuple[st
 _AGENT_TRACKING_ENV: Final = frozenset({"OMP_BASH_SESSION"})
 
 
-def _spawn_reset(launcher: Path, name: str, checkpoint_id: str) -> None:
+def _spawn_reset(launcher: Path, name: str, checkpoint_id: str, root: Path) -> subprocess.Popen[bytes]:
     env = {key: value for key, value in os.environ.items() if key not in _AGENT_TRACKING_ENV}
     with reset_log().open("a", encoding="utf-8") as log:
-        subprocess.Popen(
-            [sys.executable, str(launcher), "_reset", name, checkpoint_id],
+        return subprocess.Popen(
+            [sys.executable, str(launcher), "_reset", name, checkpoint_id, "--root", str(root)],
             stdin=subprocess.DEVNULL,
             stdout=log,
             stderr=subprocess.STDOUT,
@@ -506,16 +616,16 @@ def _spawn_reset(launcher: Path, name: str, checkpoint_id: str) -> None:
         )
 
 
-def _reset_workers(sprites: Sprites, workers: list[str], launcher: Path | None) -> None:
+def _reset_workers(sprites: Sprites, workers: list[str], launcher: Path | None, root: Path) -> None:
     for name in workers:
         cache = _cache_if_readable(name)
         if cache is None or cache.clean or not cache.base_checkpoint:
             continue
         try:
             if launcher is None:
-                reset_worker(sprites, name, cache.base_checkpoint)
+                reset_worker(sprites, name, cache.base_checkpoint, root)
             else:
-                _spawn_reset(launcher, name, cache.base_checkpoint)
+                _spawn_reset(launcher, name, cache.base_checkpoint, root)
         except (SpriteError, OSError) as error:
             _warn(f"could not reset worker {name}: {error}")
 
@@ -564,7 +674,7 @@ def _run_sprite(config: OffloadConfig, task: TaskSpec, extra_args: list[str], la
     finally:
         for _, lease in leases:
             lease.release()
-        _reset_workers(sprites, workers, launcher)
+        _reset_workers(sprites, workers, launcher, config.root)
     if task.artifacts:
         _say(sys.stderr, f"off: artifacts: {artifact_root(repo, run_id)}/\n")
     try:
@@ -676,7 +786,8 @@ def _attempt(ctx: _Run, index: int, name: str, base_id: str, limit: int, emit: C
             raise
     _touch(ctx.config, name, base_id, clean=False)
     files = sync_files(ctx.config)
-    _sync_up(ctx.sprites, ctx.config, name, files, emit)
+    drift = _sync_up(ctx.sprites, ctx.config, name, files, emit)
+    _touch(ctx.config, name, base_id, clean=False, drift=drift)
     listing = _write_file_list(files)
     envfile = _write_env_file(
         {**ctx.env, "CI": "1", "OFF": "1", "OFF_SHARD": str(index), "OFF_SHARDS": str(ctx.task.shards)}
@@ -799,15 +910,24 @@ def _pull_artifacts(ctx: _Run, name: str, index: int) -> None:
 
 def _sync_up(
     sprites: Sprites, config: OffloadConfig, name: str, files: list[str], emit: Callable[[str], None]
-) -> None:
+) -> int:
+    """Sync `files` and return how many regular files rsync transferred, i.e. how many differed on the worker."""
     for attempt in range(1, SYNC_ATTEMPTS + 1):
         completed = _rsync(sync_argv(config, sprites.rsync_shell(name)), stdin="\0".join(files))
         if completed.returncode == 0:
-            return
+            return _transferred(completed.stdout)
         if completed.returncode not in RSYNC_TRANSPORT_CODES or attempt == SYNC_ATTEMPTS:
             raise OffError(f"sync to {name} failed: {summarize_output(completed.stderr)}")
         emit(f"off: sync to {name} interrupted (rsync exit {completed.returncode}); retrying\n")
         time.sleep(SYNC_RETRY_DELAY_S)
+    raise OffError(f"sync to {name} made no attempt")
+
+
+def _transferred(stats: str) -> int:
+    match = _TRANSFERRED.search(stats)
+    if match is None:
+        raise OffError("rsync printed no transfer stats")
+    return int(match.group(1).replace(",", "").replace(".", ""))
 
 
 def _rsync(argv: list[str], stdin: str | None = None) -> subprocess.CompletedProcess[str]:
@@ -838,6 +958,21 @@ def _exec_checked(
     emit: Callable[[str], None] | None = None,
     uploads: Sequence[tuple[Path, str]] = (),
 ) -> None:
+    code = _exec_status(sprites, name, argv, live, cwd=cwd, emit=emit, uploads=uploads)
+    if code != 0:
+        raise OffError(f"{failure} (exit {code})")
+
+
+def _exec_status(
+    sprites: Sprites,
+    name: str,
+    argv: list[str],
+    live: _Live,
+    *,
+    cwd: str,
+    emit: Callable[[str], None] | None = None,
+    uploads: Sequence[tuple[Path, str]] = (),
+) -> int:
     proc = sprites.start_exec(name, argv, cwd=cwd, uploads=uploads)
     output = emit or _discard
     if proc.stdout is None:
@@ -850,9 +985,7 @@ def _exec_checked(
                 output(line)
     finally:
         timer.cancel()
-    code = proc.wait()
-    if code != 0:
-        raise OffError(f"{failure} (exit {code})")
+    return proc.wait()
 
 
 def _discard(_line: str) -> None:

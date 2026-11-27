@@ -94,6 +94,7 @@ class WorkerCache:
     policy_hash: str
     last_used: float
     clean: bool = False
+    drift: int = 0
 
 
 def read_cache(name: str) -> WorkerCache | None:
