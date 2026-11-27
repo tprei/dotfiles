@@ -122,7 +122,11 @@ FAKE_SPRITE = textwrap.dedent(
         save(state)
         fcntl.flock(lock, fcntl.LOCK_UN)
         env = {**os.environ, "HOME": str(ROOT / name / "home" / "sprite")}
-        sys.exit(subprocess.run(argv, cwd=cwd, env=env).returncode)
+        code = subprocess.run(argv, cwd=cwd, env=env).returncode
+        after = os.environ.get("FAKE_SPRITE_EXIT_AFTER")
+        if after and any("__off_exit__" in part for part in argv):
+            sys.exit(int(after))
+        sys.exit(code)
     save(state)
     '''
 ).lstrip()
@@ -166,6 +170,14 @@ OFFLOAD_TOML = textwrap.dedent(
 
     [tasks.ok]
     run = "echo hello from $OFF_SHARD and $OFF_TEST_TOKEN"
+    timeout = "5m"
+
+    [tasks.brief]
+    run = "echo brief"
+    timeout = "1m"
+
+    [tasks.tree]
+    run = "find . -not -path './.git*' | sort; if [ -L lib ]; then echo lib-is-link; fi"
     timeout = "1m"
 
     [tasks.fail]
@@ -373,15 +385,68 @@ class RunnerEndToEndTest(unittest.TestCase):
         self.assertEqual(code, 0, output)
         self.assertNotIn("./untracked.txt", output)
 
-    def test_run_waits_for_a_busy_built_worker_instead_of_building_another(self) -> None:
+    def test_run_waits_for_a_resetting_worker_instead_of_building_another(self) -> None:
         self.assertEqual(self.off("run", "ok")[0], 0)
         holder = Lease(lock_path(self.workers[0]))
         self.assertTrue(holder.try_acquire())
-        threading.Timer(0.5, holder.release).start()
+        marker = lock_path(self.workers[0]).with_suffix(".resetting")
+        marker.write_text(str(os.getpid()))
+
+        def finish_reset() -> None:
+            holder.release()
+            marker.unlink()
+
+        threading.Timer(0.5, finish_reset).start()
         code, output = self.off("run", "ok")
         self.assertEqual(code, 0, output)
         creates = [call[1] for call in self.calls() if call[0] == "create"]
         self.assertEqual(creates, [self.workers[0]])
+
+    def test_run_builds_another_worker_when_the_built_one_is_busy_with_a_run(self) -> None:
+        self.assertEqual(self.off("run", "ok")[0], 0)
+        holder = Lease(lock_path(self.workers[0]))
+        self.assertTrue(holder.try_acquire())
+        self.addCleanup(holder.release)
+        code, output = self.off("run", "ok")
+        self.assertEqual(code, 0, output)
+        creates = [call[1] for call in self.calls() if call[0] == "create"]
+        self.assertEqual(creates, self.workers)
+
+    def test_directory_replaced_by_a_symlink_keeps_syncing(self) -> None:
+        (self.repo / "lib").mkdir()
+        (self.repo / "lib" / "a.py").write_text("old\n")
+        self.assertEqual(self.off("run", "tree")[0], 0)
+        shutil.rmtree(self.repo / "lib")
+        (self.repo / "vendor" / "lib").mkdir(parents=True)
+        (self.repo / "vendor" / "lib" / "a.py").write_text("new\n")
+        (self.repo / "lib").symlink_to("vendor/lib")
+        for _ in range(2):
+            code, output = self.off("run", "tree")
+            self.assertEqual(code, 0, output)
+            self.assertIn("./vendor/lib/a.py", output)
+            self.assertIn("lib-is-link", output)
+
+    def test_deleted_package_leaves_no_empty_directory(self) -> None:
+        (self.repo / "old_pkg").mkdir()
+        (self.repo / "old_pkg" / "__init__.py").write_text("")
+        self.assertEqual(self.off("run", "tree")[0], 0)
+        shutil.rmtree(self.repo / "old_pkg")
+        code, output = self.off("run", "tree")
+        self.assertEqual(code, 0, output)
+        self.assertNotIn("old_pkg", output)
+
+    def test_result_after_a_dropped_client_is_kept_without_a_rerun(self) -> None:
+        with mock.patch.dict(os.environ, {"FAKE_SPRITE_EXIT_AFTER": "255"}):
+            code, output = self.off("run", "ok")
+        self.assertEqual(code, 0, output)
+        self.assertEqual(output.count("hello from 1"), 1, output)
+        self.assertNotIn("retrying", output)
+
+    def test_lost_connection_is_not_retried_without_time_left(self) -> None:
+        with mock.patch.dict(os.environ, {"FAKE_SPRITE_DROP": "1"}):
+            code, output = self.off("run", "brief")
+        self.assertEqual(code, runner.EXIT_OFF_ERROR, output)
+        self.assertIn("not enough time left to retry", output)
 
     def test_exec_runs_an_ad_hoc_command_and_keeps_its_exit_code(self) -> None:
         code, output = self.off("exec", "--", "echo hi && exit 4")
@@ -458,6 +523,45 @@ class LeaseOrderTest(unittest.TestCase):
             for thread in threads:
                 thread.join(timeout=10)
         self.assertEqual(sorted(finished), ["a", "b"])
+
+
+class PruneScriptTest(unittest.TestCase):
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.work = self.root / "work"
+        self.work.mkdir()
+
+    def prune(self, base: list[str], current: list[str] | None) -> subprocess.CompletedProcess[str]:
+        (self.root / "base").write_bytes(b"\0".join(path.encode() for path in base))
+        if current is not None:
+            (self.root / "run").write_bytes(b"\0".join(path.encode() for path in current))
+        argv = [sys.executable, "-c", runner.PRUNE_SCRIPT, str(self.root / "base"), str(self.root / "run")]
+        return subprocess.run(argv, cwd=self.work, capture_output=True, text=True)
+
+    def test_missing_run_list_deletes_nothing(self) -> None:
+        (self.work / "keep.txt").write_text("x")
+        completed = self.prune(["keep.txt"], None)
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertTrue((self.work / "keep.txt").exists())
+
+    def test_removes_only_stale_paths_including_odd_names(self) -> None:
+        odd = ["-rf", "new\nline.txt", "pkg/mod.py"]
+        (self.work / "pkg").mkdir()
+        for path in [*odd, "keep.txt"]:
+            (self.work / path).write_text("x")
+        completed = self.prune([*odd, "keep.txt"], ["keep.txt"])
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(sorted(path.name for path in self.work.iterdir()), ["keep.txt"])
+
+    def test_never_deletes_through_a_symlinked_parent(self) -> None:
+        (self.work / "vendor" / "lib").mkdir(parents=True)
+        (self.work / "vendor" / "lib" / "a.py").write_text("live")
+        (self.work / "lib").symlink_to("vendor/lib")
+        completed = self.prune(["lib/a.py"], ["lib", "vendor/lib/a.py"])
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual((self.work / "vendor" / "lib" / "a.py").read_text(), "live")
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import fnmatch
+import math
 import os
 import re
 import secrets
@@ -58,9 +59,60 @@ SYNC_ATTEMPTS: Final = 3
 SYNC_RETRY_DELAY_S: Final = 2
 RSYNC_TRANSPORT_CODES: Final = frozenset({10, 12, 30, 35, 255})
 TASK_ATTEMPTS: Final = 2
+MIN_RETRY_S: Final = 60
+RESET_WAIT_S: Final = 120
+RESET_POLL_S: Final = 0.2
 # Worker .bashrc runs readline setup that warns without a tty; the exported stub silences it for login shells.
 NO_BIND: Final = "bind() { :; }; export -f bind; "
+UNSET_BIND: Final = "unset -f bind; "
 IDLE_RETENTION_S: Final = 7 * 24 * 3600
+# Runs on the worker in WORKDIR right after the sync: removes base files deleted locally since the worker was built.
+# The sync already replaced swapped paths (rsync --force), so a stale path under a parent that is now a symlink or a
+# file is gone or belongs to something else, and is skipped rather than followed.
+PRUNE_SCRIPT: Final = """
+import os, sys
+base_path, run_path = sys.argv[1], sys.argv[2]
+for required in (base_path, run_path):
+    if not os.path.exists(required):
+        sys.exit(f"off: missing file list {required}")
+with open(base_path, "rb") as handle:
+    base = {path for path in handle.read().split(b"\\0") if path}
+with open(run_path, "rb") as handle:
+    current = {path for path in handle.read().split(b"\\0") if path}
+
+def under_real_dirs(path):
+    parent = os.path.dirname(path)
+    while parent:
+        if os.path.islink(parent) or not os.path.isdir(parent):
+            return False
+        parent = os.path.dirname(parent)
+    return True
+
+for path in sorted(base - current, reverse=True):
+    if not under_real_dirs(path):
+        continue
+    if os.path.islink(path) or os.path.isfile(path):
+        os.unlink(path)
+    parent = os.path.dirname(path)
+    while parent:
+        try:
+            os.rmdir(parent)
+        except OSError:
+            break
+        parent = os.path.dirname(parent)
+os.unlink(run_path)
+"""
+# Runs once at bootstrap before the tree sync: only paths the sync creates are listed, never setup inputs or outputs.
+BASE_LIST_SCRIPT: Final = """
+import os, sys
+run_path, base_path = sys.argv[1], sys.argv[2]
+with open(run_path, "rb") as handle:
+    paths = [path for path in handle.read().split(b"\\0") if path]
+os.makedirs(os.path.dirname(base_path), exist_ok=True)
+with open(base_path, "wb") as handle:
+    handle.write(b"\\0".join(path for path in paths if not os.path.lexists(path)))
+os.unlink(run_path)
+"""
 EXIT_SENTINEL: Final = "__off_exit__"
 _SENTINEL_LINE: Final = re.compile(rf"{EXIT_SENTINEL} ([0-9a-f]+) (\d+)\n?")
 _OUTPUT_LOCK: Final = threading.Lock()
@@ -131,6 +183,7 @@ def sync_argv(config: OffloadConfig, shell: str) -> list[str]:
         "--from0",
         "--files-from=-",
         "--ignore-missing-args",
+        "--force",
         "-e",
         shell,
         f"{config.root}/",
@@ -191,7 +244,7 @@ def destroy_workers(sprites: Sprites, names: list[str]) -> list[str]:
     busy: list[str] = []
     for name in names:
         lease = Lease(lock_path(name))
-        if lease.try_acquire():
+        if _acquire_after_reset(lease, name):
             held.append((name, lease))
         else:
             busy.append(name)
@@ -255,7 +308,7 @@ def _bootstrap(
     # Only the setup inputs go in before setup: setup has open egress and its tree is checkpointed for good.
     _sync_up(sprites, config, name, list(config.setup.inputs), setup_emit)
     for line in config.setup.run:
-        bounded = f"timeout --kill-after=15s {SETUP_TIMEOUT_S}s bash -lc {shlex.quote(line)}"
+        bounded = f"timeout --kill-after=15s {SETUP_TIMEOUT_S}s bash -lc {shlex.quote(UNSET_BIND + line)}"
         _exec_checked(
             sprites,
             name,
@@ -271,13 +324,12 @@ def _bootstrap(
     sprites.set_memory(name, memory_policy(config.worker.memory_mb))
     _exec_checked(sprites, name, ["true"], live, cwd=WORKDIR, failure="worker did not come back after lockdown")
     files = sync_files(config)
-    _sync_up(sprites, config, name, files, setup_emit)
     listing = _write_file_list(files)
     try:
         _exec_checked(
             sprites,
             name,
-            ["bash", "-c", f"mkdir -p {OFF_DIR} && mv {RUN_LIST} {BASE_LIST}"],
+            ["python3", "-c", BASE_LIST_SCRIPT, RUN_LIST, BASE_LIST],
             live,
             cwd=WORKDIR,
             failure="could not record the base file list",
@@ -285,6 +337,7 @@ def _bootstrap(
         )
     finally:
         listing.unlink(missing_ok=True)
+    _sync_up(sprites, config, name, files, setup_emit)
     return sprites.checkpoint(name, marker).id
 
 
@@ -336,12 +389,86 @@ def _is_ready(config: OffloadConfig, name: str) -> bool:
 
 
 def reset_worker(sprites: Sprites, name: str, checkpoint_id: str) -> None:
-    with Lease(lock_path(name)):
-        cache = _cache_if_readable(name)
-        if cache is None or cache.clean or cache.base_checkpoint != checkpoint_id:
-            return
-        sprites.restore(name, checkpoint_id)
-        write_cache(name, replace(cache, clean=True))
+    marker = _reset_marker(name)
+    try:
+        with Lease(lock_path(name)):
+            cache = _cache_if_readable(name)
+            if cache is None or cache.clean or cache.base_checkpoint != checkpoint_id:
+                return
+            marker.write_text(str(os.getpid()), encoding="utf-8")
+            sprites.restore(name, checkpoint_id)
+            write_cache(name, replace(cache, clean=True))
+    finally:
+        _clear_reset_marker(marker)
+
+
+def _reset_marker(name: str) -> Path:
+    return lock_path(name).with_suffix(".resetting")
+
+
+def _clear_reset_marker(marker: Path) -> None:
+    """Another reset may have taken the lock and written its own marker after ours released it."""
+    try:
+        owner = marker.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return
+    if owner == str(os.getpid()):
+        marker.unlink()
+
+
+def _resetting(name: str) -> bool:
+    try:
+        pid = int(_reset_marker(name).read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _acquire_after_reset(lease: Lease, name: str) -> bool:
+    """Take the lease, waiting while a background reset holds it; give up at once if a run holds it."""
+    deadline = time.monotonic() + RESET_WAIT_S
+    while True:
+        if lease.try_acquire():
+            return True
+        if not _resetting(name) or time.monotonic() >= deadline:
+            return False
+        time.sleep(RESET_POLL_S)
+
+
+def _try_lease(lease: Lease, _name: str) -> bool:
+    return lease.try_acquire()
+
+
+def _lease(config: OffloadConfig, names: list[str], count: int) -> list[tuple[str, Lease]]:
+    """Prefer free built workers, then ones finishing a reset, then building new ones; else block in fixed order."""
+    ready = [name for name in names if _is_ready(config, name)]
+    unready = [name for name in names if name not in ready]
+    passes: list[tuple[list[str], Callable[[Lease, str], bool]]] = [
+        (ready, _try_lease),
+        (ready, _acquire_after_reset),
+        (unready, _try_lease),
+    ]
+    held: list[tuple[str, Lease]] = []
+    for candidates, acquire in passes:
+        for name in candidates:
+            if len(held) == count:
+                return held
+            if any(name == taken for taken, _ in held):
+                continue
+            lease = Lease(lock_path(name))
+            if acquire(lease, name):
+                held.append((name, lease))
+    if len(held) == count:
+        return held
+    for _, lease in held:
+        lease.release()
+    return lease_workers(names, count)
 
 
 def _spawn_reset(launcher: Path, name: str, checkpoint_id: str) -> None:
@@ -400,8 +527,7 @@ def _run_sprite(config: OffloadConfig, task: TaskSpec, extra_args: list[str], la
     started_at = datetime.now(UTC)
     started = time.monotonic()
     _say(sys.stderr, f"off: run {run_id} ({task.name}, {task.shards} shard(s)) log: {run_log(run_id, 1)}\n")
-    ready = [name for name in names[task.shards :] if _is_ready(config, name)]
-    leases = lease_workers([*names[: task.shards], *ready], task.shards)
+    leases = _lease(config, names, task.shards)
     workers = [name for name, _ in leases]
     if launcher is not None:
         open_viewers(run_id, task.shards, config.root, launcher)
@@ -490,10 +616,11 @@ def _run_shard(ctx: _Run, index: int, name: str) -> int:
 
 def _execute(ctx: _Run, index: int, name: str, emit: Callable[[str], None]) -> int:
     base_id = ensure_ready(ctx.sprites, ctx.config, name, ctx.live, lambda line: emit(f"[setup] {line}"))
-    limit = ctx.task.timeout_s
+    deadline = time.monotonic() + ctx.task.timeout_s
     attempt = 1
     while True:
-        result = _attempt(ctx, index, name, base_id, emit)
+        limit = max(1, math.ceil(deadline - time.monotonic()))
+        result = _attempt(ctx, index, name, base_id, limit, emit)
         if result.task_code is not None:
             _pull_artifacts(ctx, name, index)
             _touch(ctx.config, name, base_id, clean=False)
@@ -505,34 +632,34 @@ def _execute(ctx: _Run, index: int, name: str, emit: Callable[[str], None]) -> i
         if result.expired:
             emit(f"off: local watchdog stopped the task after {limit + KILL_GRACE_S}s\n")
             return EXIT_TIMEOUT
+        lost = OffError(f"lost the task on {name}: sprite exec exited {result.client_code} without a result")
         if attempt == TASK_ATTEMPTS:
-            raise OffError(f"lost the task on {name}: sprite exec exited {result.client_code} without a result")
+            raise lost
+        if deadline - time.monotonic() < MIN_RETRY_S:
+            emit(f"off: lost the connection to {name}; not enough time left to retry\n")
+            raise lost
         attempt += 1
         emit(f"off: lost the connection to {name}; retrying once\n")
 
 
-def _attempt(ctx: _Run, index: int, name: str, base_id: str, emit: Callable[[str], None]) -> _Exec:
+def _attempt(ctx: _Run, index: int, name: str, base_id: str, limit: int, emit: Callable[[str], None]) -> _Exec:
     if not _clean_at(name, base_id):
         ctx.sprites.restore(name, base_id)
     _touch(ctx.config, name, base_id, clean=False)
     files = sync_files(ctx.config)
     _sync_up(ctx.sprites, ctx.config, name, files, emit)
+    listing = _write_file_list(files)
     envfile = _write_env_file(
         {**ctx.env, "CI": "1", "OFF": "1", "OFF_SHARD": str(index), "OFF_SHARDS": str(ctx.task.shards)}
     )
-    listing = _write_file_list(files)
-    limit = ctx.task.timeout_s
     nonce = secrets.token_hex(8)
     sentinel = f"{EXIT_SENTINEL} {nonce}"
+    off_error = f"printf '\\n{sentinel} {EXIT_OFF_ERROR}\\n'; exit {EXIT_OFF_ERROR}"
     script = (
-        f"if ! . {ENV_FILE}; then printf '\\n{sentinel} {EXIT_OFF_ERROR}\\n'; exit {EXIT_OFF_ERROR}; fi; "
-        f"rm -f {ENV_FILE}; "
-        f"if [ -f {BASE_LIST} ]; then "
-        f"LC_ALL=C comm -z -23 <(LC_ALL=C sort -zu {BASE_LIST}) <(LC_ALL=C sort -zu {RUN_LIST}) "
-        f"| xargs -0 -r rm -f --; fi; "
-        f"rm -f {RUN_LIST}; "
+        f"if ! . {ENV_FILE}; then {off_error}; fi; rm -f {ENV_FILE}; "
+        f"if ! python3 -c {shlex.quote(PRUNE_SCRIPT)} {BASE_LIST} {RUN_LIST}; then {off_error}; fi; "
         f"start=$SECONDS; "
-        f"timeout --kill-after=15s {limit}s bash -lc {shlex.quote(ctx.command)}; code=$?; "
+        f"timeout --kill-after=15s {limit}s bash -lc {shlex.quote(UNSET_BIND + ctx.command)}; code=$?; "
         f'if [ "$code" -eq 137 ] && [ $((SECONDS - start)) -ge {limit} ]; then code={EXIT_TIMEOUT}; fi; '
         f"printf '\\n{sentinel} %d\\n' \"$code\"; exit \"$code\""
     )
@@ -594,7 +721,7 @@ def _pump(proc: subprocess.Popen[str], emit: Callable[[str], None], limit_s: flo
         timer.cancel()
         _flush(held, emit)
     client_code = proc.wait()
-    accepted = task_code if task_code == client_code and not expired.is_set() else None
+    accepted = None if expired.is_set() else task_code
     return _Exec(client_code=client_code, task_code=accepted, expired=expired.is_set())
 
 

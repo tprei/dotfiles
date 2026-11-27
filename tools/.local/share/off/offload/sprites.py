@@ -162,7 +162,7 @@ class Sprites:
         except FileNotFoundError as error:
             raise SpriteError(f"sprite binary not found: {self._binary}") from error
         except subprocess.TimeoutExpired as error:
-            raise SpriteCallError(f"sprite {args[0]} timed out after {timeout:g}s") from error
+            raise SpriteError(f"sprite {args[0]} timed out after {timeout:g}s") from error
         if completed.returncode != 0:
             detail = summarize_output(completed.stderr) or summarize_output(completed.stdout)
             raise SpriteCallError(f"sprite {args[0]} exited {completed.returncode}: {detail}")
