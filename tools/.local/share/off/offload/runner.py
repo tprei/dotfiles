@@ -198,11 +198,16 @@ def sync_files(config: OffloadConfig) -> list[str]:
     ]
 
 
-def sync_argv(config: OffloadConfig, shell: str) -> list[str]:
+def sync_argv(config: OffloadConfig, shell: str, *, by_content: bool) -> list[str]:
+    """`by_content` compares checksums, which reads every file on a just-restored worker, so only a checkout other
+    than the one that built the base uses it: its mtimes differ from the base's even where the content doesn't."""
+    compare = ["--checksum"] if by_content else []
     return [
         "rsync",
         "-a",
         "-z",
+        "--modify-window=-1",
+        *compare,
         "--from0",
         "--files-from=-",
         "--ignore-missing-args",
@@ -306,7 +311,7 @@ def ensure_ready(
     info = _find(sprites, name)
     if info is None:
         raise OffError(f"worker {name} is missing after setup")
-    return _ready(sprites, config, name, info, checkpoint_id, clean=True)
+    return _ready(sprites, config, name, info, checkpoint_id, clean=True, base_root=str(config.root))
 
 
 def _ready(
@@ -317,9 +322,10 @@ def _ready(
     checkpoint_id: str,
     *,
     clean: bool,
+    base_root: str | None = None,
 ) -> str:
     sprites.ensure_private_url(name, info)
-    _touch(config, name, checkpoint_id, clean=clean)
+    _touch(config, name, checkpoint_id, clean=clean, base_root=base_root)
     return checkpoint_id
 
 
@@ -333,7 +339,7 @@ def _bootstrap(
         sprites, name, ["mkdir", "-p", WORKDIR], live, cwd="/home/sprite", failure="could not create work dir"
     )
     # Only the setup inputs go in before setup: setup has open egress and its tree is checkpointed for good.
-    _sync_up(sprites, config, name, list(config.setup.inputs), setup_emit)
+    _sync_up(sprites, config, name, list(config.setup.inputs), setup_emit, by_content=False)
     for line in config.setup.run:
         _exec_checked(
             sprites, name, _bounded_shell(line), live, cwd=WORKDIR, failure=f"setup failed: {line}", emit=setup_emit
@@ -357,7 +363,7 @@ def _bootstrap(
         )
     finally:
         listing.unlink(missing_ok=True)
-    _sync_up(sprites, config, name, files, setup_emit)
+    _sync_up(sprites, config, name, files, setup_emit, by_content=False)
     _warm(sprites, config, name, live, setup_emit)
     return sprites.checkpoint(name, marker).id
 
@@ -394,10 +400,19 @@ def _find(sprites: Sprites, name: str) -> SpriteInfo | None:
     return next((info for info in sprites.list_sprites(name) if info.name == name), None)
 
 
-def _touch(config: OffloadConfig, name: str, checkpoint_id: str, *, clean: bool, drift: int | None = None) -> None:
-    if drift is None:
-        previous = _cache_if_readable(name)
-        drift = previous.drift if previous is not None and previous.base_checkpoint == checkpoint_id else 0
+def _touch(
+    config: OffloadConfig,
+    name: str,
+    checkpoint_id: str,
+    *,
+    clean: bool,
+    drift: int | None = None,
+    base_root: str | None = None,
+) -> None:
+    previous = _cache_if_readable(name)
+    if previous is not None and previous.base_checkpoint == checkpoint_id:
+        drift = previous.drift if drift is None else drift
+        base_root = previous.base_root if base_root is None else base_root
     write_cache(
         name,
         WorkerCache(
@@ -406,7 +421,8 @@ def _touch(config: OffloadConfig, name: str, checkpoint_id: str, *, clean: bool,
             policy_hash=policy_hash(config.worker),
             last_used=time.time(),
             clean=clean,
-            drift=drift,
+            drift=drift or 0,
+            base_root=base_root or "",
         ),
     )
 
@@ -422,6 +438,11 @@ def _cache_if_readable(name: str) -> WorkerCache | None:
 def _clean_at(name: str, checkpoint_id: str) -> bool:
     cache = _cache_if_readable(name)
     return cache is not None and cache.clean and cache.base_checkpoint == checkpoint_id
+
+
+def _built_from(config: OffloadConfig, name: str) -> bool:
+    cache = _cache_if_readable(name)
+    return cache is not None and cache.base_root == str(config.root)
 
 
 def _matching_cache(config: OffloadConfig, name: str) -> WorkerCache | None:
@@ -441,6 +462,7 @@ def _is_ready(config: OffloadConfig, name: str) -> bool:
 
 
 def reset_worker(sprites: Sprites, name: str, checkpoint_id: str, root: Path) -> None:
+    retired: str | None = None
     with Lease(lock_path(name)):
         cache = _cache_if_readable(name)
         if cache is None or cache.clean or cache.base_checkpoint != checkpoint_id:
@@ -451,22 +473,30 @@ def reset_worker(sprites: Sprites, name: str, checkpoint_id: str, root: Path) ->
             sprites.restore(name, checkpoint_id)
             cache = replace(cache, clean=True)
             write_cache(name, cache)
-            if cache.drift >= REFRESH_AFTER_FILES:
-                _refresh(sprites, name, cache, root)
+            if cache.drift >= REFRESH_AFTER_FILES or not cache.base_root:
+                retired = _refresh(sprites, name, cache, root)
         finally:
             marker.unlink(missing_ok=True)
+    if retired is not None:
+        try:
+            sprites.delete_checkpoint(name, retired)
+        except (SpriteError, OSError) as error:
+            _warn(f"could not delete the old base {retired} on {name}: {error}")
     _prune_restore_points(sprites, name)
 
 
-def _refresh(sprites: Sprites, name: str, cache: WorkerCache, root: Path) -> None:
-    """Retake the base from the current tree, warm caches included, on a worker just restored to its base."""
+def _refresh(sprites: Sprites, name: str, cache: WorkerCache, root: Path) -> str | None:
+    """Retake the base from the current tree, warm caches included, on a worker just restored to its base.
+
+    Returns the replaced base's ID, which the caller deletes once a waiting run can have the lease.
+    """
     try:
         config = load_config(root)
     except ConfigError as error:
         _warn(f"base refresh skipped on {name}: {error}")
-        return
+        return None
     if cache.base_key != base_key(config) or cache.policy_hash != policy_hash(config.worker):
-        return
+        return None
 
     def emit(line: str) -> None:
         _say(sys.stdout, f"{name}: {line}")
@@ -477,7 +507,7 @@ def _refresh(sprites: Sprites, name: str, cache: WorkerCache, root: Path) -> Non
         files = sync_files(config)
     except (OffError, SpriteError, OSError) as error:
         _warn(f"base refresh skipped on {name}: {error}")
-        return
+        return None
     live = _Live()
     write_cache(name, replace(cache, clean=False))
     try:
@@ -494,19 +524,16 @@ def _refresh(sprites: Sprites, name: str, cache: WorkerCache, root: Path) -> Non
             )
         finally:
             listing.unlink(missing_ok=True)
-        _sync_up(sprites, config, name, files, emit)
+        _sync_up(sprites, config, name, files, emit, by_content=cache.base_root != str(config.root))
         _warm(sprites, config, name, live, emit)
         refreshed = sprites.checkpoint(name, marker, existing=existing).id
     except (OffError, SpriteError, OSError) as error:
         _warn(f"base refresh failed on {name}, keeping the old base: {error}")
         _drop_new_bases(sprites, name, marker, existing)
         _restore_after_failed_refresh(sprites, name, cache)
-        return
-    write_cache(name, replace(cache, base_checkpoint=refreshed, drift=0, clean=True))
-    try:
-        sprites.delete_checkpoint(name, cache.base_checkpoint)
-    except (SpriteError, OSError) as error:
-        _warn(f"could not delete the old base {cache.base_checkpoint} on {name}: {error}")
+        return None
+    write_cache(name, replace(cache, base_checkpoint=refreshed, drift=0, clean=True, base_root=str(config.root)))
+    return cache.base_checkpoint
 
 
 def _drop_new_bases(sprites: Sprites, name: str, marker: str, existing: set[str]) -> None:
@@ -784,7 +811,7 @@ def _attempt(ctx: _Run, index: int, name: str, base_id: str, limit: int, emit: C
             raise
     _touch(ctx.config, name, base_id, clean=False)
     files = sync_files(ctx.config)
-    drift = _sync_up(ctx.sprites, ctx.config, name, files, emit)
+    drift = _sync_up(ctx.sprites, ctx.config, name, files, emit, by_content=not _built_from(ctx.config, name))
     _touch(ctx.config, name, base_id, clean=False, drift=drift)
     listing = _write_file_list(files)
     envfile = _write_env_file(
@@ -907,11 +934,17 @@ def _pull_artifacts(ctx: _Run, name: str, index: int) -> None:
 
 
 def _sync_up(
-    sprites: Sprites, config: OffloadConfig, name: str, files: list[str], emit: Callable[[str], None]
+    sprites: Sprites,
+    config: OffloadConfig,
+    name: str,
+    files: list[str],
+    emit: Callable[[str], None],
+    *,
+    by_content: bool,
 ) -> int:
     """Sync `files` and return how many regular files rsync transferred, i.e. how many differed on the worker."""
     for attempt in range(1, SYNC_ATTEMPTS + 1):
-        completed = _rsync(sync_argv(config, sprites.rsync_shell(name)), stdin="\0".join(files))
+        completed = _rsync(sync_argv(config, sprites.rsync_shell(name), by_content=by_content), stdin="\0".join(files))
         if completed.returncode == 0:
             return _transferred(completed.stdout)
         if completed.returncode not in RSYNC_TRANSPORT_CODES or attempt == SYNC_ATTEMPTS:
