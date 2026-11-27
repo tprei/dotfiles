@@ -462,6 +462,7 @@ def _is_ready(config: OffloadConfig, name: str) -> bool:
 
 
 def reset_worker(sprites: Sprites, name: str, checkpoint_id: str, root: Path) -> None:
+    retired: str | None = None
     with Lease(lock_path(name)):
         cache = _cache_if_readable(name)
         if cache is None or cache.clean or cache.base_checkpoint != checkpoint_id:
@@ -473,21 +474,29 @@ def reset_worker(sprites: Sprites, name: str, checkpoint_id: str, root: Path) ->
             cache = replace(cache, clean=True)
             write_cache(name, cache)
             if cache.drift >= REFRESH_AFTER_FILES or not cache.base_root:
-                _refresh(sprites, name, cache, root)
+                retired = _refresh(sprites, name, cache, root)
         finally:
             marker.unlink(missing_ok=True)
+    if retired is not None:
+        try:
+            sprites.delete_checkpoint(name, retired)
+        except (SpriteError, OSError) as error:
+            _warn(f"could not delete the old base {retired} on {name}: {error}")
     _prune_restore_points(sprites, name)
 
 
-def _refresh(sprites: Sprites, name: str, cache: WorkerCache, root: Path) -> None:
-    """Retake the base from the current tree, warm caches included, on a worker just restored to its base."""
+def _refresh(sprites: Sprites, name: str, cache: WorkerCache, root: Path) -> str | None:
+    """Retake the base from the current tree, warm caches included, on a worker just restored to its base.
+
+    Returns the replaced base's ID, which the caller deletes once a waiting run can have the lease.
+    """
     try:
         config = load_config(root)
     except ConfigError as error:
         _warn(f"base refresh skipped on {name}: {error}")
-        return
+        return None
     if cache.base_key != base_key(config) or cache.policy_hash != policy_hash(config.worker):
-        return
+        return None
 
     def emit(line: str) -> None:
         _say(sys.stdout, f"{name}: {line}")
@@ -498,7 +507,7 @@ def _refresh(sprites: Sprites, name: str, cache: WorkerCache, root: Path) -> Non
         files = sync_files(config)
     except (OffError, SpriteError, OSError) as error:
         _warn(f"base refresh skipped on {name}: {error}")
-        return
+        return None
     live = _Live()
     write_cache(name, replace(cache, clean=False))
     try:
@@ -522,12 +531,9 @@ def _refresh(sprites: Sprites, name: str, cache: WorkerCache, root: Path) -> Non
         _warn(f"base refresh failed on {name}, keeping the old base: {error}")
         _drop_new_bases(sprites, name, marker, existing)
         _restore_after_failed_refresh(sprites, name, cache)
-        return
+        return None
     write_cache(name, replace(cache, base_checkpoint=refreshed, drift=0, clean=True, base_root=str(config.root)))
-    try:
-        sprites.delete_checkpoint(name, cache.base_checkpoint)
-    except (SpriteError, OSError) as error:
-        _warn(f"could not delete the old base {cache.base_checkpoint} on {name}: {error}")
+    return cache.base_checkpoint
 
 
 def _drop_new_bases(sprites: Sprites, name: str, marker: str, existing: set[str]) -> None:
