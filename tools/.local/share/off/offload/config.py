@@ -65,6 +65,13 @@ def parse_duration(text: str) -> int:
     return int(match.group(1)) * _UNIT_SECONDS[match.group(2)]
 
 
+def parse_timeout(text: str) -> int:
+    seconds = parse_duration(text)
+    if seconds > MAX_TIMEOUT_S:
+        raise ConfigError(f"{text} exceeds the 6h maximum")
+    return seconds
+
+
 def load_config(root: Path) -> OffloadConfig:
     path = root / "offload.toml"
     try:
@@ -160,12 +167,9 @@ def _setup_inputs(root: Path, table: Mapping[str, object]) -> tuple[str, ...]:
 
 def _timeout(text: str, where: str) -> int:
     try:
-        seconds = parse_duration(text)
+        return parse_timeout(text)
     except ConfigError as error:
         raise ConfigError(f"{where}: {error}") from error
-    if seconds > MAX_TIMEOUT_S:
-        raise ConfigError(f"{where}: {text} exceeds the 6h maximum")
-    return seconds
 
 
 def _placement(value: str, where: str) -> Literal["sprite", "local"]:

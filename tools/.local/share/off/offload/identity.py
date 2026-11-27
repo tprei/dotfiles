@@ -8,7 +8,7 @@ from pathlib import Path, PurePosixPath
 
 from .config import OffloadConfig
 
-BASE_SCHEMA = "off-base-v2"
+BASE_SCHEMA = "off-base-v3"
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 
 

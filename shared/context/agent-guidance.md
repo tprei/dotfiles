@@ -38,6 +38,12 @@ Speak English. Communicate like a principal engineer: direct, no flattery, no fa
 - New issue: new worktree and branch.
 - Dotfile edits: detect platform and shell first, preview, keep edits idempotent and scoped, never overwrite whole files.
 
+## Offload
+
+- In a repo whose git root has `offload.toml`, run heavy checks (tests, typecheck, lint, build, soak) with `off run <task>` instead of locally. Don't ask first, and only mention `off` when it fails.
+- "Offload X" means run X through `off`: the matching declared task, else `off exec -- <command>`.
+- Exit codes and details: the `offload` skill.
+
 ## Code hygiene
 
 - No code comments unless asked. Never meta comments ("Fix 1", "Update:").

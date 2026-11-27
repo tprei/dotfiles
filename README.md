@@ -204,7 +204,7 @@ sudo tailscale serve --bg --set-path /omp-usage.js ~/dotfiles/dotfiles/scriptabl
 
 ### Sprite offload
 
-`tools/.local/bin/off` runs the tasks a repo declares in `offload.toml` on [Fly.io Sprites](https://fly.io/sprites) instead of this machine. Each machine gets its own workers per repo (`off-<host><hash>-<repo><hash>-<n>`; the hashes keep look-alike hostnames and same-named repos from different owners apart). A worker is built once from `[setup]`, locked down, and checkpointed. Setup sees only the `inputs` files, so nothing else from the tree ends up in the checkpoint. Every run restores that checkpoint, syncs the files `git ls-files -co --exclude-standard` lists (uncommitted edits and new files included, anything git ignores left out), runs the task, and lets the Sprite sleep. A change to `[setup]`, its `inputs`, or the worker policy rebuilds the worker.
+`tools/.local/bin/off` runs the tasks a repo declares in `offload.toml` on [Fly.io Sprites](https://fly.io/sprites) instead of this machine. Each machine gets its own workers per repo (`off-<host><hash>-<repo><hash>-<n>`; the hashes keep look-alike hostnames and same-named repos from different owners apart). A worker is built once from `[setup]`, locked down, and checkpointed. Setup sees only the `inputs` files. The base checkpoint also holds the repo tree as of the worker build, so a run only uploads files that changed since then, and files deleted since are removed on the worker. After a run, off resets the worker in the background, so the next run starts without waiting for a restore. A change to `[setup]`, its `inputs`, or the worker policy rebuilds the worker.
 
 One-time setup per machine: `just stow tools`, then `just sprites-setup org=<fly-org>`. It installs the `sprite` CLI, signs in, and pins the org in `~/.config/off/org`.
 
@@ -226,8 +226,15 @@ timeout = "20m"
 shards = 2
 ```
 
-- Commands: `off plan` (local only), `off run TASK [-- ARGS]`, `off status`, `off down [--all]`, `off watch RUN_ID [--shard N]`, `off usage [--days N]`.
-- Exit codes: the task's own code, `124` on timeout, `125` when off itself fails (including a dropped `sprite exec` connection), `130` when interrupted. Interrupting or losing a run restores the worker's checkpoint, which stops the remote task. Logs and artifacts live under `~/.local/state/off/`.
+- Commands: `off plan` (local only), `off run TASK [-- ARGS]`, `off exec [--timeout 30m] -- CMD`, `off status`, `off down [--all]`, `off watch RUN_ID [--shard N]`, `off usage [--days N]`.
+- Exit codes: the task's own code, `124` on timeout, `125` when off itself fails (a dropped `sprite exec` connection is retried once first), `130` when interrupted. Interrupting or losing a run restores the worker's checkpoint, which stops the remote task. Logs and artifacts live under `~/.local/state/off/`.
 - Lockdown: during runs egress is denied except `worker.egress`, sudo is blocked, memory is capped, and the Sprite URL stays private. Env from `[env] pass` and task `env` goes in per run through a file deleted before the task starts. No credentials live on a worker.
 - Tern: each shard opens a tab in a Tern session named `off` that follows the local log; it closes on success and stays open on failure. `OFF_TERN=off` disables it.
 - Docker tasks aren't supported: the Docker daemon needs root, which the lockdown removes.
+
+#### Writing `[setup]`
+
+- `sudo` drops the login PATH, so run privileged commands as `sudo env "PATH=$PATH" ...`.
+- Install global npm tools with `--prefix /usr/local`, e.g. `sudo env "PATH=$PATH" npm i -g --prefix /usr/local pnpm@<version>`, so binaries land on the system PATH.
+- Workers have no `.git` directory. A command that needs git creates one first, e.g. `git init -q && git add -A`.
+- Toolchains and binaries a task needs must be fetched in setup, because runs only reach `worker.egress`. List the hosts setup fetches from in `worker.setup_egress`.

@@ -3,13 +3,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import subprocess
 import sys
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from offload.config import ConfigError, OffloadConfig, TaskSpec, load_config
+from offload.config import ConfigError, OffloadConfig, TaskSpec, load_config, parse_timeout
 from offload.identity import base_key, host_slug, repo_slug, worker_prefix
 from offload.policy import (
     LOCKED_PRIVILEGES,
@@ -24,6 +25,7 @@ from offload.runner import (
     destroy_workers,
     host_workers,
     repo_workers,
+    reset_worker,
     run_task,
     sync_files,
 )
@@ -39,8 +41,10 @@ def main(argv: Sequence[str]) -> int:
     head, extra = _split_extra(list(argv))
     parser = _parser()
     args = parser.parse_args(head)
-    if extra is not None and args.command != "run":
-        parser.error("'--' is only accepted by run")
+    if extra is not None and args.command not in {"run", "exec"}:
+        parser.error("'--' is only accepted by run and exec")
+    if args.command == "exec" and not extra:
+        parser.error("exec needs a command after --")
     try:
         return _dispatch(args, extra or [])
     except (ConfigError, OffError, SpriteError, OSError) as error:
@@ -55,6 +59,8 @@ def _parser() -> argparse.ArgumentParser:
     plan.add_argument("task", nargs="?")
     run = commands.add_parser("run", help="run a task; arguments after -- go to the task")
     run.add_argument("task")
+    execute = commands.add_parser("exec", help="run a command on a Sprite worker; arguments after -- are the command")
+    execute.add_argument("--timeout", type=_timeout_arg, default="30m")
     commands.add_parser("status", help="list this host's workers")
     down = commands.add_parser("down", help="destroy this repo's workers")
     down.add_argument("--all", action="store_true", help="destroy every worker on this host")
@@ -63,6 +69,9 @@ def _parser() -> argparse.ArgumentParser:
     viewer.add_argument("--shard", type=int, default=1)
     usage = commands.add_parser("usage", help="Sprite usage and estimated cost of off workers")
     usage.add_argument("--days", type=int, default=7)
+    reset = commands.add_parser("_reset")
+    reset.add_argument("name")
+    reset.add_argument("checkpoint")
     return parser
 
 
@@ -79,6 +88,10 @@ def _dispatch(args: argparse.Namespace, extra: list[str]) -> int:
         return _plan(args.task)
     if command == "run":
         return _run(args.task, extra)
+    if command == "exec":
+        return _exec(args.timeout, extra)
+    if command == "_reset":
+        return _reset(args.name, args.checkpoint)
     if command == "status":
         return _status()
     if command == "watch":
@@ -90,7 +103,34 @@ def _dispatch(args: argparse.Namespace, extra: list[str]) -> int:
 
 def _run(name: str, extra: list[str]) -> int:
     config = load_config(_repo_root())
-    return run_task(config, _task(config, name), extra, viewer=Path(sys.argv[0]).resolve())
+    return run_task(config, _task(config, name), extra, launcher=Path(sys.argv[0]).resolve())
+
+
+def _timeout_arg(text: str) -> int:
+    try:
+        return parse_timeout(text)
+    except ConfigError as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
+
+
+def _exec(timeout: int, argv: list[str]) -> int:
+    config = load_config(_repo_root())
+    command = argv[0] if len(argv) == 1 else shlex.join(argv)
+    spec = TaskSpec(
+        name="exec",
+        run=command,
+        timeout_s=timeout,
+        where="sprite",
+        shards=1,
+        artifacts=(),
+        env={},
+    )
+    return run_task(config, spec, [], launcher=Path(sys.argv[0]).resolve())
+
+
+def _reset(name: str, checkpoint: str) -> int:
+    reset_worker(Sprites(), name, checkpoint)
+    return 0
 
 
 def _usage(days: int) -> int:

@@ -93,6 +93,7 @@ class WorkerCache:
     base_checkpoint: str
     policy_hash: str
     last_used: float
+    clean: bool = False
 
 
 def read_cache(name: str) -> WorkerCache | None:
