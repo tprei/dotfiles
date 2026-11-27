@@ -18,6 +18,8 @@ const POOLS: readonly (readonly string[])[] = [
 ];
 
 const COOLDOWN_MS = 10 * 60_000;
+const DRAIN_PROVIDER = "opencode-go/";
+const DRAIN_UNTIL = Date.parse("2026-12-08T00:00:00");
 const SUFFIXES = ["off", "auto", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 const LEVELS = ["minimal", "low", "medium", "high", "xhigh", "max"] as const;
 type Level = (typeof LEVELS)[number];
@@ -84,9 +86,10 @@ export default function modelBalancer(pi: ExtensionAPI) {
 		const fresh = starts.filter(selector => now - (cooledAt.get(bucket(selector.base)) ?? 0) >= COOLDOWN_MS);
 		const choices = fresh.length > 0 ? fresh : starts;
 
+		const drain = now < DRAIN_UNTIL ? choices.find(selector => selector.base.startsWith(DRAIN_PROVIDER)) : undefined;
 		const index = (cursors.get(source.base) ?? 0) % choices.length;
 		cursors.set(source.base, index + 1);
-		const picked = choices[index];
+		const picked = drain ?? choices[index];
 		const routed = (selector: Selector): Selector =>
 			selector.level ? selector : { base: selector.base, level: source.level };
 		const siblings = members.filter(selector => selector !== picked).map(selector => format(routed(selector)));
