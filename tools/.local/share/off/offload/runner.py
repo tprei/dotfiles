@@ -39,9 +39,9 @@ from .state import (
     new_run_id,
     pid_alive,
     read_cache,
+    reset_log,
     run_log,
     run_pid,
-    state_root,
     write_cache,
 )
 from .tern import open_viewers
@@ -469,13 +469,20 @@ def _lease(config: OffloadConfig, names: list[str], count: int) -> list[tuple[st
     return lease_workers(names, count)
 
 
+# omp tracks every process carrying this variable and asks the agent about any still running when it stops;
+# the background reset is off's own housekeeping, not work the agent started.
+_AGENT_TRACKING_ENV: Final = frozenset({"OMP_BASH_SESSION"})
+
+
 def _spawn_reset(launcher: Path, name: str, checkpoint_id: str) -> None:
-    with (state_root() / "reset.log").open("a", encoding="utf-8") as log:
+    env = {key: value for key, value in os.environ.items() if key not in _AGENT_TRACKING_ENV}
+    with reset_log().open("a", encoding="utf-8") as log:
         subprocess.Popen(
             [sys.executable, str(launcher), "_reset", name, checkpoint_id],
             stdin=subprocess.DEVNULL,
             stdout=log,
             stderr=subprocess.STDOUT,
+            env=env,
             start_new_session=True,
         )
 

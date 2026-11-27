@@ -142,6 +142,10 @@ def pid_alive(pid: int) -> bool:
     return True
 
 
+def reset_log() -> Path:
+    return _private_dir() / "reset.log"
+
+
 def artifact_root(repo: str, run_id: str) -> Path:
     return _private_dir("artifacts", repo, run_id)
 
