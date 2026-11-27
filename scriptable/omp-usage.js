@@ -4,7 +4,8 @@
 const BASE = "https://openclaw.tail2fec5e.ts.net/usage/";
 const BOT_URL = "tg://resolve?domain=PreiPreiClaudeButlerBot";
 const FEED_SCHEMA = 2;
-const REFRESH_MS = 15 * 60 * 1000;
+const REFRESH_MS = 5 * 60 * 1000;
+const CYCLE_MS = 5 * 60 * 1000;
 const STALE_MS = 20 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -386,7 +387,7 @@ function headline(plan, entry, now) {
       return plan.reset !== null ? [duration(plan.reset - now), "until it's back"] : ["Out", "no reset reported"];
     case "short":
       return plan.reset !== null
-        ? [duration(plan.reset - plan.cutoff), `dry from ${clock(plan.cutoff)}`]
+        ? [duration(plan.reset - plan.cutoff), `dry before reset · out ${clock(plan.cutoff)}`]
         : [duration(plan.cutoff - now), "until it runs out"];
     case "lasts":
       return [`~${Math.round(entry.projected)}%`, `used by ${clock(plan.reset)}`];
@@ -616,7 +617,7 @@ function addTile(row, group, family, now) {
   tile.cornerRadius = 13.5;
   tile.size = new Size(TILE[family], 0);
   tile.setPadding(4, 0, 4, 0);
-  const art = addCentered(tile).addImage(ringImage(group, ring));
+  const art = addCentered(tile).addImage(ringImage({ ...group, second: null }, ring));
   art.imageSize = new Size(ring, ring);
   tile.addSpacer(4);
   const figure = addCentered(tile);
@@ -624,11 +625,11 @@ function addTile(row, group, family, now) {
     addFlame(figure, group.focus, 10);
     figure.addSpacer(2);
   }
-  addLabel(figure, percent(group.focus.used), Font.boldRoundedSystemFont(14), figureColor(group.focus)).minimumScaleFactor = 0.8;
-  figure.addSpacer(3);
-  addLabel(figure, group.focus.short, Font.mediumSystemFont(10), SECONDARY);
+  addLabel(figure, percent(group.focus.used), Font.boldRoundedSystemFont(14), figureColor(group.focus)).minimumScaleFactor = 0.7;
+  const window = addCentered(tile);
+  addLabel(window, group.focus.short, Font.semiboldSystemFont(10), LABEL).minimumScaleFactor = 0.6;
   const caption = addCentered(tile);
-  if (!addVerdict(caption, group.focus, now, day, 11)) addLabel(caption, ownerName(group.focus), Font.mediumSystemFont(11), SECONDARY);
+  if (!addVerdict(caption, group.focus, now, day, 10)) addLabel(caption, ownerName(group.focus), Font.mediumSystemFont(10), SECONDARY);
 }
 
 function addVerdict(stack, entry, now, time, size) {
@@ -703,10 +704,11 @@ function nowView(body, family, feed, now) {
   });
 }
 
-function addForecastHero(body, item, now) {
+function addForecastHero(body, item, now, position, count) {
   const head = addRow(body);
   addWindowTitle(head, item.entry, 14);
   head.addSpacer();
+  if (count > 1) addLabel(head, `${position + 1}/${count}`, Font.mediumSystemFont(11), SECONDARY);
   body.addSpacer(3);
   const [value, caption] = headline(item.plan, item.entry, now);
   const figure = body.addStack();
@@ -716,7 +718,7 @@ function addForecastHero(body, item, now) {
   figure.addSpacer(6);
   const note = figure.addStack();
   note.setPadding(0, 0, 4, 0);
-  addLabel(note, caption, Font.mediumSystemFont(13), SECONDARY);
+  addLabel(note, caption, Font.mediumSystemFont(13), SECONDARY).minimumScaleFactor = 0.75;
   body.addSpacer(5);
   const art = body.addStack();
   art.size = new Size(0, 32);
@@ -729,9 +731,15 @@ function forecastView(body, family, feed, now) {
     .map((entry) => ({ entry, plan: forecast(entry, now) }))
     .filter((item) => item.plan !== null);
   if (!items.length) return addNote(body, "No resets to forecast yet");
-  const lead =
-    items.find((item) => item.plan.kind === "short") || items.find((item) => item.plan.kind === "out") || items[0];
-  addForecastHero(body, lead, now);
+  const owners = new Set();
+  const leads = items.filter((item) => {
+    const key = `${item.entry.provider}/${item.entry.account}`;
+    if (owners.has(key)) return false;
+    owners.add(key);
+    return true;
+  });
+  const lead = leads[Math.floor(now / CYCLE_MS) % leads.length];
+  addForecastHero(body, lead, now, leads.indexOf(lead), leads.length);
   if (family !== "large") return;
   const rest = items.filter((item) => item !== lead).slice(0, LIST_ROWS);
   if (!rest.length) return;
