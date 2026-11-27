@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, TextIO
 
-from .state import done_marker, run_log
+from .state import done_marker, pid_alive, run_log, run_pid
 
 _PROBE_TIMEOUT_S: Final = 3.0
 _CALL_TIMEOUT_S: Final = 5.0
@@ -74,11 +74,14 @@ def open_viewers(run_id: str, shards: int, cwd: Path, off_path: Path) -> None:
 def watch(run_id: str, shard: int, *, poll_s: float = 0.25, out: TextIO = sys.stdout) -> int:
     log = run_log(run_id, shard)
     marker = done_marker(run_id, shard)
+    pid_file = run_pid(run_id)
     # A shard that fails before opening its log still gets a marker.
     while not log.exists() and not marker.exists():
+        if _run_gone(pid_file):
+            return _lost(run_id, out)
         time.sleep(poll_s)
-    if log.exists():
-        _follow_log(log, marker, poll_s, out)
+    if log.exists() and not _follow_log(log, marker, pid_file, poll_s, out):
+        return _lost(run_id, out)
     try:
         code = _read_exit_code(marker, poll_s)
     except ValueError as error:
@@ -90,8 +93,10 @@ def watch(run_id: str, shard: int, *, poll_s: float = 0.25, out: TextIO = sys.st
     return code
 
 
-def _follow_log(log: Path, marker: Path, poll_s: float, out: TextIO) -> None:
+def _follow_log(log: Path, marker: Path, pid_file: Path, poll_s: float, out: TextIO) -> bool:
+    """Stream the log until the shard's done marker appears; False if the run's process died without one."""
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    finished_normally = True
     with log.open("rb") as handle:
         while True:
             # Sample the marker first: if it exists and a read then hits EOF, the log is drained.
@@ -102,10 +107,28 @@ def _follow_log(log: Path, marker: Path, poll_s: float, out: TextIO) -> None:
                 out.flush()
             elif finished:
                 break
+            elif _run_gone(pid_file) and not marker.exists():
+                finished_normally = False
+                break
             else:
                 time.sleep(poll_s)
     out.write(decoder.decode(b"", final=True))
     out.flush()
+    return finished_normally
+
+
+def _run_gone(pid_file: Path) -> bool:
+    try:
+        pid = int(pid_file.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        return False
+    return not pid_alive(pid)
+
+
+def _lost(run_id: str, out: TextIO) -> int:
+    out.write(f"off: run {run_id} ended without a result (its off process is gone)\n")
+    out.flush()
+    return 125
 
 
 def _read_exit_code(marker: Path, poll_s: float) -> int:

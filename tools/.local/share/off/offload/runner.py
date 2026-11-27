@@ -37,8 +37,10 @@ from .state import (
     lease_workers,
     lock_path,
     new_run_id,
+    pid_alive,
     read_cache,
     run_log,
+    run_pid,
     state_root,
     write_cache,
 )
@@ -66,6 +68,8 @@ RESET_POLL_S: Final = 0.2
 NO_BIND: Final = "bind() { :; }; export -f bind; "
 UNSET_BIND: Final = "unset -f bind; "
 IDLE_RETENTION_S: Final = 7 * 24 * 3600
+# The image's `python3` is a pyenv shim that follows a repo's .python-version and hangs on versions it lacks.
+SYSTEM_PYTHON: Final = "/usr/bin/python3"
 # Runs on the worker in WORKDIR right after the sync: removes base files deleted locally since the worker was built.
 # The sync already replaced swapped paths (rsync --force), so a stale path under a parent that is now a symlink or a
 # file is gone or belongs to something else, and is skipped rather than followed.
@@ -329,7 +333,7 @@ def _bootstrap(
         _exec_checked(
             sprites,
             name,
-            ["python3", "-c", BASE_LIST_SCRIPT, RUN_LIST, BASE_LIST],
+            [SYSTEM_PYTHON, "-c", BASE_LIST_SCRIPT, RUN_LIST, BASE_LIST],
             live,
             cwd=WORKDIR,
             failure="could not record the base file list",
@@ -421,13 +425,7 @@ def _resetting(name: str) -> bool:
         pid = int(_reset_marker(name).read_text(encoding="utf-8"))
     except (FileNotFoundError, ValueError):
         return False
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
+    return pid_alive(pid)
 
 
 def _acquire_after_reset(lease: Lease, name: str) -> bool:
@@ -529,6 +527,7 @@ def _run_sprite(config: OffloadConfig, task: TaskSpec, extra_args: list[str], la
     _say(sys.stderr, f"off: run {run_id} ({task.name}, {task.shards} shard(s)) log: {run_log(run_id, 1)}\n")
     leases = _lease(config, names, task.shards)
     workers = [name for name, _ in leases]
+    run_pid(run_id).write_text(str(os.getpid()), encoding="utf-8")
     if launcher is not None:
         open_viewers(run_id, task.shards, config.root, launcher)
     ctx = _Run(sprites, config, task, run_id, repo, _command(task, extra_args), env, _Live())
@@ -657,7 +656,7 @@ def _attempt(ctx: _Run, index: int, name: str, base_id: str, limit: int, emit: C
     off_error = f"printf '\\n{sentinel} {EXIT_OFF_ERROR}\\n'; exit {EXIT_OFF_ERROR}"
     script = (
         f"if ! . {ENV_FILE}; then {off_error}; fi; rm -f {ENV_FILE}; "
-        f"if ! python3 -c {shlex.quote(PRUNE_SCRIPT)} {BASE_LIST} {RUN_LIST}; then {off_error}; fi; "
+        f"if ! {SYSTEM_PYTHON} -c {shlex.quote(PRUNE_SCRIPT)} {BASE_LIST} {RUN_LIST}; then {off_error}; fi; "
         f"start=$SECONDS; "
         f"timeout --kill-after=15s {limit}s bash -lc {shlex.quote(UNSET_BIND + ctx.command)}; code=$?; "
         f'if [ "$code" -eq 137 ] && [ $((SECONDS - start)) -ge {limit} ]; then code={EXIT_TIMEOUT}; fi; '

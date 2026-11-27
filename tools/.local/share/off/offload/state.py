@@ -128,6 +128,20 @@ def done_marker(run_id: str, shard: int) -> Path:
     return _private_dir("runs") / f"{run_id}.{shard}.done"
 
 
+def run_pid(run_id: str) -> Path:
+    return _private_dir("runs") / f"{run_id}.pid"
+
+
+def pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 def artifact_root(repo: str, run_id: str) -> Path:
     return _private_dir("artifacts", repo, run_id)
 
