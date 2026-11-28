@@ -221,7 +221,7 @@ systemctl --user enable --now omp-reset-expiry-guard.timer
 
 `tools/.local/bin/off` runs the tasks a repo declares in `offload.toml` on [Fly.io Sprites](https://fly.io/sprites) instead of this machine. Each machine gets its own workers per repo (`off-<host><hash>-<repo><hash>-<n>`; the hashes keep look-alike hostnames and same-named repos from different owners apart). A worker is built once from `[setup]`, locked down, and checkpointed. Setup sees only the `inputs` files. The base checkpoint also holds the repo tree as of the worker build, so a run only uploads files that changed since then, and files deleted since are removed on the worker. After a run, off resets the worker in the background, so the next run starts without waiting for a restore. A change to `[setup]`, its `inputs`, or the worker policy rebuilds the worker.
 
-One-time setup per machine: `just stow tools`, then `just sprites-setup org=<fly-org>`. It installs the `sprite` CLI, signs in, and pins the org in `~/.config/off/org`.
+One-time setup per machine: `just stow tools`, then `just sprites-setup <fly-org>`. It installs the `sprite` CLI, signs in, and pins the org in `~/.config/off/org`.
 
 ```toml
 version = 1
