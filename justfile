@@ -270,7 +270,7 @@ sprites-setup org="":
     org="{{ org }}"
     if [[ -z "$org" && -s "$pinned" ]]; then org=$(<"$pinned"); fi
     if [[ -z "$org" ]]; then
-        echo "pass the Fly org to use, for example: just sprites-setup org=personal" >&2
+        echo "pass the Fly org to use, for example: just sprites-setup personal" >&2
         exit 1
     fi
     sprite org list >/dev/null 2>&1 || sprite login
